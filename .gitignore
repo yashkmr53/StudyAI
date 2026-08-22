@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+backend/var/
+
+# Environment / secrets
+.env
+db.sqlite3
+
+# Local database backups
+*.sql
+backups/
+
+# Local Python virtual environment
+myenv/
+
+# Node
+node_modules/
+frontend/dist/
+dev-dist/
+
+# Env / OS
+.DS_Store
+*.log
