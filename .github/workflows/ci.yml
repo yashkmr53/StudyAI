@@ -97,7 +97,7 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: ./frontend
-        run: npm run coverage -- --reporter=lcov
+        run: npm run coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
