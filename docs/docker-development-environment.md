@@ -130,6 +130,94 @@ docker compose exec api python manage.py showmigrations
 After editing backend code: `docker compose build && docker compose up -d`.
 After editing frontend code: same (the image rebuilds the SPA bundle).
 
+## Running the Test Suite (Docker PostgreSQL)
+
+One canonical command:
+
+```bash
+./scripts/test.sh
+```
+
+Pass a test label through when you only want part of the suite:
+
+```bash
+./scripts/test.sh tests.api.test_hardening.RateLimitTests
+```
+
+What the script does for you:
+
+- Checks Docker, `.env`, and that the `api`/`db` containers are up (with exact fix-it
+  instructions if not); it never deletes volumes or data.
+- **Verifies the api image matches your working tree** before running anything.
+  `docker compose exec` runs the *image-baked* copy of the code — if you edited backend
+  code without rebuilding, results would silently not reflect your changes. The script
+  fails loudly instead and tells you to rebuild:
+  `docker compose build api worker && docker compose up -d api worker`.
+- Pins `DJANGO_SETTINGS_MODULE=config.settings.ci` automatically. You never type it.
+- Runs the full suite against PostgreSQL/pgvector inside the `api` container:
+  `python manage.py test <labels> --noinput -v 2`.
+
+Why this exact configuration:
+
+- **PostgreSQL/pgvector is retained** — `config.settings.ci` points at the Docker `db`
+  service (env-driven), so migrations, RLS policies and pgvector retrieval run for real
+  instead of degrading to SQLite.
+- **Celery runs eagerly** — background jobs execute inline inside the test process;
+  nothing leaks onto the live Redis broker or touches the running worker.
+- **Test-wide throttling is disabled** — `ci.py` sets `RATE_LIMITING_ENABLED=False` with
+  a `DummyCache`, because Django's test client presents every request from the same
+  IP and would otherwise share one rate bucket across all ~116 tests (the cause of the
+  historical HTTP 429 cascade).
+- **Production throttling remains enabled** — `prod.py` still enforces `auth: 30/min`
+  via LocMemCache; nothing about runtime behavior changed.
+- **Throttle-specific tests explicitly opt in** — `tests/api/test_hardening.py::RateLimitTests`
+  re-enables throttling per-test (`RATE_LIMITING_ENABLED=True`, tight `3/min` rate, its own
+  LocMemCache, `cache.clear()` teardown), so the throttle machinery itself stays covered.
+
+Do **not** use this as your routine test command:
+
+```bash
+docker compose exec api python manage.py test        # WRONG: runs under prod settings
+```
+
+The `api` container defaults to `DJANGO_SETTINGS_MODULE=config.settings.prod`. Running the
+suite that way leaves production throttling on (shared bucket → ~75 cascading HTTP 429
+failures), Celery non-eager (enrichment jobs escape to the live Redis broker/worker),
+and Argon2 password hashing (slow). If you must invoke Django manually, always add
+`-e DJANGO_SETTINGS_MODULE=config.settings.ci` yourself — but prefer `./scripts/test.sh`.
+
+GitHub Actions runs the same underlying command (`python manage.py test tests --noinput -v 2`
+under `config.settings.ci`) natively against its own pgvector service container, so local
+and CI results are directly comparable.
+
+After editing backend code, rebuild first so the container sees it:
+`docker compose build api worker && docker compose up -d api worker`.
+
+## Production Configuration Smoke Validation
+
+The automated suite deliberately uses relaxed test settings. To prove the *production*
+configuration itself is still intact (throttling on, Celery non-eager, health/auth paths
+alive), run:
+
+```bash
+./scripts/smoke_prod.sh
+```
+
+Checks performed (read-only; no data written):
+
+| Check | Expected |
+| --- | --- |
+| `manage.py check` under `config.settings.prod` | passes |
+| `RATE_LIMITING_ENABLED` / auth rate / cache backend | `True` / `30/min` / LocMemCache |
+| `CELERY_TASK_ALWAYS_EAGER` | `False` |
+| `/healthz`, `/readyz` | `200`, DB roundtrip OK |
+| Password-reset probes | early `202`s, then real HTTP `429` (throttle engages) |
+| `celery inspect ping` through Redis | worker pongs |
+
+Note: gunicorn runs 3 workers and LocMemCache counters are per-process, so the throttle
+probe loops (≤120 no-write requests) until one worker's 30/min bucket fills. This briefly
+(≤60 s) fills the auth bucket for requests originating from the api container itself.
+
 ## Destructive Commands (read carefully)
 
 | Command | Effect |
@@ -182,6 +270,10 @@ access tokens simply expire after their lifetime).
 | Port 80 already in use | Another process owns port 80 (often an old container). Find it: `lsof -iTCP:80 -sTCP:LISTEN` or `docker ps` for other projects; stop that, or change the mapping in `docker-compose.yml` to `"8080:80"`. |
 | Migration errors | Read `docker compose logs api`. For a broken half-migrated dev DB use the Full Database Reset above. |
 | `401` after logging out of the API | Expected: logout blacklists the refresh token; the access token stays valid until expiry (30 min). |
+| `./scripts/test.sh` says "api container is not running" | Stack is down. Start it: `docker compose up -d --build`, wait for `docker compose ps` to show api healthy, re-run. |
+| `./scripts/test.sh` says image differs from working tree | You edited backend code after the last build. Rebuild: `docker compose build api worker && docker compose up -d api worker`, then re-run. This guard prevents silently testing stale code. |
+| `permission denied ./scripts/test.sh` | Script lost its executable bit: `chmod +x scripts/*.sh`. |
+| Suite passes locally but fails in CI (or vice versa) | Both run `config.settings.ci` against PostgreSQL — compare env vars and rebuild state; do NOT "fix" by weakening prod settings or skipping tests. |
 
 ## First-Time Setup Summary (fresh machine)
 
@@ -191,4 +283,8 @@ docker compose up -d --build
 # wait for `docker compose ps` to show api healthy (migrations run automatically)
 docker compose exec api python manage.py createsuperuser
 open http://localhost/admin/
+
+# verify everything, always:
+./scripts/test.sh         # full backend suite on PostgreSQL/pgvector
+./scripts/smoke_prod.sh   # production-configuration smoke check
 ```

@@ -42,6 +42,9 @@ jobs:
         run: |
           python manage.py check
           python manage.py makemigrations --check --dry-run
+      # Canonical backend test command — identical to ./scripts/test.sh locally
+      # (Docker api container) except it runs natively against this job's
+      # pgvector service. Same settings module: config.settings.ci.
       - name: Tests (PostgreSQL)
         working-directory: backend
         run: python manage.py test tests --noinput -v 2
