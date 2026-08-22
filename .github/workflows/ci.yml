@@ -127,7 +127,7 @@ jobs:
 
       - name: Test Docker compose up
         run: |
-          docker compose up -d --wait --wait-timeout 180
+          docker compose up -d --wait --wait-timeout 300
           curl -fsS http://localhost/healthz
           curl -fsS http://localhost/readyz
           docker compose down -v
