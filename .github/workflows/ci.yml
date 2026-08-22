@@ -20,7 +20,8 @@ jobs:
           POSTGRES_DB: studyai
           POSTGRES_USER: studyai
           POSTGRES_PASSWORD: studyai
-        ports: 5432:5432
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -28,7 +29,8 @@ jobs:
           --health-retries 5
       redis:
         image: redis:7-alpine
-        ports: 6379:6379
+        ports:
+          - 6379:6379
         options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
