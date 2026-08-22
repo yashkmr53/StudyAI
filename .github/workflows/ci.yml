@@ -118,6 +118,7 @@ jobs:
       POSTGRES_PASSWORD: ci-dummy-password
       DJANGO_SECRET_KEY: ci-dummy-secret-key
       DJANGO_SECURE_SSL_REDIRECT: "0"
+      DJANGO_ALLOWED_HOSTS: "localhost,api"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
