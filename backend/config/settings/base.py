@@ -28,6 +28,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
+    "corsheaders",
+    "django_prometheus",
     # Shared
     "shared",
     # Apps
@@ -54,6 +56,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -190,6 +193,38 @@ JOBS_MAX_ATTEMPTS = 3
 JOBS_RETRY_BASE_SECONDS = 5
 JOBS_RETRY_CAP_SECONDS = 300
 JOBS_TIMEOUT_SECONDS = 600
+
+# CORS / CSRF (§23)
+CORS_ALLOWED_ORIGINS = []
+CSRF_TRUSTED_ORIGINS = []
+
+# Redis throttle cache (§23, D3)
+REDIS_THROTTLE_URL = "redis://redis:6379/2"
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    },
+    "throttle": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_THROTTLE_URL,
+        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+    },
+}
+
+# Prometheus metrics (§25, E)
+PROMETHEUS_METRICS_ENABLED = False
+
+# Enrichment coalescing window + change-magnitude threshold (§21, B7)
+ENRICHMENT_COALESCE_WINDOW_SECONDS = 300
+ENRICHMENT_CHANGE_MAGNITUDE_THRESHOLD = 0.15
+
+# Provider input limits (D5 data-minimization)
+MAX_PROVIDER_INPUT_CHARS = 8000
+
+# Monthly AI budget defaults (B8) — per-user overrides via admin
+DEFAULT_MONTHLY_TOKEN_BUDGET = 100000
+DEFAULT_MONTHLY_COST_BUDGET_USD = 50.00
 
 LOGGING = {
     "version": 1,

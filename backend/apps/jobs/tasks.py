@@ -27,3 +27,13 @@ def reap_stuck_jobs_task():
     if count:
         logger.warning("Reaped %s stuck jobs", count)
     return count
+
+
+@app.task
+def promote_retries_task():
+    from apps.jobs.services import promote_due_retries
+
+    count = promote_due_retries(timezone.now())
+    if count:
+        logger.info("Promoted %s retryable jobs to QUEUED", count)
+    return count

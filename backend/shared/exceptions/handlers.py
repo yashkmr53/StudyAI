@@ -94,6 +94,12 @@ class ProviderUnavailable(APIError):
     default_message = "An external provider is temporarily unavailable."
 
 
+class ProviderError(APIError):
+    status_code = 502
+    code = ERROR_PROVIDER_ERROR
+    default_message = "Upstream provider failed."
+
+
 _STATUS_TO_CODE = {
     400: ERROR_INVALID_REQUEST,
     401: ERROR_UNAUTHENTICATED,

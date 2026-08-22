@@ -35,6 +35,8 @@ class Job(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # For enrichment coalescing (B7): link to previous job if this job coalesced
+    coalesced_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="coalesced_jobs")
 
     class Meta:
         indexes = [

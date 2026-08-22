@@ -38,6 +38,13 @@ class ProviderCallLog(models.Model):
     latency_ms = models.PositiveIntegerField(default=0)
     success = models.BooleanField(default=True)
     error = models.TextField(blank=True)
+    # B8 token accounting
+    input_tokens = models.PositiveIntegerField(null=True, blank=True)
+    output_tokens = models.PositiveIntegerField(null=True, blank=True)
+    total_tokens = models.PositiveIntegerField(null=True, blank=True)
+    estimated_cost_usd = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    # D5 data-minimization metadata
+    metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

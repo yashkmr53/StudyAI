@@ -5,11 +5,15 @@
 /api/v1/status — staff-only aggregates: jobs by status/type, dead-letters,
                  retryable backlog, provider usage, citation distribution,
                  request latency percentiles (§25 list).
+/metrics   — Prometheus metrics endpoint (§25, E).
 """
+from django.conf import settings
 from django.db import connection
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from shared.observability.metrics import get_prometheus_metrics
 
 
 class HealthzView(APIView):
@@ -85,3 +89,17 @@ class StatusView(APIView):
             "database": {"vendor": connection.vendor},
         }
         return Response(payload)
+
+
+class MetricsView(APIView):
+    """Prometheus metrics endpoint."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        if not getattr(settings, "PROMETHEUS_METRICS_ENABLED", False):
+            return Response({"detail": "Metrics disabled"}, status=404)
+        from django.http import HttpResponse
+        from prometheus_client import CONTENT_TYPE_LATEST
+        return HttpResponse(get_prometheus_metrics(), content_type=CONTENT_TYPE_LATEST)

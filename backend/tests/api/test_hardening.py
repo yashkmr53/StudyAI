@@ -63,7 +63,10 @@ class RateLimitTests(TestCase):
             **__import__("django.conf", fromlist=["settings"]).settings.REST_FRAMEWORK,
             "DEFAULT_THROTTLE_RATES": {"auth": "3/min", "ai": "100/min", "user": "1000/min"},
         },
-        CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+        CACHES={
+            "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+            "throttle": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        },
         RATE_LIMITING_ENABLED=True,
     )
     def test_login_throttled_after_rate(self):

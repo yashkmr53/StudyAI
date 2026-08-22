@@ -68,6 +68,17 @@ services:
     volumes:
       - objectstore:/app/var/objectstore
 
+  beat:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+    environment: *backend-env
+    command: celery -A config beat -l info
+    volumes:
+      - objectstore:/app/var/objectstore
+
   frontend:
     build: ./frontend
     restart: unless-stopped

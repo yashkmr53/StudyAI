@@ -80,3 +80,16 @@ export async function markAcknowledged(id: number): Promise<void> {
     acknowledged_at: new Date().toISOString(),
   });
 }
+
+export async function updateOperationStatus(id: number, status: SyncOperation["status"]): Promise<void> {
+  const db = await getDb();
+  const op = await db.get("outbox", id);
+  if (op) {
+    await db.put("outbox", { ...op, status });
+  }
+}
+
+export async function getOperationsByStatus(status: SyncOperation["status"]): Promise<SyncOperation[]> {
+  const db = await getDb();
+  return db.getAllFromIndex("outbox", "by_status", status);
+}

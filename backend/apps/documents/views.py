@@ -35,7 +35,7 @@ from apps.jobs.models import Job
 from apps.jobs.services import cancel_job, dispatch_job
 from apps.profiles.models import Profile
 from shared.authorization.services import ProfileAuthorizationService
-from shared.throttles import LiveScopedRateThrottle
+from shared.throttles import LiveScopedRateThrottle, AIBudgetThrottle
 from shared.exceptions import ValidationError
 
 
@@ -164,7 +164,7 @@ class DocumentViewSet(
         return Response({"digitized_document": None, "job": _job_payload(with_job)}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="enrich",
-            throttle_classes=[LiveScopedRateThrottle])
+            throttle_classes=[AIBudgetThrottle])
     def enrich(self, request, pk=None):
         """§60: POST /documents/{id}/enrich — 200 existing / 202 enrich job."""
         result = EnrichmentService.enqueue_enrichment(request.user, str(pk))
@@ -189,7 +189,8 @@ class DocumentViewSet(
 
         return Response(EnrichedNoteSerializer(note).data)
 
-    @action(detail=True, methods=["post"], url_path="refresh-ai")
+    @action(detail=True, methods=["post"], url_path="refresh-ai",
+            throttle_classes=[AIBudgetThrottle])
     def refresh_ai(self, request, pk=None):
         """§60: POST /documents/{id}/refresh-ai — forces regeneration."""
         result = EnrichmentService.enqueue_enrichment(request.user, str(pk), force_refresh=True)

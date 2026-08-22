@@ -1,4 +1,4 @@
-import { enqueueOperation, markAcknowledged, pendingOperations, type SyncOperation } from "../../db/indexeddb/db";
+import { enqueueOperation, markAcknowledged, pendingOperations, updateOperationStatus, type SyncOperation } from "../../db/indexeddb/db";
 import { ApiError } from "../../types/api";
 import { canvasApi, type LockContext } from "../api/canvas";
 
@@ -10,6 +10,8 @@ import { canvasApi, type LockContext } from "../api/canvas";
  * Client idempotency keys prevent duplicate writes server-side.
  * client_sequence is the outbox auto-increment id: monotonic per device.
  */
+
+export type OutboxStatus = "pending" | "sending" | "acknowledged" | "failed" | "retrying";
 
 export function newDeviceId(): string {
   const existing = localStorage.getItem("studyai.device_id");
@@ -90,19 +92,45 @@ export async function flushOutbox(): Promise<{ acked: number; lockLost: boolean 
   for (const group of groups.values()) {
     const ctx = lockContextProvider?.();
     if (!ctx) break; // no active session/lock — retry later
+
+    // Mark ops as sending
+    for (const opId of group.opIds) {
+      await updateOperationStatus(opId, "sending");
+    }
+
     try {
       await canvasApi.pushStrokes(group.pageId, ctx, group.strokes);
     } catch (err) {
+      // Mark ops as failed
+      for (const opId of group.opIds) {
+        await updateOperationStatus(opId, "failed");
+      }
       if (err instanceof ApiError && err.code === "SESSION_LOCK_LOST") {
         onLockLostCallback?.();
         return { acked, lockLost: true };
       }
-      continue; // transient failure — leave ops pending for next flush
+      // transient failure — leave ops as failed for next flush (will transition to retrying)
+      continue;
     }
+
+    // Mark ops as acknowledged
     for (const opId of group.opIds) {
       await markAcknowledged(opId);
       acked += 1;
     }
   }
   return { acked, lockLost: false };
+}
+
+/**
+ * Retry failed operations - transitions from failed to retrying to sending
+ */
+export async function retryFailedOperations(): Promise<void> {
+  const ops = await pendingOperations();
+  const failedOps = ops.filter(op => op.status === "failed" && op.operation_type === "strokes.append");
+
+  for (const op of failedOps) {
+    await updateOperationStatus(op.id!, "retrying");
+    // The next flushOutbox() call will pick these up and transition to sending
+  }
 }

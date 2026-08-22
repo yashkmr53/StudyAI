@@ -14,6 +14,7 @@ from shared.exceptions.handlers import (  # noqa: F401
     ERROR_VALIDATION_ERROR,
     Forbidden,
     IdempotencyConflict,
+    ProviderError,
     ProviderUnavailable,
     RateLimited,
     ResourceNotFound,

@@ -25,5 +25,8 @@ RATE_LIMITING_ENABLED = False
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.dummy.DummyCache"
-    }
+    },
+    "throttle": {
+        "BACKEND": "django.core.cache.backends.dummy.DummyCache"
+    },
 }

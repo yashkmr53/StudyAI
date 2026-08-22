@@ -7,7 +7,7 @@ from apps.chat.models import ChatMessage, ChatSession
 from apps.chat.services import ChatService
 from apps.profiles.models import Profile
 from apps.subjects.models import Subject
-from shared.throttles import LiveScopedRateThrottle
+from shared.throttles import LiveScopedRateThrottle, AIBudgetThrottle
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):
@@ -39,6 +39,7 @@ class ChatSessionViewSet(
 ):
     serializer_class = ChatSessionSerializer
     throttle_scope = "ai"
+    throttle_classes = [AIBudgetThrottle]
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
@@ -65,7 +66,7 @@ class ChatSessionViewSet(
         return Response(ChatSessionSerializer(session).data, status=201)
 
     @action(detail=True, methods=["get", "post"], url_path="messages",
-            throttle_classes=[LiveScopedRateThrottle])
+            throttle_classes=[AIBudgetThrottle])
     def messages(self, request, pk=None):
         session = self.get_object()
         if request.method == "POST":

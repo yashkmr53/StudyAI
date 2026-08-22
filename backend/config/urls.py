@@ -3,13 +3,15 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from providers.storage.views import StorageDownloadView, StorageUploadView
-from shared.observability.views import HealthzView, ReadyzView, StatusView
+from shared.observability.views import HealthzView, ReadyzView, StatusView, MetricsView
 
 api_v1 = [
     path("auth/", include("apps.accounts.urls")),
     path("", include("apps.profiles.urls")),
     path("", include("apps.canvas.urls")),
     path("", include("apps.documents.urls")),  # incl. search + audit routes
+    path("", include("apps.notebooks.urls")),  # B1 Notebooks CRUD
+    path("", include("apps.ai_classroom.urls")),  # B4 Tag rename
     path("status", StatusView.as_view(), name="status"),
     path("storage/upload/<path:key>", StorageUploadView.as_view()),
     path("storage/download/<path:key>", StorageDownloadView.as_view()),
@@ -22,4 +24,5 @@ urlpatterns = [
     path("api/v1/", include(api_v1)),
     path("healthz", HealthzView.as_view()),
     path("readyz", ReadyzView.as_view()),
+    path("metrics", MetricsView.as_view(), name="metrics"),
 ]

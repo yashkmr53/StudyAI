@@ -24,7 +24,9 @@ LOGGING["loggers"] = {
 # verbose SQL off; keep throttle debug
 
 # Throttling must not leak counters across tests: disable cache by default.
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"},
+    "throttle": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"},
+}
 
 RATE_LIMITING_ENABLED = False  # enabled per-test via override_settings
-CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
