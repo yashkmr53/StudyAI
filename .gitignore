@@ -18,6 +18,7 @@ myenv/
 # Node
 node_modules/
 frontend/dist/
+frontend/coverage/
 dev-dist/
 
 # Env / OS
