@@ -1,10 +1,11 @@
-import { useOnlineStatus } from "../../hooks/useOnlineStatus";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import type React from "react";
 
 /**
  * Offline banner component (G5).
  * Shows a banner when the app is offline.
  */
-export function OfflineBanner(): JSX.Element | null {
+export function OfflineBanner(): React.ReactElement | null {
   const { isOnline, wasOffline } = useOnlineStatus();
 
   if (isOnline && !wasOffline) {

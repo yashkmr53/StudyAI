@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getOperationsByStatus, type SyncOperation, type OutboxStatus } from "../../db/indexeddb/db";
-import { flushOutbox, retryFailedOperations } from "../../services/sync/outbox";
+import { getOperationsByStatus, type SyncOperation } from "../db/indexeddb/db";
+import { flushOutbox, retryFailedOperations } from "../services/sync/outbox";
 
 interface OutboxState {
   operations: SyncOperation[];
