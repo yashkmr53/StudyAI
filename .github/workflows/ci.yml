@@ -127,11 +127,10 @@ jobs:
 
       - name: Test Docker compose up
         run: |
-          docker compose up -d
-          sleep 30
-          curl -f http://localhost/healthz
-          curl -f http://localhost/api/v1/healthz
-          docker compose down
+          docker compose up -d --wait --wait-timeout 180
+          curl -fsS http://localhost/healthz
+          curl -fsS http://localhost/readyz
+          docker compose down -v
 
   openapi-drift:
     name: OpenAPI Drift Check
