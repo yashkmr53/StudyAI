@@ -183,7 +183,7 @@ class NoteSpaceService:
     def signed_download_url(artifact: DigitizedDocument) -> dict:
         from providers.registry import get_object_storage
 
-        url = get_object_storage().create_download_url(artifact.pdf_ref)
+        url = get_object_storage().create_download_url(artifact.pdf_ref, ttl_seconds=settings.SIGNED_URL_TTL_SECONDS)
         return {
             "url": url,
             "expires_in": getattr(settings, "SIGNED_URL_TTL_SECONDS", 300),

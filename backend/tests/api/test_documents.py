@@ -21,6 +21,7 @@ def _png_bytes() -> bytes:
     return b"\x89PNG\r\n\x1a\n" + b"x" * 256
 
 
+@override_settings(STORAGE_BACKEND="local")
 class UploadFlowTests(TestCase):
     def setUp(self):
         self.alice = authenticated_client("alice@example.com", "s3curePass!x")

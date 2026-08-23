@@ -8,6 +8,7 @@ POST /api/v1/documents/{id}/revisions         finalize-upload OR user-edit revis
 POST /api/v1/documents/{id}/retry-processing
 POST /api/v1/documents/pages/{page_id}/finalize-upload   (explicit §46 step)
 """
+from django.conf import settings
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -75,7 +76,7 @@ class DocumentViewSet(
         key = f"{profile.id}/{page.id}{ext}"
         page.image_ref = key
         page.save(update_fields=("image_ref",))
-        upload_url = storage.create_upload_url(key, content_type="application/octet-stream")
+        upload_url = storage.create_upload_url(key,content_type="application/octet-stream",ttl_seconds=settings.SIGNED_URL_TTL_SECONDS,)
         audit_event(actor=request.user, action="document.created", resource_type="document",
                     resource_id=document.pk, request=request)
         return Response(
