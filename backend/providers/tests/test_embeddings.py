@@ -177,15 +177,21 @@ class TestEmbeddingBackfill(TestCase):
 
     def test_model_version_changes_require_backfill(self):
         """Changing model version should indicate backfill needed."""
-        provider_v1 = HashingEmbeddingProvider()
-        # Manually change version to simulate model update
-        provider_v1._model_version = "hashing-384-v2"
-        
-        # Embedding with old version should warn
-        with self.assertLogs(level="WARNING") as cm:
-            provider_v1.embed(["test"], model_version="hashing-384-v1")
-        
-        assert any("Model version mismatch" in msg for msg in cm.output)
+        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        with patch("sentence_transformers.SentenceTransformer") as mock_st_class:
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.array([[0.1] * 384], dtype=np.float32)
+            mock_st_class.return_value = mock_model
+            
+            provider_v1 = SentenceTransformerEmbeddingProvider()
+            # Manually change version to simulate model update
+            provider_v1._model_version = "sentence-transformers-test-model-v2"
+            
+            # Embedding with old version should warn
+            with self.assertLogs(level="WARNING") as cm:
+                provider_v1.embed(["test"], model_version="sentence-transformers-test-model-v1")
+            
+            assert any("Model version mismatch" in msg for msg in cm.output)
 
     def test_embedding_model_metadata(self):
         """Provider should expose metadata for backfill tracking."""

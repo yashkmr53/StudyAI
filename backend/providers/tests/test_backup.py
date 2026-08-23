@@ -48,8 +48,8 @@ class TestBackupCommands(TestCase):
         
         cmd = Command()
         
-        # The command requires --backup-file argument
-        cmd.handle(backup_file="/tmp/backup/test.sql")
+        # The command requires --backup-file and --target-db arguments
+        cmd.handle(backup_file="/tmp/backup/test.sql", target_db=None)
         
         # Should verify backup exists
         mock_exists.assert_called()
