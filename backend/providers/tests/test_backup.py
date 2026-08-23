@@ -7,6 +7,7 @@ from io import StringIO
 
 from providers.storage.local import LocalObjectStorage
 from providers.registry import get_object_storage
+from providers.storage.s3 import MinIOStorageProvider
 
 
 class TestBackupCommands(TestCase):
@@ -15,42 +16,40 @@ class TestBackupCommands(TestCase):
     def setUp(self):
         self.storage = LocalObjectStorage()
 
-    @patch("apps.core.management.commands.backup_database.dumpdata")
-    @patch("apps.core.management.commands.backup_database.open", new_callable=MagicMock)
-    @patch("apps.core.management.commands.backup_database.Path.mkdir")
-    def test_backup_database_command(self, mock_mkdir, mock_open, mock_dumpdata):
+    @patch("apps.audit.management.commands.backup_database.subprocess.run")
+    @patch("apps.audit.management.commands.backup_database.os.makedirs")
+    @patch("apps.audit.management.commands.backup_database.os.path.getsize")
+    def test_backup_database_command(self, mock_getsize, mock_makedirs, mock_run):
         """Test backup_database management command."""
-        from apps.core.management.commands.backup_database import Command
+        from apps.audit.management.commands.backup_database import Command
         
         cmd = Command()
         out = StringIO()
-        
-        # Mock the file handle
-        mock_file = MagicMock()
-        mock_open.return_value.__enter__.return_value = mock_file
+        mock_getsize.return_value = 1024
         
         cmd.handle(
             output_dir="/tmp/backup",
-            compress=True,
+            format="plain",
             stdout=out,
         )
         
         # Should create directory
-        mock_mkdir.assert_called()
+        mock_makedirs.assert_called()
         
-        # Should call dumpdata
-        mock_dumpdata.assert_called()
+        # Should call pg_dump
+        mock_run.assert_called()
         
-        # Should write to file
-        mock_file.write.assert_called()
+        # Should write success message
+        self.assertIn("Backup written", out.getvalue())
 
-    @patch("apps.core.management.commands.verify_backup.Path.exists")
-    @patch("apps.core.management.commands.verify_backup.call_command")
-    def test_verify_backup_command(self, mock_call_command, mock_exists):
+    @patch("apps.audit.management.commands.verify_backup.subprocess.run")
+    @patch("apps.audit.management.commands.verify_backup.os.path.exists")
+    def test_verify_backup_command(self, mock_exists, mock_run):
         """Test verify_backup management command."""
-        from apps.core.management.commands.verify_backup import Command
+        from apps.audit.management.commands.verify_backup import Command
         
         mock_exists.return_value = True
+        mock_run.return_value = MagicMock(returncode=0)
         
         cmd = Command()
         out = StringIO()
@@ -60,8 +59,8 @@ class TestBackupCommands(TestCase):
         # Should verify backup exists
         mock_exists.assert_called()
         
-        # Should run flush and migrate to test restore
-        assert mock_call_command.call_count >= 2
+        # Should run pg_restore
+        mock_run.assert_called()
 
 
 class TestBackupWithMinIO(TestCase):
@@ -123,7 +122,7 @@ class TestBackupOffsiteHook(TestCase):
         # The script would be called like:
         # scripts/backup_offsite_hook.sh --source-dir /tmp/backup --dest-uri s3://bucket/backups
         
-        from apps.core.management.commands.backup_database import Command
+        from apps.audit.management.commands.backup_database import Command
         cmd = Command()
         
         # Simulate running the hook
@@ -180,14 +179,14 @@ class TestBackupRestoreProcedure(TestCase):
 
     def test_backup_command_help(self):
         """Backup command should have help text."""
-        from apps.core.management.commands.backup_database import Command
+        from apps.audit.management.commands.backup_database import Command
         cmd = Command()
         
         assert "backup" in cmd.help.lower()
 
     def test_verify_command_help(self):
         """Verify command should have help text."""
-        from apps.core.management.commands.verify_backup import Command
+        from apps.audit.management.commands.verify_backup import Command
         cmd = Command()
         
         assert "verify" in cmd.help.lower() or "restore" in cmd.help.lower()

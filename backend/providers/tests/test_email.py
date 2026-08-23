@@ -139,19 +139,24 @@ class TestMailpitEmailProvider(TestCase):
         assert "<p>HTML version</p>" in message
 
     @patch("providers.email.requests.get")
-    @patch("providers.email.requests.get")
-    def test_get_captured_emails(self, mock_get_messages, mock_get_init):
+    def test_get_captured_emails(self, mock_get):
         """Should retrieve captured emails from Mailpit API."""
-        mock_get_init.return_value.json.return_value = {"messages": []}
-        mock_get_init.return_value.raise_for_status = MagicMock()
+        # First call for initialization
+        init_response = MagicMock()
+        init_response.json.return_value = {"messages": []}
+        init_response.raise_for_status = MagicMock()
         
-        mock_get_messages.return_value.json.return_value = {
+        # Second call for getting messages
+        messages_response = MagicMock()
+        messages_response.json.return_value = {
             "messages": [
                 {"ID": "1", "Subject": "Test 1", "From": "a@b.com", "To": ["c@d.com"]},
                 {"ID": "2", "Subject": "Test 2", "From": "e@f.com", "To": ["g@h.com"]},
             ]
         }
-        mock_get_messages.return_value.raise_for_status = MagicMock()
+        messages_response.raise_for_status = MagicMock()
+        
+        mock_get.side_effect = [init_response, messages_response]
         
         provider = MailpitEmailProvider()
         emails = provider.get_captured_emails()
@@ -159,6 +164,7 @@ class TestMailpitEmailProvider(TestCase):
         assert len(emails) == 2
         assert emails[0]["Subject"] == "Test 1"
         assert emails[1]["Subject"] == "Test 2"
+        assert mock_get.call_count == 2
 
     def test_implements_email_provider(self):
         """Should implement EmailProvider protocol."""
@@ -184,7 +190,9 @@ class TestSMTPEmailProvider(TestCase):
     def test_send_email_tls(self, mock_smtp_class):
         """Should send email with TLS."""
         mock_smtp = MagicMock()
-        mock_smtp_class.return_value.__enter__.return_value = mock_smtp
+        mock_smtp_class.return_value = mock_smtp
+        mock_smtp.__enter__ = MagicMock(return_value=mock_smtp)
+        mock_smtp.__exit__ = MagicMock(return_value=False)
         
         provider = SMTPEmailProvider(
             host="smtp.example.com",
@@ -210,7 +218,9 @@ class TestSMTPEmailProvider(TestCase):
     def test_send_email_ssl(self, mock_smtp_ssl_class):
         """Should send email with SSL."""
         mock_smtp = MagicMock()
-        mock_smtp_ssl_class.return_value.__enter__.return_value = mock_smtp
+        mock_smtp_ssl_class.return_value = mock_smtp
+        mock_smtp.__enter__ = MagicMock(return_value=mock_smtp)
+        mock_smtp.__exit__ = MagicMock(return_value=False)
         
         provider = SMTPEmailProvider(
             host="smtp.example.com",
@@ -229,8 +239,9 @@ class TestSMTPEmailProvider(TestCase):
         
         mock_smtp_ssl_class.assert_called_once_with("smtp.example.com", 465)
         mock_smtp.login.assert_called_once_with("user", "pass")
+        mock_smtp.sendmail.assert_called_once()
         # No starttls for SSL
-        assert not hasattr(mock_smtp, 'starttls') or not mock_smtp.starttls.called
+        mock_smtp.starttls.assert_not_called()
 
     @patch("providers.email.smtplib.SMTP")
     def test_send_without_auth(self, mock_smtp_class):

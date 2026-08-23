@@ -63,6 +63,7 @@ class SentenceTransformerEmbeddingProvider:
         self._model: Optional[Any] = None
         self._dimension: int = 384
         self._model_version: str = "all-MiniLM-L6-v2-v1"
+        self._device: str = "cpu"  # default, will be updated in _load_model
         
         self._load_model()
         logger.info(

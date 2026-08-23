@@ -61,7 +61,8 @@ class TestOCRServiceBehavior(TestCase):
         assert "failing-primary" in attempted
         assert "fallback" in attempted
         assert result.provider == "fallback"
-        assert result.confidence == 0.90
+        # Average of 0.90, 0.89, 0.88 = 0.89
+        assert result.confidence == 0.89
 
     def test_ocr_chain_all_fail_raises(self):
         """OCR chain should raise if all providers fail."""

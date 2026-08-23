@@ -159,8 +159,8 @@ SIGNED_URL_TTL_SECONDS = 300
 CANVAS_LOCK_TTL_SECONDS = 90
 
 # Ingestion / OCR (architecture §6, §28, §47)
-OCR_PIPELINE_VERSION = "mock-v1"          # part of the OCR idempotency key (§20)
-OCR_PROVIDER_CHAIN = ["mock", "mock"]     # primary, fallback — mock until §30 decision
+OCR_PIPELINE_VERSION = "tesseract-v1"          # part of the OCR idempotency key (§20)
+OCR_PROVIDER_CHAIN = "tesseract,mock"     # primary, fallback — comma-separated string
 OCR_REVIEW_THRESHOLD = 0.80               # avg confidence below → needs_review (§48)
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 UPLOAD_ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -179,14 +179,17 @@ AI_DAILY_BUDGET_PER_PROFILE = 500  # generous default; enforced when set
 RENDERER_VERSION = "notespace-pdf-v1"
 
 # AI Classroom retrieval foundation (architecture §8, §10, §14)
-EMBEDDING_PROVIDER = "hashing"          # local embedder (F-001); swap for model-based later
+EMBEDDING_PROVIDER = "sentence_transformers"  # local embedder (MiniLM)
 EMBEDDING_DIMENSIONS = 384
-EMBEDDING_MODEL_VERSION = "hashing-384-v1"
+EMBEDDING_MODEL_VERSION = "sentence-transformers-all-MiniLM-L6-v2-v1"
 CHUNKER_VERSION = "v1"
 CHUNK_WORDS = 120                       # target chunk size in words (§10)
 CHUNK_OVERLAP_WORDS = 30                # carried context window across chunk/page edges
 RETRIEVAL_RRF_K = 60                    # Reciprocal Rank Fusion constant
 RETRIEVAL_CANDIDATES = 50               # per-channel depth before fusion
+
+# LLM Provider Chain (Phase 11)
+LLM_PROVIDER_CHAIN = "ollama,mock"     # primary, fallback — comma-separated string
 
 # Jobs runtime (architecture §19–20)
 JOBS_MAX_ATTEMPTS = 3

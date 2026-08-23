@@ -34,6 +34,18 @@ def _sign(token: str) -> float:
 
 class HashingEmbeddingProvider:
     name = "hashing"
+    
+    @property
+    def dimension(self) -> int:
+        return 384
+    
+    @property
+    def model_name(self) -> str:
+        return "hashing"
+    
+    @property
+    def model_version(self) -> str:
+        return "hashing-384-v1"
 
     def embed(self, texts: list[str], *, model_version: str) -> list[list[float]]:
         dim = _dim()

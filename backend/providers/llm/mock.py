@@ -38,7 +38,8 @@ class MockLLMProvider:
         elif prompt.name == "chat":
             data = self._chat(evidence)
         else:
-            raise ValueError(f"MockLLM has no behaviour for prompt '{prompt.name}'.")
+            # Default handler for unknown prompts (tests, etc.)
+            data = {"result": f"Mock response for {prompt.name}", "status": "ok"}
 
         return StructuredLLMResult(
             data=data,

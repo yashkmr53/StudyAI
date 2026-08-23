@@ -41,8 +41,14 @@ from providers.email import MailpitEmailProvider, SMTPEmailProvider
 
 
 def _get_env(name: str, default: str | None = None) -> str | None:
-    """Get environment variable with Django settings fallback."""
-    return getattr(settings, name, None) or os.environ.get(name, default)
+    """Get environment variable with Django settings fallback.
+    
+    Handles both string and list formats from settings.
+    """
+    value = getattr(settings, name, None) or os.environ.get(name, default)
+    if isinstance(value, list):
+        return ",".join(value)
+    return value
 
 
 # ============================================================================
@@ -92,7 +98,10 @@ def _build_ocr(name: str):
         return PaddleOCRProvider()
     # Production providers (require credentials)
     if name == "google":
-        from providers.ocr.google import GoogleVisionOCRProvider
+        try:
+            from providers.ocr.google import GoogleVisionOCRProvider
+        except ImportError:
+            raise ValueError("Google Vision OCR provider not available (providers.ocr.google not implemented)")
         return GoogleVisionOCRProvider()
     raise ValueError(f"Unknown OCR provider: {name}")
 
@@ -126,12 +135,18 @@ def _build_llm(name: str):
         return OllamaChatProvider()
     # Production providers (require credentials)
     if name == "openai":
-        from providers.llm.openai import OpenAILLMProvider
+        try:
+            from providers.llm.openai import OpenAILLMProvider
+        except ImportError:
+            raise ValueError("OpenAI provider not available (providers.llm.openai not implemented)")
         if not _get_env("OPENAI_API_KEY"):
             raise ValueError("OpenAI provider requires OPENAI_API_KEY environment variable")
         return OpenAILLMProvider()
     if name == "anthropic":
-        from providers.llm.anthropic import AnthropicLLMProvider
+        try:
+            from providers.llm.anthropic import AnthropicLLMProvider
+        except ImportError:
+            raise ValueError("Anthropic provider not available (providers.llm.anthropic not implemented)")
         if not _get_env("ANTHROPIC_API_KEY"):
             raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY environment variable")
         return AnthropicLLMProvider()
@@ -166,7 +181,10 @@ def get_embedding_provider() -> EmbeddingProvider:
     
     # Production: same model but hosted
     if name == "openai":
-        from providers.embeddings.openai import OpenAIEmbeddingProvider
+        try:
+            from providers.embeddings.openai import OpenAIEmbeddingProvider
+        except ImportError:
+            raise ValueError("OpenAI embeddings provider not available (providers.embeddings.openai not implemented)")
         if not _get_env("OPENAI_API_KEY"):
             raise ValueError("OpenAI embeddings require OPENAI_API_KEY")
         return OpenAIEmbeddingProvider()
