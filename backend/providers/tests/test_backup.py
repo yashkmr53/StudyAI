@@ -39,12 +39,17 @@ class TestBackupCommands(TestCase):
 
     @patch("apps.audit.management.commands.verify_backup.subprocess.run")
     @patch("os.path.exists")
-    def test_verify_backup_command(self, mock_exists, mock_run):
+    @patch("django.db.connection")
+    def test_verify_backup_command(self, mock_connection, mock_exists, mock_run):
         """Test verify_backup management command."""
         from apps.audit.management.commands.verify_backup import Command
         
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0, stdout="")
+        
+        # Mock the database connection cursor to avoid SQLite issues
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
         
         cmd = Command()
         
@@ -56,6 +61,10 @@ class TestBackupCommands(TestCase):
         
         # Should run pg_restore/psql
         mock_run.assert_called()
+        
+        # Should attempt to drop and create database
+        mock_cursor.execute.assert_any_call('DROP DATABASE IF EXISTS "test_restore_verify";')
+        mock_cursor.execute.assert_any_call('CREATE DATABASE "test_restore_verify";')
 
 
 class TestBackupWithMinIO(TestCase):
