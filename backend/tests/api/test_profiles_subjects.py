@@ -53,6 +53,43 @@ class ProfileSubjectAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 422)
 
+    def test_list_subjects_gated_by_profile_query_param(self):
+        self.alice.post(
+            "/api/v1/subjects",
+            {"profile": str(self.alice_profile.id), "name": "Algorithms"},
+            content_type="application/json",
+        )
+        sem2 = Profile.objects.create(
+            user=User.objects.get(email="alice@example.com"), name="Sem 2"
+        )
+        self.alice.post(
+            "/api/v1/subjects",
+            {"profile": str(sem2.id), "name": "Networks"},
+            content_type="application/json",
+        )
+
+        scoped = self.alice.get(
+            f"/api/v1/subjects?profile={self.alice_profile.id}"
+        ).json()
+        self.assertEqual([s["name"] for s in scoped["results"]], ["Algorithms"])
+
+        unscoped = self.alice.get("/api/v1/subjects").json()
+        self.assertEqual(unscoped["count"], 2)
+
+    def test_profile_gate_rejects_foreign_and_unknown_ids(self):
+        bob_profile = Profile.objects.get(user__email="bob@example.com")
+
+        # Existing but foreign-owned: Forbidden (same semantics as create).
+        foreign = self.alice.get(f"/api/v1/subjects?profile={bob_profile.id}")
+        self.assertEqual(foreign.status_code, 403)
+        self.assertEqual(foreign.json()["error"]["code"], "FORBIDDEN")
+
+        # Unknown id: Not Found.
+        unknown = self.alice.get(
+            "/api/v1/subjects?profile=00000000-0000-0000-0000-000000000000"
+        )
+        self.assertEqual(unknown.status_code, 404)
+
 
 class ModelConstraintTests(TestCase):
     def test_profile_unique_per_user_name(self):
