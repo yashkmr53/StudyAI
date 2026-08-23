@@ -21,12 +21,65 @@ services:
       interval: 5s
       retries: 10
 
+  # Local development services (Phase 11)
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console UI
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI / API
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Optional: pre-pull models at build time
+    # command: sh -c "ollama serve & sleep 10 && ollama pull llama3.1:8b && wait"
+
   api:
     build: ./backend
     restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
+      minio: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+      ollama: { condition: service_healthy }
     environment: &backend-env
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set in .env}
@@ -43,8 +96,25 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_SSLMODE: disable   # private docker network only
       CELERY_BROKER_URL: redis://redis:6379/0
-      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-local}
-      OBJECT_STORAGE_LOCAL_DIR: var/objectstore
+      # Phase 11: Local provider configuration
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-minio}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-studyai}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_SECURE: "false"
+      OCR_PROVIDER_CHAIN: ${OCR_PROVIDER_CHAIN:-tesseract,mock}
+      LLM_PROVIDER_CHAIN: ${LLM_PROVIDER_CHAIN:-ollama,mock}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-mailpit}
+      MAILPIT_HOST: mailpit
+      MAILPIT_PORT: 1025
+      MAILPIT_API_URL: http://mailpit:8025
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@studyai.local}
+      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-llama3.1:8b}
       SIGNED_URL_TTL_SECONDS: ${SIGNED_URL_TTL_SECONDS:-300}
     command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
     volumes:
@@ -63,6 +133,9 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
+      minio: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+      ollama: { condition: service_healthy }
     environment: *backend-env
     command: celery -A config worker -l info
     volumes:
@@ -74,6 +147,9 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
+      minio: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+      ollama: { condition: service_healthy }
     environment: *backend-env
     command: celery -A config beat -l info
     volumes:
@@ -101,3 +177,5 @@ volumes:
   pgdata:
   objectstore:
   django_static:
+  minio_data:
+  ollama_data:

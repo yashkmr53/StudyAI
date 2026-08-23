@@ -1,72 +1,219 @@
 """Provider registry: business logic asks for a provider by role (§24).
 
-Real handwriting providers are an open decision (§30); the default chain is
-the mock provider, overridable via settings for tests.
+Provider selection is driven by environment variables:
+- OCR_PROVIDER: "mock", "tesseract", "paddleocr" (default: "mock")
+- LLM_PROVIDER: "mock", "ollama", "ollama-chat" (default: "mock")
+- EMBEDDING_PROVIDER: "hashing", "sentence_transformers" (default: "hashing")
+- STORAGE_BACKEND: "local", "minio", "s3" (default: "local")
+- EMAIL_BACKEND: "mailpit", "smtp", "console" (default: "mailpit" for dev, "console" for tests)
+
+Production providers (google, openai) are separate adapters that require credentials.
+Local providers work without any external credentials.
 """
+import os
 from django.conf import settings
 
-from providers.base import EmbeddingProvider, LLMProvider, OCRProvider
+from providers.base import (
+    EmbeddingProvider,
+    LLMProvider,
+    OCRProvider,
+    ObjectStorageProvider,
+    EmailProvider,
+)
+
+# OCR
 from providers.ocr.chain import OCRChainProvider
+from providers.ocr.mock import MockOCRProvider
+
+# LLM
+from providers.llm.chain import LLMChainProvider
+from providers.llm.mock import MockLLMProvider
+from providers.llm.failing import FailingLLMProvider
+
+# Embeddings
+from providers.embeddings.hashing import HashingEmbeddingProvider
+
+# Storage
 from providers.storage.local import LocalObjectStorage
 
+# Email
+from providers.email import MailpitEmailProvider, SMTPEmailProvider
 
-def get_object_storage() -> LocalObjectStorage:
-    backend = settings.OBJECT_STORAGE_BACKEND
+
+def _get_env(name: str, default: str | None = None) -> str | None:
+    """Get environment variable with Django settings fallback."""
+    return getattr(settings, name, None) or os.environ.get(name, default)
+
+
+# ============================================================================
+# Object Storage
+# ============================================================================
+
+def get_object_storage() -> ObjectStorageProvider:
+    """Get object storage provider based on STORAGE_BACKEND."""
+    backend = _get_env("STORAGE_BACKEND", "local")
+    
     if backend == "local":
         return LocalObjectStorage()
-    raise ValueError(f"Unknown OBJECT_STORAGE_BACKEND: {backend}")
+    
+    if backend == "minio":
+        from providers.storage.s3 import MinIOStorageProvider
+        return MinIOStorageProvider(backend="minio")
+    
+    if backend == "s3":
+        from providers.storage.s3 import S3StorageProvider
+        # Validate required credentials for production
+        if not _get_env("S3_ACCESS_KEY") or not _get_env("S3_SECRET_KEY"):
+            raise ValueError(
+                "S3 backend requires S3_ACCESS_KEY and S3_SECRET_KEY environment variables"
+            )
+        return S3StorageProvider(backend="s3")
+    
+    raise ValueError(f"Unknown STORAGE_BACKEND: {backend}")
 
+
+# ============================================================================
+# OCR
+# ============================================================================
 
 def _build_ocr(name: str):
+    """Build single OCR provider by name."""
     if name == "mock":
-        from providers.ocr.mock import MockOCRProvider
-
         return MockOCRProvider()
     if name == "mock_low_confidence":
-        from providers.ocr.mock import MockOCRProvider
-
         return MockOCRProvider(confidence=0.42, name="mock_low_confidence")
     if name == "failing":
-        from providers.ocr.mock import MockOCRProvider
-
         return MockOCRProvider(fail=True, name="failing")
+    if name == "tesseract":
+        from providers.ocr.local import TesseractOCRProvider
+        return TesseractOCRProvider()
+    if name == "paddleocr":
+        from providers.ocr.local import PaddleOCRProvider
+        return PaddleOCRProvider()
+    # Production providers (require credentials)
+    if name == "google":
+        from providers.ocr.google import GoogleVisionOCRProvider
+        return GoogleVisionOCRProvider()
     raise ValueError(f"Unknown OCR provider: {name}")
 
 
 def get_ocr_provider() -> OCRChainProvider:
-    """Primary + fallback chain (§28). Defaults to mock → mock."""
-    names = getattr(settings, "OCR_PROVIDER_CHAIN", ["mock", "mock"])
+    """Get OCR provider chain (primary + fallback).
+    
+    OCR_PROVIDER_CHAIN can be a comma-separated list: "tesseract,mock"
+    Defaults to ["mock", "mock"] for backward compatibility.
+    """
+    chain_str = _get_env("OCR_PROVIDER_CHAIN", "mock,mock")
+    names = [n.strip() for n in chain_str.split(",") if n.strip()]
     return OCRChainProvider([_build_ocr(n) for n in names])
 
 
-def _build_llm(name: str):
-    if name == "mock":
-        from providers.llm.mock import MockLLMProvider
+# ============================================================================
+# LLM
+# ============================================================================
 
+def _build_llm(name: str):
+    """Build single LLM provider by name."""
+    if name == "mock":
         return MockLLMProvider()
     if name == "failing":
-        from providers.llm.failing import FailingLLMProvider
-
         return FailingLLMProvider()
+    if name == "ollama":
+        from providers.llm.local import OllamaLLMProvider
+        return OllamaLLMProvider()
+    if name == "ollama-chat":
+        from providers.llm.local import OllamaChatProvider
+        return OllamaChatProvider()
+    # Production providers (require credentials)
+    if name == "openai":
+        from providers.llm.openai import OpenAILLMProvider
+        if not _get_env("OPENAI_API_KEY"):
+            raise ValueError("OpenAI provider requires OPENAI_API_KEY environment variable")
+        return OpenAILLMProvider()
+    if name == "anthropic":
+        from providers.llm.anthropic import AnthropicLLMProvider
+        if not _get_env("ANTHROPIC_API_KEY"):
+            raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY environment variable")
+        return AnthropicLLMProvider()
     raise ValueError(f"Unknown LLM provider: {name}")
 
 
-def get_llm_provider():
-    """Primary → fallback chain (§28). Default: mock → mock."""
-    from providers.llm.chain import LLMChainProvider
-
-    names = getattr(settings, "LLM_PROVIDER_CHAIN", ["mock", "mock"])
+def get_llm_provider() -> LLMChainProvider:
+    """Get LLM provider chain (primary + fallback).
+    
+    LLM_PROVIDER_CHAIN can be a comma-separated list: "ollama,mock"
+    Defaults to ["mock", "mock"] for backward compatibility.
+    """
+    chain_str = _get_env("LLM_PROVIDER_CHAIN", "mock,mock")
+    names = [n.strip() for n in chain_str.split(",") if n.strip()]
     return LLMChainProvider([_build_llm(n) for n in names])
 
 
-def get_embedding_provider() -> EmbeddingProvider:
-    name = getattr(settings, "EMBEDDING_PROVIDER", "hashing")
-    if name == "hashing":
-        from providers.embeddings.hashing import HashingEmbeddingProvider
+# ============================================================================
+# Embeddings
+# ============================================================================
 
+def get_embedding_provider() -> EmbeddingProvider:
+    """Get embedding provider based on EMBEDDING_PROVIDER."""
+    name = _get_env("EMBEDDING_PROVIDER", "hashing")
+    
+    if name == "hashing":
         return HashingEmbeddingProvider()
+    
+    if name == "sentence_transformers":
+        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        return SentenceTransformerEmbeddingProvider()
+    
+    # Production: same model but hosted
+    if name == "openai":
+        from providers.embeddings.openai import OpenAIEmbeddingProvider
+        if not _get_env("OPENAI_API_KEY"):
+            raise ValueError("OpenAI embeddings require OPENAI_API_KEY")
+        return OpenAIEmbeddingProvider()
+    
     raise ValueError(f"Unknown embedding provider: {name}")
 
 
 def embedding_model_version() -> str:
-    return getattr(settings, "EMBEDDING_MODEL_VERSION", "hashing-384-v1")
+    """Get embedding model version for cache invalidation."""
+    provider = _get_env("EMBEDDING_PROVIDER", "hashing")
+    if provider == "sentence_transformers":
+        model_name = _get_env("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+        return f"{model_name.replace('/', '-')}-v1"
+    return _get_env("EMBEDDING_MODEL_VERSION", "hashing-384-v1")
+
+
+def embedding_dimension() -> int:
+    """Get embedding dimension for the current provider."""
+    provider = _get_env("EMBEDDING_PROVIDER", "hashing")
+    if provider == "sentence_transformers":
+        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        # Create temporary instance to get dimension
+        p = SentenceTransformerEmbeddingProvider()
+        return p.dimension
+    return 384  # hashing default
+
+
+# ============================================================================
+# Email
+# ============================================================================
+
+def get_email_provider() -> EmailProvider:
+    """Get email provider based on EMAIL_BACKEND."""
+    backend = _get_env("EMAIL_BACKEND", "mailpit")
+    
+    if backend == "mailpit":
+        return MailpitEmailProvider()
+    
+    if backend == "smtp":
+        if not _get_env("SMTP_HOST"):
+            raise ValueError("SMTP backend requires SMTP_HOST environment variable")
+        return SMTPEmailProvider()
+    
+    if backend == "console":
+        # Django's console backend - prints to stdout
+        from django.core.mail import get_connection
+        from providers.email import ConsoleEmailProvider
+        return ConsoleEmailProvider()
+    
+    raise ValueError(f"Unknown EMAIL_BACKEND: {backend}")
