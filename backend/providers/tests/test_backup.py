@@ -38,7 +38,7 @@ class TestBackupCommands(TestCase):
         mock_run.assert_called()
 
     @patch("apps.audit.management.commands.verify_backup.subprocess.run")
-    @patch("apps.audit.management.commands.verify_backup.connection")
+    @patch("django.db.connection")
     def test_verify_backup_command(self, mock_connection, mock_run):
         """Test verify_backup management command."""
         from apps.audit.management.commands.verify_backup import Command
