@@ -113,7 +113,6 @@ jobs:
     name: Docker Compose Build
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main'
     env:
       # Dummy values for compose interpolation + HTTP smoke test only
       POSTGRES_PASSWORD: ci-dummy-password
