@@ -17,8 +17,8 @@ class TestBackupCommands(TestCase):
         self.storage = LocalObjectStorage()
 
     @patch("apps.audit.management.commands.backup_database.subprocess.run")
-    @patch("apps.audit.management.commands.backup_database.os.makedirs")
-    @patch("apps.audit.management.commands.backup_database.os.path.getsize")
+    @patch("os.makedirs")
+    @patch("os.path.getsize")
     def test_backup_database_command(self, mock_getsize, mock_makedirs, mock_run):
         """Test backup_database management command."""
         from apps.audit.management.commands.backup_database import Command
@@ -43,7 +43,7 @@ class TestBackupCommands(TestCase):
         self.assertIn("Backup written", out.getvalue())
 
     @patch("apps.audit.management.commands.verify_backup.subprocess.run")
-    @patch("apps.audit.management.commands.verify_backup.os.path.exists")
+    @patch("os.path.exists")
     def test_verify_backup_command(self, mock_exists, mock_run):
         """Test verify_backup management command."""
         from apps.audit.management.commands.verify_backup import Command

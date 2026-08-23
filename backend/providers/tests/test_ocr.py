@@ -102,7 +102,7 @@ class TestOCRServiceBehavior(TestCase):
 class TestTesseractOCRProvider(TestCase):
     """Test Tesseract OCR provider (when available)."""
 
-    @patch("providers.ocr.local.tesserocr")
+    @patch("tesserocr")
     def test_tesseract_provider_initialization(self, mock_tesserocr):
         """Test Tesseract provider can be initialized."""
         mock_tesserocr.get_tesseract_version.return_value = "5.3.0"
@@ -114,7 +114,7 @@ class TestTesseractOCRProvider(TestCase):
         assert provider.languages == "eng"
         mock_tesserocr.get_tesseract_version.assert_called_once()
 
-    @patch("providers.ocr.local.tesserocr")
+    @patch("tesserocr")
     def test_tesseract_recognize(self, mock_tesserocr):
         """Test Tesseract recognize method."""
         # Mock the API
@@ -146,7 +146,7 @@ class TestTesseractOCRProvider(TestCase):
 class TestPaddleOCRProvider(TestCase):
     """Test PaddleOCR provider (when available)."""
 
-    @patch("providers.ocr.local.PaddleOCR")
+    @patch("paddleocr.PaddleOCR")
     def test_paddleocr_provider_initialization(self, mock_paddleocr):
         """Test PaddleOCR provider can be initialized."""
         from providers.ocr.local import PaddleOCRProvider
@@ -155,7 +155,7 @@ class TestPaddleOCRProvider(TestCase):
         assert provider.name == "paddleocr"
         assert provider.languages == "en"
 
-    @patch("providers.ocr.local.PaddleOCR")
+    @patch("paddleocr.PaddleOCR")
     def test_paddleocr_recognize(self, mock_paddleocr_class):
         """Test PaddleOCR recognize method."""
         mock_ocr = MagicMock()

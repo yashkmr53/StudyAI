@@ -65,7 +65,7 @@ class TestHashingEmbeddingProvider(TestCase):
 class TestSentenceTransformerEmbeddingProvider(TestCase):
     """Test sentence-transformers embedding provider."""
 
-    @patch("providers.embeddings.local.SentenceTransformer")
+    @patch("sentence_transformers.SentenceTransformer")
     def test_provider_initialization(self, mock_st_class):
         """Test provider initializes model correctly."""
         mock_model = MagicMock()
@@ -82,7 +82,7 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         assert provider.model_version == "sentence-transformers-test-model-v1"
         mock_st_class.assert_called_once()
 
-    @patch("providers.embeddings.local.SentenceTransformer")
+    @patch("sentence_transformers.SentenceTransformer")
     def test_embed_single_text(self, mock_st_class):
         """Test embedding single text."""
         mock_model = MagicMock()
@@ -96,7 +96,7 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         assert len(embeddings[0]) == 384
         mock_model.encode.assert_called_once()
 
-    @patch("providers.embeddings.local.SentenceTransformer")
+    @patch("sentence_transformers.SentenceTransformer")
     def test_embed_batch(self, mock_st_class):
         """Test embedding batch of texts."""
         mock_model = MagicMock()
@@ -112,7 +112,7 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         assert call_args[1]["batch_size"] == 2
         assert call_args[1]["normalize_embeddings"] is True
 
-    @patch("providers.embeddings.local.SentenceTransformer")
+    @patch("sentence_transformers.SentenceTransformer")
     def test_embed_normalized(self, mock_st_class):
         """Test embeddings are L2 normalized."""
         # Return non-normalized vectors
@@ -161,7 +161,7 @@ class TestEmbeddingPersistence(TestCase):
         assert all(isinstance(x, float) for x in embeddings[0])
         assert len(embeddings[0]) == 384
 
-    @patch("providers.embeddings.local.SentenceTransformer")
+    @patch("sentence_transformers.SentenceTransformer")
     def test_sentence_transformer_embeddings_pgvector_compatible(self, mock_st_class):
         """Sentence transformer embeddings should be compatible with pgvector."""
         mock_model = MagicMock()

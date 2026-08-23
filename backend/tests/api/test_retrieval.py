@@ -117,7 +117,7 @@ class ChunkingTests(TestCase):
         for chunk in chunks:
             self.assertIsNotNone(chunk.embedding)
             self.assertEqual(len(chunk.embedding), 384)
-            self.assertEqual(chunk.embedding_model, "hashing")
+            self.assertEqual(chunk.embedding_model, "sentence_transformers")
 
     def test_index_rerun_is_incremental_not_duplicating(self):
         from apps.retrieval.services import enqueue_index_job

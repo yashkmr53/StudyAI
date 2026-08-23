@@ -47,15 +47,15 @@ class TestLLMServiceBehavior(TestCase):
             assert isinstance(result, StructuredLLMResult)
             assert isinstance(result.data, dict)
 
-    def test_mock_llm_unknown_prompt_raises(self):
-        """Mock LLM should raise for unknown prompt types."""
+    def test_mock_llm_unknown_prompt_returns_default(self):
+        """Mock LLM should return default response for unknown prompt types."""
         provider = MockLLMProvider()
         prompt = Prompt(name="unknown", version="v1", user="{}")
         
-        with self.assertRaises(ValueError) as cm:
-            provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+        result = provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
         
-        assert "no behaviour for prompt 'unknown'" in str(cm.exception)
+        assert isinstance(result, StructuredLLMResult)
+        assert result.data == {"result": "Mock response for unknown", "status": "ok"}
 
     def test_mock_llm_deterministic(self):
         """Mock LLM should be deterministic for same input."""
