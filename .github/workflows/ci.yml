@@ -123,11 +123,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Docker images (lightweight CI build)
-        run: |
-          # Use lightweight requirements for CI to avoid disk space issues
-          cp backend/requirements-ci.txt backend/requirements.txt
-          docker compose build
+      - name: Build Docker images
+        run: docker compose build
 
       - name: Test Docker compose up
         run: |
