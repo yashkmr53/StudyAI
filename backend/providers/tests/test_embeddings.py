@@ -1,5 +1,7 @@
 """Embedding generation and persistence tests (Phase 11)."""
+import importlib.util
 import numpy as np
+import unittest
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, override_settings
@@ -7,6 +9,9 @@ from django.test import TestCase, override_settings
 from providers.embeddings.hashing import HashingEmbeddingProvider
 from providers.embeddings.local import SentenceTransformerEmbeddingProvider
 from providers.base import EmbeddingProvider
+
+# Check if sentence_transformers is available
+SENTENCE_TRANSFORMERS_AVAILABLE = importlib.util.find_spec("sentence_transformers") is not None
 
 
 class TestHashingEmbeddingProvider(TestCase):
@@ -62,6 +67,20 @@ class TestHashingEmbeddingProvider(TestCase):
         assert provider.model_version == "hashing-384-v1"
 
 
+import importlib.util
+import numpy as np
+from unittest.mock import patch, MagicMock
+
+from django.test import TestCase, override_settings
+
+from providers.embeddings.hashing import HashingEmbeddingProvider
+from providers.base import EmbeddingProvider
+
+# Check if sentence_transformers is available
+SENTENCE_TRANSFORMERS_AVAILABLE = importlib.util.find_spec("sentence_transformers") is not None
+
+
+@unittest.skipUnless(SENTENCE_TRANSFORMERS_AVAILABLE, "sentence_transformers not installed")
 class TestSentenceTransformerEmbeddingProvider(TestCase):
     """Test sentence-transformers embedding provider."""
 
@@ -172,6 +191,7 @@ class TestEmbeddingPersistence(TestCase):
             assert len(emb) == provider.dimension
 
 
+@unittest.skipUnless(SENTENCE_TRANSFORMERS_AVAILABLE, "sentence_transformers not installed")
 class TestEmbeddingBackfill(TestCase):
     """Test embedding backfill requirements."""
 
