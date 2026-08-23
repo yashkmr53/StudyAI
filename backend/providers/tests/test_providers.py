@@ -104,7 +104,7 @@ class TestProviderSelection(TestCase):
         assert isinstance(storage, LocalObjectStorage)
 
     @override_settings(STORAGE_BACKEND="minio")
-    @patch("providers.registry.MinioStorageProvider")
+    @patch("providers.storage.s3.MinIOStorageProvider")
     def test_get_object_storage_minio(self, mock_minio):
         mock_instance = MagicMock()
         mock_minio.return_value = mock_instance
@@ -114,7 +114,7 @@ class TestProviderSelection(TestCase):
         mock_minio.assert_called_once_with(backend="minio")
 
     @override_settings(STORAGE_BACKEND="s3", S3_ACCESS_KEY="test", S3_SECRET_KEY="test")
-    @patch("providers.registry.S3StorageProvider")
+    @patch("providers.storage.s3.S3StorageProvider")
     def test_get_object_storage_s3(self, mock_s3):
         mock_instance = MagicMock()
         mock_s3.return_value = mock_instance
@@ -135,7 +135,7 @@ class TestProviderSelection(TestCase):
         assert all(isinstance(p, MockOCRProvider) for p in provider.providers)
 
     @override_settings(OCR_PROVIDER_CHAIN="tesseract,mock")
-    @patch("providers.registry.TesseractOCRProvider")
+    @patch("providers.ocr.local.TesseractOCRProvider")
     def test_get_ocr_provider_tesseract(self, mock_tesseract):
         mock_instance = MagicMock()
         mock_tesseract.return_value = mock_instance

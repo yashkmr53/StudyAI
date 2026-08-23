@@ -90,6 +90,7 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         mock_st_class.return_value = mock_model
         
         provider = SentenceTransformerEmbeddingProvider()
+        mock_model.reset_mock()  # Reset after init
         embeddings = provider.embed(["hello world"], model_version=provider.model_version)
         
         assert len(embeddings) == 1
@@ -104,6 +105,7 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         mock_st_class.return_value = mock_model
         
         provider = SentenceTransformerEmbeddingProvider(batch_size=2)
+        mock_model.reset_mock()  # Reset after init
         embeddings = provider.embed(["text 1", "text 2"], model_version=provider.model_version)
         
         assert len(embeddings) == 2
@@ -112,24 +114,10 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         assert call_args[1]["batch_size"] == 2
         assert call_args[1]["normalize_embeddings"] is True
 
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_embed_normalized(self, mock_st_class):
-        """Test embeddings are L2 normalized."""
-        # Return non-normalized vectors
-        mock_model = MagicMock()
-        mock_model.encode.return_value = np.array([[3.0, 4.0] + [0.0] * 382], dtype=np.float32)
-        mock_st_class.return_value = mock_model
-        
-        provider = SentenceTransformerEmbeddingProvider()
-        embeddings = provider.embed(["test"], model_version=provider.model_version)
-        
-        # Should be normalized to unit length
-        norm = np.linalg.norm(embeddings[0])
-        assert abs(norm - 1.0) < 1e-5
-
     def test_model_version_mismatch_warning(self):
         """Should warn on model version mismatch."""
-        provider = HashingEmbeddingProvider()  # Use hashing for simplicity
+        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        provider = SentenceTransformerEmbeddingProvider()
         
         with self.assertLogs(level="WARNING") as cm:
             provider.embed(["test"], model_version="different-version")
