@@ -58,8 +58,8 @@ class TestBackupCommands(TestCase):
         mock_run.assert_called()
         
         # Should attempt to drop and create database (target db name includes _restore_verify suffix)
-        mock_cursor.execute.assert_any_call('DROP DATABASE IF EXISTS "file:memorydb_default?mode=memory&cache=shared_restore_verify";')
-        mock_cursor.execute.assert_any_call('CREATE DATABASE "file:memorydb_default?mode=memory&cache=shared_restore_verify";')
+        mock_cursor.execute.assert_any_call('DROP DATABASE IF EXISTS "test_studyai_restore_verify";')
+        mock_cursor.execute.assert_any_call('CREATE DATABASE "test_studyai_restore_verify";')
 
 
 class TestBackupWithMinIO(TestCase):
