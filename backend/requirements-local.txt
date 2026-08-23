@@ -1,6 +1,0 @@
-# Heavy local-provider dependencies (NOT installed in Docker/CI images).
-# Install locally or on GPU hosts: pip install -r requirements-local.txt
-# The app degrades gracefully when these are missing (providers fall back
-# per OCR/LLM provider chain; embeddings warn and return None model).
-sentence-transformers>=3.0  # Local embeddings (heavy: torch + CUDA)
-ollama>=0.3                 # Ollama client (optional, requests also works)

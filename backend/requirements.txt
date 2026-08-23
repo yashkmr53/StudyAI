@@ -14,14 +14,9 @@ django-cors-headers>=4.6
 django-redis>=5.4
 django-prometheus>=2.3
 
-# Phase 11: Local provider dependencies (lightweight; safe for Docker/CI)
-# tesserocr pinned <2.10: >=2.10 requires cysignals, which has no prebuilt
-# wheels for newer CPython and fails to compile in slim images (no compiler).
-tesserocr>=2.9,<2.10      # Tesseract OCR Python bindings (bundled libs)
+# Phase 11: Local provider dependencies
+tesserocr>=2.6.0          # Tesseract OCR Python bindings
+sentence-transformers>=3.0  # Local embeddings
 boto3>=1.34               # MinIO/S3 storage
+ollama>=0.3               # Ollama client (optional, we use requests)
 requests>=2.31            # HTTP client for Ollama API
-numpy>=1.26               # Embedding vectors (was transitive dep of torch)
-
-# Heavy ML dependencies live in requirements-local.txt (install locally only):
-# sentence-transformers>=3.0  # Local embeddings (heavy: torch + CUDA)
-# ollama>=0.3                 # Ollama client (requests used instead)

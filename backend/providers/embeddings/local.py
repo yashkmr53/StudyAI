@@ -15,6 +15,8 @@ import logging
 import os
 from typing import Optional
 
+import numpy as np
+
 from providers.base import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
@@ -146,8 +148,6 @@ class SentenceTransformerEmbeddingProvider:
             )
         
         try:
-            import numpy as np
-
             # Encode in batches
             embeddings = self._model.encode(
                 texts,
