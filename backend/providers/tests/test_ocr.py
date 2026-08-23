@@ -102,24 +102,25 @@ class TestOCRServiceBehavior(TestCase):
 class TestTesseractOCRProvider(TestCase):
     """Test Tesseract OCR provider (when available)."""
 
-    @patch("tesserocr")
-    def test_tesseract_provider_initialization(self, mock_tesserocr):
+    @patch("tesserocr.get_tesseract_version")
+    @patch("tesserocr.PyTessBaseAPI")
+    def test_tesseract_provider_initialization(self, mock_pytessbase, mock_get_version):
         """Test Tesseract provider can be initialized."""
-        mock_tesserocr.get_tesseract_version.return_value = "5.3.0"
+        mock_get_version.return_value = "5.3.0"
         
         from providers.ocr.local import TesseractOCRProvider
         provider = TesseractOCRProvider(languages="eng")
         
         assert provider.name == "tesseract"
         assert provider.languages == "eng"
-        mock_tesserocr.get_tesseract_version.assert_called_once()
+        mock_get_version.assert_called_once()
 
-    @patch("tesserocr")
-    def test_tesseract_recognize(self, mock_tesserocr):
+    @patch("tesserocr.PyTessBaseAPI")
+    def test_tesseract_recognize(self, mock_pytessbase):
         """Test Tesseract recognize method."""
         # Mock the API
         mock_api = MagicMock()
-        mock_tesserocr.PyTessBaseAPI.return_value.__enter__.return_value = mock_api
+        mock_pytessbase.return_value.__enter__.return_value = mock_api
         mock_api.GetIterator.return_value = MagicMock()
         
         # Configure iterator
