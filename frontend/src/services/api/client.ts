@@ -87,7 +87,16 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       request_id: "req_unknown",
       details: {},
     };
-    throw new ApiError(response.status, errorBody);
+    // Prefer concrete field messages ("You already have a subject called
+    // “DSA”.") over the generic envelope message ("Validation failed.").
+    const detailMessages = Object.values(errorBody.details ?? {})
+      .flat()
+      .map((m) => String(m))
+      .filter(Boolean);
+    throw new ApiError(response.status, {
+      ...errorBody,
+      message: detailMessages[0] ?? errorBody.message,
+    });
   }
   return payload as T;
 }

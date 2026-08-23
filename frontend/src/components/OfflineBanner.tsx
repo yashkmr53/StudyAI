@@ -1,4 +1,5 @@
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { useTranslation } from "react-i18next";
 import type React from "react";
 
 /**
@@ -7,6 +8,7 @@ import type React from "react";
  */
 export function OfflineBanner(): React.ReactElement | null {
   const { isOnline, wasOffline } = useOnlineStatus();
+  const { t } = useTranslation();
 
   if (isOnline && !wasOffline) {
     return null;
@@ -32,9 +34,7 @@ export function OfflineBanner(): React.ReactElement | null {
       role="status"
       aria-live="polite"
     >
-      {isOnline
-        ? "Connection restored. Syncing changes..."
-        : "You are offline. Changes will sync when reconnected."}
+      {isOnline ? t("app.backOnline") : t("app.offline")}
     </div>
   );
 }

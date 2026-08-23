@@ -1,0 +1,415 @@
+{
+  "app": {
+    "name": "StudyAI",
+    "offline": "You are offline. Changes will sync when reconnected.",
+    "backOnline": "Connection restored. Syncing changes..."
+  },
+  "common": {
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "edit": "Edit",
+      "close": "Close",
+      "search": "Search",
+      "clear": "Clear",
+      "retry": "Retry",
+      "done": "Done",
+      "send": "Send",
+      "create": "Create",
+      "start": "Start",
+      "next": "Next",
+      "finish": "Finish",
+      "back": "Back",
+      "signOut": "Sign out",
+      "takeOver": "Take over",
+      "continue": "Continue",
+      "open": "Open",
+      "newProfile": "New profile"
+    },
+    "states": {
+      "working": "Working…",
+      "loading": "Loading…",
+      "success": "Success",
+      "error": "Error"
+    },
+    "breadcrumb": {
+      "subjects": "Subjects",
+      "label": "Breadcrumb"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo_one": "{{count}}m ago",
+      "minutesAgo_other": "{{count}}m ago",
+      "hoursAgo_one": "{{count}}h ago",
+      "hoursAgo_other": "{{count}}h ago",
+      "yesterday": "yesterday",
+      "daysAgo_one": "{{count}}d ago",
+      "daysAgo_other": "{{count}}d ago"
+    },
+    "difficulty": {
+      "easy": "easy",
+      "medium": "medium",
+      "hard": "hard"
+    }
+  },
+  "nav": {
+    "subjectsSection": "Subjects",
+    "noSubjects": "No subjects yet.",
+    "addSubject": "Add subject",
+    "newSubjectAria": "New subject",
+    "switchProfile": "Switch profile",
+    "newProfilePrompt": "Profile name"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue studying.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@university.edu",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "••••••••••",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "google": "Continue with Google",
+      "comingSoon": "Coming soon",
+      "noAccount": "New here?",
+      "createAccountLink": "Create an account",
+      "failedFallback": "We couldn't sign you in. Please check your details and try again."
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Start writing, transcribing, and studying.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@university.edu",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "At least 10 characters",
+      "passwordHint": "Minimum 10 characters.",
+      "shortPassword": "Passwords need at least 10 characters.",
+      "submit": "Create account",
+      "submitting": "Creating account…",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in",
+      "failedFallback": "We couldn't create your account."
+    }
+  },
+  "onboarding": {
+    "profile": {
+      "title": "Create a profile",
+      "subtitle": "A profile keeps each study context separate.",
+      "nameLabel": "Profile name",
+      "namePlaceholder": "e.g. Yash",
+      "submit": "Continue",
+      "creating": "Creating…",
+      "keepUsing": "Keep using “{{name}}”",
+      "error": "We couldn't create this profile. Please try again."
+    },
+    "module": {
+      "title": "How do you want to study?",
+      "subtitle": "You can switch anytime inside a subject — this just sets your starting point.",
+      "radioGroupLabel": "Module",
+      "noteSpaceName": "NoteSpace",
+      "noteSpaceDescription": "Write and organize your notes with faithful transcription.",
+      "aiClassroomName": "AI Classroom",
+      "aiClassroomDescription": "Write, organize, enrich, test yourself, practice, and chat with your study material.",
+      "services": {
+        "transcription": "Faithful transcription",
+        "write": "Handwriting",
+        "enrichment": "AI-enriched notes",
+        "tests": "Subject tests",
+        "qa": "Practice QA",
+        "chat": "AI chat"
+      },
+      "continue": "Continue"
+    },
+    "subjects": {
+      "title": "How many subjects do you want to add?",
+      "subtitle": "You can always add more later.",
+      "countLabel": "Number of subjects",
+      "placeholder": "Subject {{index}} — e.g. {{example}}",
+      "example1": "Data Structures and Algorithms",
+      "example2": "Machine Learning",
+      "example3": "Probability",
+      "example4": "Operating Systems",
+      "nameAria": "Subject {{index}} name",
+      "finish": "Finish setup",
+      "finishing": "Creating…",
+      "resumeError": "“{{name}}” — {{reason}}"
+    }
+  },
+  "modules": {
+    "toggleLabel": "Module",
+    "classroomBanner": "AI Classroom",
+    "cards": {
+      "qa": {
+        "title": "Practice QA",
+        "description": "Practice what you've learned with questions grounded in your notes."
+      },
+      "tests": {
+        "title": "Subject Tests",
+        "description": "Test your understanding across this subject."
+      },
+      "chat": {
+        "title": "Ask StudyAI",
+        "description": "Chat with your study material and get cited answers."
+      }
+    }
+  },
+  "subjectsPage": {
+    "title": "Subjects",
+    "studyingAs": "Studying as {{name}}",
+    "profilesCount_one": "{{count}} profile",
+    "profilesCount_other": "{{count}} profiles",
+    "newSubject": "New subject",
+    "loadFailed": {
+      "title": "We couldn't load your subjects.",
+      "message": "Please try again.",
+      "retry": "Retry"
+    },
+    "empty": {
+      "title": "No subjects yet.",
+      "description": "Add your first subject to get started.",
+      "action": "Add subject"
+    }
+  },
+  "subjectCard": {
+    "openAria": "Open {{name}}",
+    "notes_one": "{{count}} note",
+    "notes_other": "{{count}} notes",
+    "folders_one": "{{count}} folder",
+    "folders_other": "{{count}} folders",
+    "lastOpened": "Last opened {{time}}"
+  },
+  "newSubjectDialog": {
+    "title": "New subject",
+    "description": "Subjects group your folders and notes.",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Data Structures and Algorithms",
+    "create": "Create subject",
+    "creating": "Creating…",
+    "fallbackError": "We couldn't create this subject."
+  },
+  "workspace": {
+    "foldersTitle": "Folders",
+    "notesTitle": "Notes",
+    "newFolder": "New folder",
+    "write": "Write",
+    "writeTooltip": "Goes to Unfiled unless opened from a folder",
+    "unfiled": "Unfiled",
+    "notFoundTitle": "We couldn't find this subject.",
+    "notFoundMessage": "It may have been deleted.",
+    "foldersEmpty": {
+      "title": "No folders yet.",
+      "description": "Create a folder to organize your notes, or just start writing — those notes land in Unfiled."
+    }
+  },
+  "folders": {
+    "dialog": {
+      "title": "New folder",
+      "description": "Folders can nest as deeply as you like.",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Binary Trees",
+      "locationLabel": "Location",
+      "topLevel": "Top level",
+      "create": "Create folder",
+      "creating": "Creating…",
+      "fallbackError": "We couldn't create this folder."
+    },
+    "detail": {
+      "notFoundTitle": "We couldn't find this folder.",
+      "notFoundMessage": "It may have been deleted.",
+      "subfolderCount_one": "{{count}} subfolder",
+      "subfolderCount_other": "{{count}} subfolders",
+      "noteCount_one": "{{count}} note",
+      "noteCount_other": "{{count}} notes",
+      "newSubfolder": "New subfolder",
+      "unfiled": "Unfiled",
+      "unfiledHint": "Notes written from the subject page land here until you move them into a folder.",
+      "foldersSection": "Folders",
+      "notesSection": "Notes",
+      "emptyFolderTitle": "This folder is empty.",
+      "emptyFolderDescription": "Start writing your first note.",
+      "openAria": "Open {{name}}"
+    },
+    "card": {
+      "notes_one": "{{count}} note",
+      "notes_other": "{{count}} notes"
+    }
+  },
+  "notes": {
+    "defaults": {
+      "title": "Notes {{date}}"
+    },
+    "source": {
+      "canvas": "handwritten",
+      "upload": "scan"
+    },
+    "row": {
+      "updated": "Updated {{time}}"
+    },
+    "detail": {
+      "tabHandwritten": "Handwritten",
+      "tabEnriched": "Enriched",
+      "loadFailed": "We couldn't load this note."
+    },
+    "status": {
+      "transcribed": "Transcribed",
+      "processing": "Processing",
+      "transcriptionFailed": "Transcription failed",
+      "pending": "Pending",
+      "enriched": "Enriched",
+      "enriching": "Enriching…",
+      "outOfDate": "Out of date",
+      "enrichmentFailed": "Enrichment failed",
+      "notEnriched": "Not enriched"
+    },
+    "handwritten": {
+      "page": "Page {{number}}",
+      "pageRange": "{{current}} / {{total}}",
+      "prevPage": "Previous page",
+      "nextPage": "Next page",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomOutSymbol": "−",
+      "zoomInSymbol": "+",
+      "prevSymbol": "‹",
+      "nextSymbol": "›",
+      "loadingPage": "Loading page",
+      "loadingNote": "Loading note",
+      "canvasAria": "Handwritten page",
+      "scanAlt": "Page {{number}} scan",
+      "transcriptPending": "Transcription will appear here as soon as processing completes.",
+      "loadPagesFailed": "We couldn't load this note's pages.",
+      "noPagesTitle": "This note has no pages yet.",
+      "noPagesMessage": "The source is still being processed."
+    },
+    "enriched": {
+      "generatingTitle": "Generating your enriched notes…",
+      "generatingBody": "Your handwritten notes are being analyzed. This may take a moment.",
+      "thinkingAria": "Loading",
+      "emptyTitle": "Your enriched notes aren't ready yet.",
+      "emptyDescription": "StudyAI turns your handwritten pages into structured, cited study notes.",
+      "generate": "Generate enrichment",
+      "staleTitle": "This enrichment is out of date.",
+      "staleBody": "The handwritten note has changed since these AI notes were generated.",
+      "regenerate": "Regenerate",
+      "failedTitle": "We couldn't generate the enriched notes.",
+      "failedMessage": "Your handwritten note is safe.",
+      "tryAgain": "Try Again",
+      "startFailed": "We couldn't start enrichment. Please try again.",
+      "generatedAt": "Generated {{date}}",
+      "nothingYet": "Nothing here yet.",
+      "sourcesAria": "Sources",
+      "citation": "Page {{page}}",
+      "citationTooltip": "Go to page {{page}}"
+    }
+  },
+  "writer": {
+    "done": "Done",
+    "back": "Back",
+    "closeAria": "Close writer",
+    "untitledNote": "New note",
+    "pagesAria": "Pages",
+    "subjectFallback": "Subject",
+    "lockLost": "This note is now controlled by another device.",
+    "addPageTip": "Add page",
+    "addPage": "+ Page",
+    "pageTab": "Page {{number}}",
+    "finalizedMark": " ✓",
+    "statusFinalized": "This page is finalized and read-only.",
+    "statusLockLost": "Drawing paused until you take over.",
+    "statusSyncing": "Autosaved locally · syncing in background",
+    "bootError": "We couldn't open a writing session. Please try again.",
+    "goBack": "Go back",
+    "canvasAria": "Handwriting canvas",
+    "tools": {
+      "pen": "Pen (P)",
+      "highlighter": "Highlighter (H)",
+      "eraser": "Eraser (E)",
+      "colorGroup": "Color",
+      "sizeGroup": "Size",
+      "colorAria": "Color {{color}}",
+      "strokeFine": "Stroke fine",
+      "strokeMedium": "Stroke medium",
+      "strokeBold": "Stroke bold",
+      "undo": "Undo (⌘Z)",
+      "redo": "Redo (⇧⌘Z)"
+    },
+    "toolsAria": "Writing tools"
+  },
+  "tests": {
+    "title": "Tests",
+    "defaultTitle": "{{subject}} test",
+    "subtitle": "Check your understanding across {{subject}}.",
+    "newTest": "New test",
+    "creating": "Creating…",
+    "loadFailed": "We couldn't load your tests.",
+    "createFailed": "We couldn't create this test yet. Your notes need to be processed first.",
+    "emptyTitle": "No tests yet.",
+    "emptyDescription": "Create a test to generate questions from your study material.",
+    "questionCount_one": "{{count}} question",
+    "questionCount_other": "{{count}} questions",
+    "questionsPending": "Questions pending",
+    "completed": "Completed",
+    "ready": "Ready",
+    "review": "Review",
+    "start": "Start",
+    "masterySuffix": "mastery {{percent}}%",
+    "runner": {
+      "allTests": "All tests",
+      "answered": "{{answered}}/{{total}} answered",
+      "submit": "Submit test",
+      "score": "Score {{value}}%",
+      "loadFailedTitle": "We couldn't load this test.",
+      "retryBackLabel": "Back to tests",
+      "noQuestionsTitle": "This test has no questions yet.",
+      "noQuestionsMessage": "Questions appear once your notes have been processed.",
+      "correctAnswerMissing": "Correct answer not provided by the server.",
+      "masteryHint": "Mastery updates as you complete more tests."
+    }
+  },
+  "practice": {
+    "title": "Practice QA",
+    "subtitle": "Practice what you've learned in {{subject}}.",
+    "loadFailed": "We couldn't load practice questions.",
+    "emptyTitle": "No practice questions yet.",
+    "emptyDescription": "Questions are generated from your transcribed notes. Add a scanned note and let processing finish, then check back.",
+    "allCaughtUpTitle": "All caught up.",
+    "allCaughtUpDescription": "Every available question has been refreshed or retired as stale.",
+    "questionOf": "Question {{index}} of {{total}}",
+    "answersAria": "Answers",
+    "correctSoFar_one": "{{count}} correct so far",
+    "correctSoFar_other": "{{count}} correct so far",
+    "correct": "Correct",
+    "notQuite": "Not quite",
+    "nextQuestion": "Next question",
+    "sessionCompleteTitle": "Session complete.",
+    "sessionSummary": "You answered {{correct}} of {{total}} correctly.",
+    "practiceAgain": "Practice again",
+    "sessionAccuracyAria": "Session accuracy"
+  },
+  "chat": {
+    "title": "Ask StudyAI",
+    "subtitle": "Chat with your study material for {{subject}}.",
+    "chatsAria": "Chats",
+    "newChat": "New chat",
+    "defaultThreadTitle": "{{subject}} chat",
+    "threadsEmpty": "No chats yet.",
+    "noThreadTitle": "No chat selected.",
+    "noThreadDescription": "Start a new chat to ask questions about your material.",
+    "introHint": "Ask anything about your notes — answers cite the source pages.",
+    "composerPlaceholder": "Ask about your study material…",
+    "messageAria": "Message",
+    "thinkingAria": "StudyAI is thinking",
+    "emptyResponse": "(empty response)",
+    "sendFailedBubble": "Sorry — that didn't go through. Please try again.",
+    "loadSessionsFailed": "We couldn't load your chats.",
+    "createSessionFailed": "We couldn't start a new chat. Please try again.",
+    "retryNewChat": "Start a new chat"
+  },
+  "errors": {
+    "loadWorkspace": "Could not load your workspace",
+    "testCreateFailed": "The test could not be created.",
+    "genericTryAgain": "Please try again."
+  }
+}
