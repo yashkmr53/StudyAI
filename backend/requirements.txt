@@ -13,3 +13,10 @@ redis>=5.0
 django-cors-headers>=4.6
 django-redis>=5.4
 django-prometheus>=2.3
+
+# Phase 11: Local provider dependencies
+tesserocr>=2.6.0          # Tesseract OCR Python bindings
+sentence-transformers>=3.0  # Local embeddings
+boto3>=1.34               # MinIO/S3 storage
+ollama>=0.3               # Ollama client (optional, we use requests)
+requests>=2.31            # HTTP client for Ollama API

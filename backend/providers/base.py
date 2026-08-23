@@ -29,6 +29,10 @@ class StructuredLLMResult:
     model: str = ""
     prompt_name: str = ""
     prompt_version: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
 
 
 @runtime_checkable
@@ -44,6 +48,15 @@ class LLMProvider(Protocol):
 @runtime_checkable
 class EmbeddingProvider(Protocol):
     def embed(self, texts: list[str], *, model_version: str) -> list[list[float]]: ...
+    
+    @property
+    def dimension(self) -> int: ...
+    
+    @property
+    def model_name(self) -> str: ...
+    
+    @property
+    def model_version(self) -> str: ...
 
 
 @runtime_checkable
@@ -51,3 +64,28 @@ class ObjectStorageProvider(Protocol):
     def create_upload_url(self, key: str, *, content_type: str, ttl_seconds: int) -> str: ...
     def create_download_url(self, key: str, *, ttl_seconds: int) -> str: ...
     def delete(self, key: str) -> None: ...
+    def store_bytes(self, key: str, data: bytes) -> int: ...
+    def read_bytes(self, key: str) -> bytes: ...
+    def exists(self, key: str) -> bool: ...
+    def size(self, key: str) -> int: ...
+
+
+@runtime_checkable
+class EmailProvider(Protocol):
+    def send_email(
+        self,
+        *,
+        to: list[str],
+        subject: str,
+        body_text: str,
+        body_html: str | None = None,
+        from_email: str | None = None,
+    ) -> None: ...
+    
+    def send_password_reset_email(
+        self,
+        *,
+        to: str,
+        reset_url: str,
+        user_name: str,
+    ) -> None: ...

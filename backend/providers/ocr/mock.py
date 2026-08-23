@@ -30,4 +30,4 @@ class MockOCRProvider:
             for i in range(3)
         ]
         avg = sum(l["confidence"] for l in lines) / len(lines)
-        return OCRResult(lines=lines, confidence=round(avg, 4), provider=self.name)
+        return OCRResult(lines=lines, confidence=round(avg, 4), provider=self.name, raw_ref=image_uri)
