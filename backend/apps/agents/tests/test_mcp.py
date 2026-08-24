@@ -1,9 +1,7 @@
 """MCP Adapter Tests (Phase 3)."""
 
-import pytest
 import json
 from unittest.mock import Mock, patch
-from uuid import uuid4
 
 from django.test import TestCase
 from django.contrib.auth import get_user_model
@@ -16,8 +14,7 @@ from apps.agents.mcp.telemetry import record_mcp_call, get_mcp_stats
 User = get_user_model()
 
 
-@pytest.mark.django_db
-class TestMCPToolRegistry:
+class TestMCPToolRegistry(TestCase):
     def test_registry_has_all_tools(self):
         """Test that MCP registry has all StudyAI tools."""
         registry = get_mcp_tool_registry()
@@ -40,20 +37,19 @@ class TestMCPToolRegistry:
         ]
         
         for name in expected:
-            assert name in tool_names, f"Missing tool: {name}"
+            self.assertIn(name, tool_names, f"Missing tool: {name}")
     
     def test_tool_definitions_have_schemas(self):
         """Test that MCP tool definitions have proper schemas."""
         registry = get_mcp_tool_registry()
         for tool in registry.list_tools():
-            assert "inputSchema" in tool.to_mcp_dict()
-            assert "outputSchema" in tool.to_mcp_dict()
-            assert tool.input_schema.get("type") == "object"
-            assert tool.output_schema.get("type") == "object"
+            self.assertIn("inputSchema", tool.to_mcp_dict())
+            self.assertIn("outputSchema", tool.to_mcp_dict())
+            self.assertEqual(tool.input_schema.get("type"), "object")
+            self.assertEqual(tool.output_schema.get("type"), "object")
 
 
-@pytest.mark.django_db
-class TestMCPAuthenticator:
+class TestMCPAuthenticator(TestCase):
     def test_create_and_validate_token(self):
         """Test token creation and validation."""
         user = User.objects.create_user(email="mcp@example.com", password="testpass123")
@@ -67,20 +63,20 @@ class TestMCPAuthenticator:
             scopes=["tools:read", "tools:execute"],
         )
         
-        assert token.token.startswith("mcp_")
-        assert token.user_id == user.pk
-        assert token.client_id == "test_client"
-        assert "tools:read" in token.scopes
-        assert "tools:execute" in token.scopes
+        self.assertTrue(token.token.startswith("mcp_"))
+        self.assertEqual(token.user_id, user.pk)
+        self.assertEqual(token.client_id, "test_client")
+        self.assertIn("tools:read", token.scopes)
+        self.assertIn("tools:execute", token.scopes)
         
         # Validate token
         validated = authenticator.validate_token(token.token)
-        assert validated is not None
-        assert validated.user_id == user.pk
+        self.assertIsNotNone(validated)
+        self.assertEqual(validated.user_id, user.pk)
         
         # Invalid token
         invalid = authenticator.validate_token("mcp_invalid")
-        assert invalid is None
+        self.assertIsNone(invalid)
     
     def test_revoke_token(self):
         """Test token revocation."""
@@ -93,11 +89,11 @@ class TestMCPAuthenticator:
         
         # Revoke
         success = authenticator.revoke_token(token.token)
-        assert success is True
+        self.assertTrue(success)
         
         # Validate after revoke
         validated = authenticator.validate_token(token.token)
-        assert validated is None
+        self.assertIsNone(validated)
     
     def test_user_context_from_token(self):
         """Test getting user context from token."""
@@ -110,15 +106,14 @@ class TestMCPAuthenticator:
         
         context = authenticator.get_user_context(token, "test-request-123")
         
-        assert context.user_id == user.pk
-        assert context.user == user
-        assert context.profile.user == user
-        assert context.client_id == "test_client"
-        assert context.request_id == "test-request-123"
+        self.assertEqual(context.user_id, user.pk)
+        self.assertEqual(context.user, user)
+        self.assertEqual(context.profile.user, user)
+        self.assertEqual(context.client_id, "test_client")
+        self.assertEqual(context.request_id, "test-request-123")
 
 
-@pytest.mark.django_db
-class TestMCPTokenValidator:
+class TestMCPTokenValidator(TestCase):
     def test_validate_request_success(self):
         """Test successful request validation."""
         user = User.objects.create_user(email="mcp4@example.com", password="testpass123")
@@ -139,14 +134,14 @@ class TestMCPTokenValidator:
             tool_category="retrieval",
         )
         
-        assert context.user_id == user.pk
-        assert context.client_id == "test_client"
+        self.assertEqual(context.user_id, user.pk)
+        self.assertEqual(context.client_id, "test_client")
     
     def test_validate_request_missing_auth(self):
         """Test validation fails without auth."""
         validator = MCPTokenValidator(MCPAuthenticator())
         
-        with pytest.raises(ValueError, match="Missing Authorization header"):
+        with self.assertRaises(ValueError, msg="Missing Authorization header"):
             validator.validate_request(
                 auth_header=None,
                 tool_name="search_notes",
@@ -157,7 +152,7 @@ class TestMCPTokenValidator:
         """Test validation fails with invalid token."""
         validator = MCPTokenValidator(MCPAuthenticator())
         
-        with pytest.raises(ValueError, match="Invalid or expired token"):
+        with self.assertRaises(ValueError, msg="Invalid or expired token"):
             validator.validate_request(
                 auth_header="Bearer mcp_invalid",
                 tool_name="search_notes",
@@ -175,12 +170,12 @@ class TestMCPTokenValidator:
         token = authenticator.create_token(
             user=user,
             client_id="test_client",
-            scopes=["invalid_scope"],  # Not in ["tools:read", "tools:execute"]
+            scopes=["invalid_scope"],
         )
         
         validator = MCPTokenValidator(authenticator)
         
-        with pytest.raises(ValueError, match="Insufficient scopes"):
+        with self.assertRaises(ValueError, msg="Insufficient scopes"):
             validator.validate_request(
                 auth_header=f"Bearer {token.token}",
                 tool_name="search_notes",
@@ -188,8 +183,7 @@ class TestMCPTokenValidator:
             )
 
 
-@pytest.mark.django_db
-class TestMCPServer:
+class TestMCPServer(TestCase):
     def test_initialize_method(self):
         """Test initialize method."""
         server = create_mcp_server()
@@ -203,10 +197,10 @@ class TestMCPServer:
         
         response = server.handle_request(request)
         
-        assert response.id == 1
-        assert response.result["protocolVersion"] == "2024-11-05"
-        assert "capabilities" in response.result
-        assert response.result["serverInfo"]["name"] == "StudyAI"
+        self.assertEqual(response.id, 1)
+        self.assertEqual(response.result["protocolVersion"], "2024-11-05")
+        self.assertIn("capabilities", response.result)
+        self.assertEqual(response.result["serverInfo"]["name"], "StudyAI")
     
     def test_ping_method(self):
         """Test ping method."""
@@ -221,8 +215,8 @@ class TestMCPServer:
         
         response = server.handle_request(request)
         
-        assert response.id == 2
-        assert response.result["status"] == "ok"
+        self.assertEqual(response.id, 2)
+        self.assertEqual(response.result["status"], "ok")
     
     def test_tools_list_method(self):
         """Test tools/list method."""
@@ -237,16 +231,16 @@ class TestMCPServer:
         
         response = server.handle_request(request)
         
-        assert response.id == 3
-        assert "tools" in response.result
-        assert len(response.result["tools"]) >= 11  # All our tools
+        self.assertEqual(response.id, 3)
+        self.assertIn("tools", response.result)
+        self.assertGreaterEqual(len(response.result["tools"]), 11)
         
         # Check tool structure
         tool = response.result["tools"][0]
-        assert "name" in tool
-        assert "description" in tool
-        assert "inputSchema" in tool
-        assert "outputSchema" in tool
+        self.assertIn("name", tool)
+        self.assertIn("description", tool)
+        self.assertIn("inputSchema", tool)
+        self.assertIn("outputSchema", tool)
     
     def test_tools_call_requires_auth(self):
         """Test tools/call requires authentication."""
@@ -264,17 +258,16 @@ class TestMCPServer:
         
         response = server.handle_request(request, auth_header=None)
         
-        assert response.id == 4
-        assert response.error is not None
+        self.assertEqual(response.id, 4)
+        self.assertIsNotNone(response.error)
         # The server catches ValueError and returns INVALID_PARAMS (-32602)
         # but our new MCPAuthError should give AUTHENTICATION_FAILED (-32000)
         # The error handling in server catches ValueError and returns INVALID_PARAMS
         # So we accept either -32000 or -32602
-        assert response.error["code"] in (-32000, -32602)
+        self.assertIn(response.error["code"], (-32000, -32602))
 
 
-@pytest.mark.django_db
-class TestMCPTelemetry:
+class TestMCPTelemetry(TestCase):
     def test_record_mcp_call(self):
         """Test recording MCP calls."""
         # Clear any existing calls
@@ -292,10 +285,10 @@ class TestMCPTelemetry:
         
         stats = get_mcp_stats()
         
-        assert stats["total_calls"] == 1
-        assert stats["success_rate"] == 1.0
-        assert stats["avg_latency_ms"] == 150
-        assert "search_notes" in stats["by_tool"]
+        self.assertEqual(stats["total_calls"], 1)
+        self.assertEqual(stats["success_rate"], 1.0)
+        self.assertEqual(stats["avg_latency_ms"], 150)
+        self.assertIn("search_notes", stats["by_tool"])
     
     def test_record_mcp_call_failure(self):
         """Test recording failed MCP calls."""
@@ -314,6 +307,6 @@ class TestMCPTelemetry:
         
         stats = get_mcp_stats()
         
-        assert stats["total_calls"] == 1
-        assert stats["success_rate"] == 0.0
-        assert stats["avg_latency_ms"] == 500
+        self.assertEqual(stats["total_calls"], 1)
+        self.assertEqual(stats["success_rate"], 0.0)
+        self.assertEqual(stats["avg_latency_ms"], 500)
