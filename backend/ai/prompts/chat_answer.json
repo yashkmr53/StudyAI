@@ -1,0 +1,17 @@
+{
+  "name": "chat_answer",
+  "version": "v1",
+  "template": "Answer the user's question using ONLY the provided evidence.\nCite sources using chunk_ids. If evidence is insufficient, say so.\n\nEVIDENCE_JSON:{evidence_json}\n\nQUESTION:{question}\n\nRespond with JSON containing:\n- answer: string\n- cited_chunk_ids: array of strings\n- confidence: number (0-1)",
+  "output_schema": {
+    "type": "object",
+    "required": ["answer", "cited_chunk_ids", "confidence"],
+    "properties": {
+      "answer": {"type": "string"},
+      "cited_chunk_ids": {"type": "array", "items": {"type": "string"}},
+      "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+    }
+  },
+  "output_schema_version": "v1",
+  "description": "Generate answer with citations for chat",
+  "tags": ["chat", "answer"]
+}

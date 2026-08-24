@@ -24,9 +24,14 @@ RATE_LIMITING_ENABLED = False
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.dummy.DummyCache"
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache"
     },
     "throttle": {
         "BACKEND": "django.core.cache.backends.dummy.DummyCache"
     },
 }
+
+STORAGE_BACKEND = "local"
+OBJECT_STORAGE_BACKEND = "local"
+
+LANGSMITH_TRACING = False

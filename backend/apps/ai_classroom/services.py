@@ -16,18 +16,17 @@ persist EnrichedNote/Blocks/CitationBlocks.
   canonical document or NoteSpace artifacts.
 """
 import hashlib
-import json
 import logging
 
 from django.conf import settings
 from django.db import transaction
 
 from apps.ai_classroom.models import CitationBlock, EnrichedNote, EnrichedNoteBlock
-from apps.ai_classroom.prompts import QUALIFIED, active_prompt, validate_stage_output
+from apps.ai_classroom.prompts import QUALIFIED, active_prompt
 from apps.documents.models import Document
 from apps.jobs.models import Job
 from apps.retrieval.models import NoteChunk
-from providers.base import Prompt
+from providers.registry import get_llm_provider
 from shared.exceptions import ResourceNotFound, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -234,90 +233,30 @@ class EnrichmentService:
 
 
 def run_enrichment_job(job: Job) -> None:
+    from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
+    from ai.langgraph.state.enrichment_state import EnrichmentState
+
     document = Document.objects.select_related("profile").get(pk=job.resource_id)
 
-    # ---- A. Retrieve ------------------------------------------------------
-    user_chunks = list(
-        NoteChunk.objects.filter(document=document, stale=False)
-        .select_related("reference_book")
-        .order_by("chunk_index")[:8]
+    initial_state = EnrichmentState(
+        document_id=str(document.pk),
+        job_id=str(job.pk),
+        user_chunks=[],
+        reference_chunks=[],
+        evidence_payload={},
+        draft_result={},
+        gaps_result={},
+        fill_result={},
+        all_blocks=[],
+        stitched_blocks=[],
+        errors=[],
+        execution_metadata={},
     )
-    reference_chunks = list(
-        NoteChunk.objects.filter(
-            source_type="reference",
-            stale=False,
-            reference_book__status="ready",
-        ).exclude(reference_book__isnull=True)
-        .select_related("reference_book")
-        .order_by("?")[:6]
-    )
 
-    def as_evidence(chunks: list[NoteChunk]) -> list[dict]:
-        return [{"chunk_id": str(c.pk), "content": c.content} for c in chunks]
-
-    # ---- B. Draft (schema-validated) -------------------------------------
-    from providers.registry import get_llm_provider
-
-    llm = get_llm_provider()
+    final_state = invoke_enrichment_graph(initial_state)
+    stitched = final_state.get("stitched_blocks", [])
     draft_prompt = active_prompt("enrichment_draft")
-    evidence_payload = {"user_chunks": as_evidence(user_chunks), "reference_chunks": as_evidence(reference_chunks)}
-    draft_result = llm.generate_structured(
-        prompt=Prompt(
-            name="enrichment_draft",
-            version=draft_prompt.version,
-            user=draft_prompt.template + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
-        ),
-        request_id=f"job_{job.pk}",
-    )
-    validate_stage_output("enrichment_draft", draft_result.data)
-
-    # ---- C. Gap detection (schema-validated) -----------------------------
-    gaps_prompt = active_prompt("gap_detection")
-    gaps_result = llm.generate_structured(
-        prompt=Prompt(
-            name="gap_detection",
-            version=gaps_prompt.version,
-            user=gaps_prompt.template + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
-        ),
-        request_id=f"job_{job.pk}",
-    )
-    validate_stage_output("gap_detection", gaps_result.data)
-
-    # ---- D. Gap filling (schema-validated) -------------------------------
-    fill_prompt = active_prompt("gap_filling")
-    fill_evidence = {**evidence_payload, "gaps": gaps_result.data["gaps"]}
-    fill_result = llm.generate_structured(
-        prompt=Prompt(
-            name="gap_filling",
-            version=fill_prompt.version,
-            user=fill_prompt.template + "\nEVIDENCE_JSON:" + json.dumps(fill_evidence),
-        ),
-        request_id=f"job_{job.pk}",
-    )
-    validate_stage_output("gap_filling", fill_result.data)
-
-    all_blocks = draft_result.data["blocks"] + fill_result.data["blocks"]
-
-    # ---- E/F. Citation stitch + evidence verification --------------------
-    chunk_meta = {str(c.pk): c for c in [*user_chunks, *reference_chunks]}
-    stitched = []
-    for i, block in enumerate(all_blocks):
-        refs = []
-        for cid in block.get("source_chunk_ids", []):
-            chunk = chunk_meta.get(cid)
-            if chunk is None:
-                continue
-            revision_id = chunk.revision_ids[0] if chunk.revision_ids else None
-            refs.append({
-                "source_type": chunk.source_type,
-                "chunk_id": str(chunk.pk),
-                "document_id": str(chunk.document_id),
-                "page_number": chunk.page_start,
-                "revision_id": revision_id,
-                "retrieval_score": None,
-            })
-        status, score = EvidenceVerifier.verify(block["content"], refs)
-        stitched.append({"index": i, **block, "refs": refs, "status": status, "score": score})
+    llm = get_llm_provider()
 
     # ---- Persist atomically (§67-style boundary) --------------------------
     with transaction.atomic():

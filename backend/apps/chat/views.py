@@ -72,7 +72,9 @@ class ChatSessionViewSet(
         if request.method == "POST":
             serializer = MessageInSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            message = ChatService.ask(session, serializer.validated_data["content"])
+            # Check for agent mode header
+            use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
+            message = ChatService.ask(session, serializer.validated_data["content"], use_agent=use_agent)
             return Response(ChatMessageSerializer(message).data, status=201)
         messages = ChatMessage.objects.filter(session=session)
         return Response(ChatMessageSerializer(messages, many=True).data)
@@ -81,5 +83,6 @@ class ChatSessionViewSet(
         session = self.get_object()
         serializer = MessageInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        message = ChatService.ask(session, serializer.validated_data["content"])
+        use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
+        message = ChatService.ask(session, serializer.validated_data["content"], use_agent=use_agent)
         return Response(ChatMessageSerializer(message).data, status=201)
