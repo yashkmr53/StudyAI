@@ -1,0 +1,28 @@
+{
+  "name": "enrichment_draft",
+  "version": "v1",
+  "template": "Draft a structured enrichment grounded ONLY in the provided evidence.\nEvidence JSON follows. Produce blocks with block_type/title/content,\ngeneration_method and source_chunk_ids referencing the evidence ids.\n\nEVIDENCE_JSON:{evidence_json}",
+  "output_schema": {
+    "type": "object",
+    "required": ["blocks"],
+    "properties": {
+      "blocks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["block_type", "content", "generation_method", "source_chunk_ids"],
+          "properties": {
+            "block_type": {"type": "string"},
+            "title": {"type": "string"},
+            "content": {"type": "string"},
+            "generation_method": {"enum": ["llm", "rule_based", "user_edited", "transcribed"]},
+            "source_chunk_ids": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    }
+  },
+  "output_schema_version": "v1",
+  "description": "Draft enrichment blocks from user and reference chunks",
+  "tags": ["enrichment", "draft"]
+}

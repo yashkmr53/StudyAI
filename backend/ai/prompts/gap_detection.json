@@ -1,0 +1,25 @@
+{
+  "name": "gap_detection",
+  "version": "v1",
+  "template": "Compare user-note coverage against reference coverage. Report topics\npresent in references but missing from user notes as gaps.\n\nEVIDENCE_JSON:{evidence_json}",
+  "output_schema": {
+    "type": "object",
+    "required": ["gaps"],
+    "properties": {
+      "gaps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["topic", "reference_chunk_id"],
+          "properties": {
+            "topic": {"type": "string"},
+            "reference_chunk_id": {"type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "output_schema_version": "v1",
+  "description": "Detect gaps between user notes and reference material",
+  "tags": ["enrichment", "gap_detection"]
+}

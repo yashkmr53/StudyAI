@@ -399,6 +399,8 @@
     "noThreadDescription": "Start a new chat to ask questions about your material.",
     "introHint": "Ask anything about your notes — answers cite the source pages.",
     "composerPlaceholder": "Ask about your study material…",
+    "agentComposerPlaceholder": "Ask me to create a test, find weak topics, plan revision…",
+    "agentMode": "Agent Mode",
     "messageAria": "Message",
     "thinkingAria": "StudyAI is thinking",
     "emptyResponse": "(empty response)",

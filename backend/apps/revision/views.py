@@ -100,5 +100,23 @@ class RevisionPlansView(APIView):
             target = date.today() + timedelta(days=14)
         hours = request.query_params.get("hours")
 
-        plan = RevisionPlanningService.build_plan(profile, subject, target)
-        return Response({**plan, "hours_per_week": float(hours) if hours else None})
+        from ai.langgraph.graphs.revision_planning_graph import invoke_revision_planning_graph
+        from ai.langgraph.state.revision_planning_state import RevisionPlanningState
+
+        initial_state = RevisionPlanningState(
+            profile_id=str(profile.pk),
+            subject_id=str(subject.pk) if subject else None,
+            target_date=target.isoformat(),
+            days_left=max(1, (target - date.today()).days),
+            horizon=min(max(1, (target - date.today()).days), 14),
+            weights={},
+            urgency=min(1.0, max(1, (target - date.today()).days) / 14),
+            candidates=[],
+            priorities=[],
+            schedule=[],
+            errors=[],
+            execution_metadata={},
+        )
+
+        final_state = invoke_revision_planning_graph(initial_state)
+        return Response({**final_state, "hours_per_week": float(hours) if hours else None})

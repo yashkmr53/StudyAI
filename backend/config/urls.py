@@ -12,6 +12,7 @@ api_v1 = [
     path("", include("apps.documents.urls")),  # incl. search + audit routes
     path("", include("apps.notebooks.urls")),  # B1 Notebooks CRUD
     path("", include("apps.ai_classroom.urls")),  # B4 Tag rename
+    path("", include("apps.agents.urls")),  # Phase 1: Agentic AI
     path("status", StatusView.as_view(), name="status"),
     path("storage/upload/<path:key>", StorageUploadView.as_view()),
     path("storage/download/<path:key>", StorageDownloadView.as_view()),

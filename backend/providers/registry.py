@@ -68,11 +68,8 @@ def get_object_storage() -> ObjectStorageProvider:
     
     if backend == "s3":
         from providers.storage.s3 import S3StorageProvider
-        # Validate required credentials for production
         if not _get_env("S3_ACCESS_KEY") or not _get_env("S3_SECRET_KEY"):
-            raise ValueError(
-                "S3 backend requires S3_ACCESS_KEY and S3_SECRET_KEY environment variables"
-            )
+            raise ValueError("S3 backend requires S3_ACCESS_KEY and S3_SECRET_KEY environment variables")
         return S3StorageProvider(backend="s3")
     
     raise ValueError(f"Unknown STORAGE_BACKEND: {backend}")

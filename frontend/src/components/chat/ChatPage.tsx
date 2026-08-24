@@ -4,12 +4,16 @@ import { useParams } from "react-router-dom";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import { ModuleProvider, useSubjectModule } from "../modules/ModuleContext";
 import { EmptyState, ErrorState } from "../ui/primitives";
-import { ChatIcon, PlusIcon } from "../ui/icons";
+import { ChatIcon, PlusIcon, SparkleIcon } from "../ui/icons";
 import { chatApi } from "../../services/api/chat";
 import { useWorkspaceStore } from "../../state/workspaceStore";
+import { useAgentChat } from "../../hooks/useAgentChat";
+import { ToolStatusIndicator } from "./ToolStatusIndicator";
+import { AgentMessageBubble } from "./AgentMessageBubble";
 import type { ChatMessageItem, ChatThreadSummary } from "../../types/domain";
+import type { AgentMessage } from "../../types/agent";
 
-/** Ask StudyAI (§25) — module-scoped chat; only when ChatService is enabled. */
+/** Ask StudyAI (§25) — module-scoped chat with optional agent mode (Phase 2). */
 export function ChatPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const subjects = useWorkspaceStore((s) => s.subjects);
@@ -21,9 +25,25 @@ export function ChatPage() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agentMode, setAgentMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const {
+    sendMessage,
+    sending,
+    toolCalls,
+  } = useAgentChat({
+    sessionId: activeThreadId || "",
+    onMessageSent: (userMsg, assistantMsg) => {
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    },
+    onError: (err) => {
+      setError(err.message);
+      // Remove pending messages on error
+      setMessages((prev) => prev.filter((m) => !m.id.startsWith("pending-")));
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +59,6 @@ export function ChatPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjectId]);
 
   useEffect(() => {
@@ -79,21 +98,25 @@ export function ChatPage() {
   async function send() {
     const content = draft.trim();
     if (!content || !activeThreadId || sending) return;
-    setSending(true);
     setDraft("");
+
     const pendingId = `pending-${crypto.randomUUID()}`;
-    setMessages((prev) => [
-      ...prev,
-      { id: `u-${pendingId}`, role: "user", content, citations: [] },
-      { id: pendingId, role: "assistant", content: "", citations: [], pending: true },
-    ]);
+    const userMsg: ChatMessageItem = { id: `u-${pendingId}`, role: "user", content, citations: [] };
+    const pendingAssistantMsg: ChatMessageItem = { id: pendingId, role: "assistant", content: "", citations: [], pending: true };
+
+    setMessages((prev) => [...prev, userMsg, pendingAssistantMsg]);
+
     try {
-      const reply = await chatApi.sendMessage(activeThreadId, content);
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== pendingId),
-        reply.user,
-        reply.assistant,
-      ]);
+      if (agentMode) {
+        await sendMessage(content);
+      } else {
+        const reply = await chatApi.sendMessage(activeThreadId, content);
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== pendingId),
+          reply.user,
+          reply.assistant,
+        ]);
+      }
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== pendingId));
       setMessages((prev) => [
@@ -105,8 +128,6 @@ export function ChatPage() {
           citations: [],
         },
       ]);
-    } finally {
-      setSending(false);
     }
   }
 
@@ -121,13 +142,26 @@ export function ChatPage() {
           ]}
         />
 
-        <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
+        <div className="page-heading page-heading__row" style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <h1>{t("chat.title")}</h1>
             <p className="subtitle" style={{ marginTop: 5 }}>
               {t("chat.subtitle", { subject: subjectName })}
             </p>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer" style={{ marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={agentMode}
+              onChange={(e) => setAgentMode(e.target.checked)}
+              className="checkbox"
+              disabled={sending}
+            />
+            <span className="flex items-center gap-1 text-sm">
+              <SparkleIcon size={14} />
+              {t("chat.agentMode", { defaultValue: "Agent Mode" })}
+            </span>
+          </label>
         </div>
 
         <div className="chat-layout grow" style={{ minHeight: 480 }}>
@@ -185,30 +219,50 @@ export function ChatPage() {
                     {t("chat.introHint")}
                   </p>
                 )}
-                {messages.map((message) => (
-                  <div key={message.id} className={message.role === "user" ? "msg msg--user" : "msg msg--assistant"}>
-                    <div className={message.pending ? "msg__bubble pending" : "msg__bubble"}>
-                      {message.pending ? (
-                        <span className="typing-dots" aria-label={t("chat.thinkingAria")}>
-                          <span />
-                          <span />
-                          <span />
-                        </span>
-                      ) : (
-                        message.content || t("chat.emptyResponse")
+                {messages.map((message) => {
+                  // Check if this is an agent message with tool calls
+                  const agentMsg = message as AgentMessage;
+                  if (agentMsg.toolCalls && agentMsg.toolCalls.length > 0) {
+                    return (
+                      <AgentMessageBubble key={message.id} message={agentMsg} />
+                    );
+                  }
+                  return (
+                    <div key={message.id} className={message.role === "user" ? "msg msg--user" : "msg msg--assistant"}>
+                      <div className={message.pending ? "msg__bubble pending" : "msg__bubble"}>
+                        {message.pending ? (
+                          <span className="typing-dots" aria-label={t("chat.thinkingAria")}>
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                        ) : (
+                          message.content || t("chat.emptyResponse")
+                        )}
+                      </div>
+                      {message.citations.length > 0 && (
+                        <div className="citations-row">
+                          {message.citations.map((citation, i) => (
+                            <span key={i} className="citation-chip" role="presentation">
+                              Page {citation.page}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {message.citations.length > 0 && (
-                      <div className="citations-row">
-                        {message.citations.map((citation, i) => (
-                          <span key={i} className="citation-chip" role="presentation">
-                            Page {citation.page}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                  );
+                })}
+                {/* Active tool calls during agent execution */}
+                {agentMode && sending && toolCalls.length > 0 && (
+                  <div className="active-tool-calls space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-100 animate-pulse">
+                    <div className="text-sm font-medium text-blue-700">Agent is working…</div>
+                    <div className="space-y-1 mt-1">
+                      {toolCalls.map((tc, i) => (
+                        <ToolStatusIndicator key={i} toolCall={tc} compact />
+                      ))}
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
 
               <form
@@ -220,11 +274,11 @@ export function ChatPage() {
               >
                 <input
                   className="input"
-                  placeholder={t("chat.composerPlaceholder")}
+                  placeholder={agentMode ? t("chat.agentComposerPlaceholder", { defaultValue: "Ask me to create a test, find weak topics, plan revision…" }) : t("chat.composerPlaceholder")}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   aria-label={t("chat.messageAria")}
-                  disabled={!activeThreadId}
+                  disabled={!activeThreadId || sending}
                 />
                 <button type="submit" className="btn btn--primary" disabled={!draft.trim() || sending}>
                   {t("common.actions.send")}

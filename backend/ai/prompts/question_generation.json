@@ -1,0 +1,18 @@
+{
+  "name": "question_generation",
+  "version": "v1",
+  "template": "Generate an MCQ question from the provided source chunk.\nCreate a clear question with 4 options (A, B, C, D) and indicate the correct answer index (0-3).\n\nSOURCE_CHUNK:{chunk_json}\nDISTRACTOR_CONTENTS:{distractor_json}\n\nRespond with JSON containing:\n- prompt: string (the question text)\n- options: array of 4 strings\n- answer_index: integer (0-3)\n- difficulty: string (easy|medium|hard)",
+  "output_schema": {
+    "type": "object",
+    "required": ["prompt", "options", "answer_index", "difficulty"],
+    "properties": {
+      "prompt": {"type": "string"},
+      "options": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4},
+      "answer_index": {"type": "integer", "minimum": 0, "maximum": 3},
+      "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"]}
+    }
+  },
+  "output_schema_version": "v1",
+  "description": "Generate MCQ from document chunk",
+  "tags": ["questions", "generation"]
+}
