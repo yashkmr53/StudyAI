@@ -181,3 +181,12 @@ export function RefreshIcon({ size, className }: IconProps) {
     </svg>
   );
 }
+
+export function DownloadIcon({ size, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 3v12M6 9l6 6 6-6" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
