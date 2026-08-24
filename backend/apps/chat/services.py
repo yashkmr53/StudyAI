@@ -1,13 +1,16 @@
-"""Chatbot service (architecture §16, §57).
+"""Chatbot service (architecture §16, §57, Phase 1 Agentic AI).
 
 User question → scoped hybrid retrieval → evidence-grounded answer via
 the LLM provider (mock) → citation verification → persist messages.
 Retrieval scoping guarantees the chatbot never sees another profile's
 content.
+
+Agent mode (Phase 1): When X-Agent-Mode header is present or AGENT_ENABLED,
+uses StudyAIAgent for multi-step tool-use orchestration.
 """
-import json
 import logging
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.ai_classroom.services import EvidenceVerifier
@@ -16,16 +19,13 @@ from apps.chat.models import ChatMessage, ChatSession
 logger = logging.getLogger(__name__)
 
 CHAT_PROMPT_VERSION = "chat:v1"
+AGENT_PROMPT_VERSION = getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1")
 
 
 class ChatService:
     @staticmethod
     @transaction.atomic
-    def ask(session: ChatSession, content: str) -> ChatMessage:
-        from providers.llm.mock import MockLLMProvider
-        from providers.base import Prompt
-        from apps.retrieval.retrieval import RetrievalService
-
+    def ask(session: ChatSession, content: str, *, use_agent: bool = False) -> ChatMessage:
         content = (content or "").strip()
         if not content:
             from shared.exceptions import ValidationError
@@ -37,58 +37,73 @@ class ChatService:
         assert_within_budget(session.profile_id)
         ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
 
-        evidence = RetrievalService.search(
-            session.profile.user,
-            content,
-            subject=session.subject,
-            top_k=4,
+        # Agent mode: use StudyAIAgent for multi-step orchestration
+        if use_agent and getattr(settings, "AGENT_ENABLED", True):
+            return ChatService._ask_agent(session, content)
+
+        # Classic RAG mode (original implementation)
+        return ChatService._ask_classic(session, content)
+
+    @staticmethod
+    def _ask_classic(session: ChatSession, content: str) -> ChatMessage:
+        """LangGraph-based RAG chatbot implementation."""
+        from ai.langgraph.graphs.chat_graph import invoke_chat_graph
+        from ai.langgraph.state.chat_state import ChatState
+
+        initial_state = ChatState(
+            user_request=content,
+            profile_id=str(session.profile_id),
+            subject_id=str(session.subject_id) if session.subject_id else None,
+            session_id=str(session.pk),
+            retrieved_evidence=[],
+            selected_evidence=[],
+            answer="",
+            citations=[],
+            verification_status="not_verified",
+            verification_score=0.0,
+            retry_count=0,
+            errors=[],
+            execution_metadata={},
         )
 
-        from providers.registry import get_llm_provider
+        final_state = invoke_chat_graph(initial_state)
 
-        llm = get_llm_provider()
-        payload = {
-            "evidence": [
-                {"chunk_id": e.chunk_id, "content": e.content_snippet} for e in evidence
-            ]
-        }
-        result = llm.generate_structured(
-            prompt=Prompt(name="chat", version="v1", user="EVIDENCE_JSON:" + json.dumps(payload)),
-            request_id=f"chat:{session.pk}",
-        )
-        answer = result.data["answer"]
-        cited_ids = result.data.get("cited_chunk_ids", [])
-
-        by_id = {e.chunk_id: e for e in evidence}
-        citations = []
-        cited_contents = []
-        for cid in cited_ids:
-            ev = by_id.get(cid)
-            if ev is None:
-                continue
-            cited_contents.append(ev.content_snippet)
-            citations.append({
-                "source_type": ev.source_type,
-                "chunk_id": ev.chunk_id,
-                "document_id": ev.document_id,
-                "page_start": ev.page_start,
-                "page_end": ev.page_end,
-                "snippet": ev.content_snippet,
-                "rrf_score": round(ev.rrf_score, 6),
-            })
-
-        status, score = EvidenceVerifier._classify(answer, cited_contents)
-
-        from django.conf import settings
+        answer = final_state.get("answer", "")
+        citations = final_state.get("citations", [])
+        verification_status = final_state.get("verification_status", "not_verified")
+        verification_score = final_state.get("verification_score")
 
         message = ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
             content=answer,
-            citations=citations + [{"verification_status": status, "verification_score": score,
+            citations=citations + [{"verification_status": verification_status, "verification_score": verification_score,
                                      "verifier_version": EvidenceVerifier.VERSION}],
             model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
             prompt_version=CHAT_PROMPT_VERSION,
         )
-        logger.info("Chat %s answered with %s citation(s) [%s]", session.pk, len(citations), status)
+        logger.info("Chat %s answered with %s citation(s) [%s]", session.pk, len(citations), verification_status)
+        return message
+
+    @staticmethod
+    def _ask_agent(session: ChatSession, content: str) -> ChatMessage:
+        """Agentic mode using StudyAIAgent."""
+        from apps.agents.services.agent import StudyAIAgent
+
+        agent = StudyAIAgent()
+        result = agent.process_request(content, session.profile.user, session)
+
+        message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.ASSISTANT,
+            content=result.answer,
+            citations=result.citations,
+            model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+            prompt_version=AGENT_PROMPT_VERSION,
+        )
+        logger.info(
+            "Agent chat %s answered with %s citation(s) [%s] (tools=%d, iterations=%d, outcome=%s)",
+            session.pk, len(result.citations), result.verification_status,
+            len(result.tool_calls), result.iterations, result.outcome
+        )
         return message

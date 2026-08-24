@@ -75,7 +75,7 @@ class DocumentViewSet(
         key = f"{profile.id}/{page.id}{ext}"
         page.image_ref = key
         page.save(update_fields=("image_ref",))
-        upload_url = storage.create_upload_url(key, content_type="application/octet-stream")
+        upload_url = storage.create_upload_url(key, content_type="application/octet-stream", ttl_seconds=300)
         audit_event(actor=request.user, action="document.created", resource_type="document",
                     resource_id=document.pk, request=request)
         return Response(

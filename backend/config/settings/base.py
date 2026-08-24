@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.jobs",
     "apps.evaluation",
     "apps.audit",
+    "apps.agents",  # Phase 1: Agentic AI
 ]
 
 MIDDLEWARE = [
@@ -228,6 +229,14 @@ MAX_PROVIDER_INPUT_CHARS = 8000
 # Monthly AI budget defaults (B8) — per-user overrides via admin
 DEFAULT_MONTHLY_TOKEN_BUDGET = 100000
 DEFAULT_MONTHLY_COST_BUDGET_USD = 50.00
+
+# Phase 1: Agentic AI Settings
+AGENT_ENABLED = True
+AGENT_MAX_ITERATIONS = 5
+AGENT_MAX_TOOL_CALLS = 10
+AGENT_REQUEST_TIMEOUT_SECONDS = 60
+AGENT_PER_TOOL_TIMEOUT_SECONDS = 30
+AGENT_PROMPT_VERSION = "agent_orchestrator:v1"
 
 LOGGING = {
     "version": 1,

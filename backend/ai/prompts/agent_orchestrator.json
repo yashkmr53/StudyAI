@@ -1,0 +1,29 @@
+{
+  "name": "agent_orchestrator",
+  "version": "v1",
+  "template": "You are StudyAI, an AI study assistant. You have access to tools for retrieving notes, checking mastery, generating questions, and creating tests.\n\nAvailable tools:\n{tool_descriptions}\n\nUser request: {user_request}\n\nThink step by step. If you need to use a tool, respond with JSON:\n{\n  \"tool\": \"tool_name\",\n  \"arguments\": {...},\n  \"reasoning\": \"why you need this tool\"\n}\n\nIf you have enough information to answer, respond with JSON:\n{\n  \"final_answer\": \"your answer\",\n  \"citations\": [{\"chunk_id\": \"...\", \"document_id\": \"...\", \"page_start\": 1}],\n  \"reasoning\": \"why this answers the question\"\n}",
+  "output_schema": {
+    "type": "object",
+    "oneOf": [
+      {
+        "required": ["tool", "arguments", "reasoning"],
+        "properties": {
+          "tool": {"type": "string"},
+          "arguments": {"type": "object"},
+          "reasoning": {"type": "string"}
+        }
+      },
+      {
+        "required": ["final_answer", "citations", "reasoning"],
+        "properties": {
+          "final_answer": {"type": "string"},
+          "citations": {"type": "array", "items": {"type": "object"}},
+          "reasoning": {"type": "string"}
+        }
+      }
+    ]
+  },
+  "output_schema_version": "v1",
+  "description": "Agent orchestrator decision prompt",
+  "tags": ["agent", "orchestrator"]
+}

@@ -30,3 +30,8 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.dummy.DummyCache"
     },
 }
+
+STORAGE_BACKEND = "local"
+OBJECT_STORAGE_BACKEND = "local"
+
+LANGSMITH_TRACING = False

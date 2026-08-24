@@ -20,3 +20,10 @@ sentence-transformers>=3.0  # Local embeddings
 boto3>=1.34               # MinIO/S3 storage
 ollama>=0.3               # Ollama client (optional, we use requests)
 requests>=2.31            # HTTP client for Ollama API
+
+# LangGraph/LangChain/LangSmith (Phase 12: AI Orchestration)
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+langsmith>=0.1.0
