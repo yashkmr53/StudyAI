@@ -15,11 +15,13 @@ import {
   PenIcon,
   PlusIcon,
   QuizIcon,
+  UploadIcon,
 } from "../ui/icons";
 import { useAuthStore } from "../../features/auth/authStore";
 import { servicesFor, useModuleConfigStore } from "../../state/moduleConfigStore";
 import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
+import { documentsApi } from "../../services/api/documents";
 import type { ModuleId } from "../../types/modules";
 import { UNFILED_FOLDER_ID } from "../../types/domain";
 import { childrenOf } from "../../utils/folderTree";
@@ -46,6 +48,7 @@ export function SubjectWorkspace() {
   const setActiveModule = useUiStore((s) => s.setActiveModule);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const { t } = useTranslation();
 
   const subject = subjects.find((x) => x.id === subjectId);
@@ -98,6 +101,30 @@ export function SubjectWorkspace() {
   if (!subject) return null;
 
   const writeState = { returnTo: `${location.pathname}` };
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !subjectId || !profile) return;
+    setUploading(true);
+    try {
+      const created = await documentsApi.create(profile.id, file.name, "image");
+      await documentsApi.uploadToSignedUrl(created.upload.url, await file.arrayBuffer(), file.type);
+      await documentsApi.finalizeUpload(created.document.id, created.page.id);
+      await useWorkspaceStore.getState().registerUploadNote({
+        documentId: created.document.id,
+        profileId: profile.id,
+        subjectId,
+        folderId: null,
+        title: file.name,
+      });
+      navigate(`/subjects/${subjectId}/notes/${created.document.id}`);
+    } catch {
+      // TODO: surface upload error to user
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
 
   return (
     <ModuleProvider value={{ moduleId, services }}>
@@ -173,6 +200,17 @@ export function SubjectWorkspace() {
               <PenIcon size={13} />
               {t("workspace.write")}
             </button>
+            <label className="btn btn--secondary btn--sm" style={{ cursor: "pointer" }}>
+              <UploadIcon size={13} />
+              {uploading ? t("workspace.uploading") : t("workspace.upload")}
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                style={{ display: "none" }}
+                disabled={uploading}
+                onChange={handleUpload}
+              />
+            </label>
           </div>
 
           {rootFolders.length === 0 && unfiledCount === 0 ? (

@@ -2,17 +2,19 @@
 from rest_framework import serializers
 
 from apps.ai_classroom.models import EnrichedNote
+from apps.jobs.models import Job
 
 
 class EnrichedNoteSerializer(serializers.ModelSerializer):
     blocks = serializers.SerializerMethodField()
+    job_status = serializers.SerializerMethodField()
 
     class Meta:
         model = EnrichedNote
         fields = (
             "id", "document", "revision_ids", "provider", "model",
             "prompt_version", "schema_version", "ai_stale", "blocks",
-            "created_at",
+            "job_status", "created_at",
         )
 
     def get_blocks(self, obj) -> list:
@@ -38,3 +40,11 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
                 ),
             })
         return out
+
+    def get_job_status(self, obj) -> str | None:
+        job = (
+            Job.objects.filter(resource_type="document", resource_id=str(obj.document_id))
+            .order_by("-created_at")
+            .first()
+        )
+        return job.status if job else None

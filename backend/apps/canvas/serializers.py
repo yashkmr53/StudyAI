@@ -19,7 +19,7 @@ class CanvasSessionSerializer(serializers.ModelSerializer):
         fields = (
             "id", "profile", "subject", "device_id",
             "lock_holder", "lock_generation", "lock_expires_at",
-            "pages", "created_at", "updated_at",
+            "pages", "document", "created_at", "updated_at",
         )
 
     def get_pages(self, obj) -> list:

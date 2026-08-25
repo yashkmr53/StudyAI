@@ -10,6 +10,7 @@ from apps.documents.views import (
     DocumentViewSet,
     FinalizeUploadView,
     JobViewSet,
+    PageDownloadView,
 )
 from apps.questions.views import DocumentQuestionsViewSet
 from apps.retrieval.views import SearchView
@@ -28,6 +29,7 @@ document_questions = DocumentQuestionsViewSet.as_view({"get": "list"})
 urlpatterns = [
     path("", include(router.urls)),
     path("documents/pages/<uuid:page_id>/finalize-upload", FinalizeUploadView.as_view(), name="finalize-upload"),
+    path("documents/pages/<uuid:page_id>/download", PageDownloadView.as_view(), name="page-download"),
     path("digitized-documents/<uuid:pk>/download", DigitizedDownloadView.as_view(), name="digitized-download"),
     path("jobs/<uuid:pk>/cancel", CancelJobView.as_view(), name="job-cancel"),
     path("search", SearchView.as_view(), name="search"),

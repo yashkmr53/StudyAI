@@ -24,6 +24,7 @@ def _serialize_test(test: TestInstance, include_questions: bool = True) -> dict:
     data = {
         "id": str(test.pk),
         "subject": str(test.subject_id) if test.subject_id else None,
+        "title": test.title or "",
         "type": test.type,
         "created_at": test.created_at,
         "question_count": test.test_questions.count(),
@@ -38,6 +39,7 @@ def _serialize_test(test: TestInstance, include_questions: bool = True) -> dict:
                 "difficulty": q.difficulty,
                 "prompt": q.prompt,
                 "options": q.options,
+                "answer_index": q.answer_index,
                 "answered": attempt is not None,
                 "selected_index": attempt.selected_index if attempt else None,
                 "correct": attempt.correct if attempt else None,
@@ -73,9 +75,11 @@ class TestViewSet(
             num = int(request.data.get("num_questions", 5))
         except (TypeError, ValueError):
             num = 5
+        title = request.data.get("title", "")
         test = TestGenerationService.build_test(
             profile, subject=subject, num_questions=max(1, min(num, 20)),
             type_=TestInstance.Type.PRACTICE,
+            title=title,
         )
         return Response(_serialize_test(test), status=201)
 

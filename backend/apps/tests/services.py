@@ -108,7 +108,7 @@ class TestGenerationService:
         )
 
     @classmethod
-    def build_test(cls, profile, *, subject=None, num_questions: int = 5, type_=TestInstance.Type.PRACTICE):
+    def build_test(cls, profile, *, subject=None, num_questions: int = 5, type_=TestInstance.Type.PRACTICE, title: str = ""):
         qs = Question.objects.filter(
             document__profile__user=profile.user, stale=False
         ).select_related("document")
@@ -122,7 +122,7 @@ class TestGenerationService:
         selected = [q for _, _, q in scored[:num_questions]]
 
         with transaction.atomic():
-            test = TestInstance.objects.create(profile=profile, subject=subject, type=type_)
+            test = TestInstance.objects.create(profile=profile, subject=subject, type=type_, title=title)
             for order, q in enumerate(selected, start=1):
                 TestQuestion.objects.create(test=test, question=q, order=order)
         return test

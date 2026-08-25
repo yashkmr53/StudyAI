@@ -157,6 +157,9 @@ export function TranscriptionChip({ status }: { status: string }) {
   if (status === "failed") {
     return <span className="chip chip--red">{t("notes.status.transcriptionFailed")}</span>;
   }
+  if (status === "needs_review") {
+    return <span className="chip chip--amber">{t("notes.status.needsReview")}</span>;
+  }
   return <span className="chip chip--gray">{t("notes.status.pending")}</span>;
 }
 

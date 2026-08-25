@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enrichmentApi } from "../../services/api/enrichment";
+import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
 import { AlertIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
@@ -27,6 +28,7 @@ export function EnrichedView({ note, onCitation }: Props) {
   const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [tags, setTags] = useState<{ stable_key: string; display_name: string }[]>([]);
   const pollsLeft = useRef(MAX_POLLS);
   const pollTimer = useRef<number | null>(null);
 
@@ -52,8 +54,10 @@ export function EnrichedView({ note, onCitation }: Props) {
   useEffect(() => {
     setSnapshot(null);
     setLoadError(false);
+    setTags([]);
     stopPolling();
     void refresh();
+    void tagsApi.listForDocument(note.refId).then((t) => setTags(t.map((x) => ({ stable_key: x.stable_key, display_name: x.display_name })))).catch(() => {});
     return stopPolling;
   }, [note.refId, refresh, stopPolling]);
 
@@ -208,6 +212,15 @@ export function EnrichedView({ note, onCitation }: Props) {
           ))
         )}
       </article>
+      {tags.length > 0 && (
+        <div className="tags-row" style={{ marginTop: 18 }}>
+          {tags.map((tag) => (
+            <span key={tag.stable_key} className="chip chip--ghost">
+              {tag.display_name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

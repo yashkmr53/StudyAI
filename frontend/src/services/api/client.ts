@@ -12,6 +12,11 @@ interface RequestOptions {
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let onSessionExpired: (() => void) | null = null;
+let activeProfileId: string | null = null;
+
+export function setActiveProfileId(profileId: string | null): void {
+  activeProfileId = profileId;
+}
 
 export function setTokens(access: string | null, refresh: string | null): void {
   accessToken = access;
@@ -62,6 +67,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  if (activeProfileId) headers["X-Active-Profile"] = activeProfileId;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,

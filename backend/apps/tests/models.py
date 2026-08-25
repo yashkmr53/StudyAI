@@ -16,6 +16,7 @@ class TestInstance(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="tests")
     subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name="tests")
+    title = models.CharField(max_length=200, blank=True, default="")
     type = models.CharField(max_length=16, choices=Type.choices, default=Type.PRACTICE)
     scheduled_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
