@@ -274,7 +274,7 @@ function UploadSource({ note, page, onPageChange, highlightToken }: Omit<Props, 
         const wire = p as PageStatusWire;
         if (wire.image_ref) {
           try {
-            const dl = await documentsApi.getDownloadUrl(wire.image_ref);
+            const dl = await documentsApi.getPageDownloadUrl(p.id);
             imageUrl = dl.url;
           } catch {
             imageUrl = null;

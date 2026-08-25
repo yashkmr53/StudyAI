@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { profilesApi } from "../../services/api/profiles";
 import { authApi } from "../../services/api/auth";
-import { loadPersistedTokens, setSessionExpiredHandler, setTokens } from "../../services/api/client";
+import { loadPersistedTokens, setActiveProfileId, setSessionExpiredHandler, setTokens } from "../../services/api/client";
 import type { Profile } from "../../types/api";
 
 loadPersistedTokens();
@@ -45,14 +45,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
       try {
         const profiles = await profilesApi.list();
-        const profile = pickActive(profiles);
-        if (profile) localStorage.setItem("studyai.profile", profile.id);
-        set({
-          profiles,
-          profile,
-          email: get().email ?? localStorage.getItem("studyai.email"),
-          initialized: true,
-        });
+      const profile = pickActive(profiles);
+      if (profile) localStorage.setItem("studyai.profile", profile.id);
+      setActiveProfileId(profile?.id ?? null);
+      set({
+        profiles,
+        profile,
+        email: get().email ?? localStorage.getItem("studyai.email"),
+        initialized: true,
+      });
       } catch {
         setTokens(null, null);
         localStorage.removeItem("studyai.email");
@@ -66,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const profiles = await profilesApi.list();
       const profile = pickActive(profiles);
       if (profile) localStorage.setItem("studyai.profile", profile.id);
+      setActiveProfileId(profile?.id ?? null);
       set({ email, profiles, profile });
     },
 
@@ -82,29 +84,31 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const profile =
         profiles.find((p) => p.id === data.profile.id) ?? data.profile;
       localStorage.setItem("studyai.profile", profile.id);
+      setActiveProfileId(profile.id);
       set({ email, profiles: profiles.length ? profiles : [profile], profile });
     },
 
     async logout() {
       await authApi.logout();
+      setActiveProfileId(null);
       localStorage.removeItem("studyai.email");
       set({ email: null, profiles: [], profile: null });
     },
 
     async refreshProfiles() {
       const profiles = await profilesApi.list();
-      set((s) => ({
-        profiles,
-        profile: s.profile && profiles.some((p) => p.id === s.profile?.id)
-          ? s.profile
-          : pickActive(profiles),
-      }));
+      const active = get().profile && profiles.some((p) => p.id === get().profile?.id)
+        ? get().profile
+        : pickActive(profiles);
+      setActiveProfileId(active?.id ?? null);
+      set({ profiles, profile: active });
     },
 
     switchProfile(id) {
       const profile = get().profiles.find((p) => p.id === id);
       if (!profile) return;
       localStorage.setItem("studyai.profile", id);
+      setActiveProfileId(id);
       set({ profile });
     },
 
@@ -112,6 +116,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const created = await profilesApi.create(name);
       const profiles = [...get().profiles, created];
       localStorage.setItem("studyai.profile", created.id);
+      setActiveProfileId(created.id);
       set({ profiles, profile: created });
       return created;
     },

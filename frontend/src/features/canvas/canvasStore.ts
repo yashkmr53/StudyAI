@@ -11,6 +11,8 @@ interface CanvasState {
   activePageId: string | null;
   generation: number;
   lockLost: boolean;
+  lastFinalizedDocumentId: string | null;
+  lastFinalizedRevisionId: string | null;
 
   ensureDevice: () => string;
   newSession: (profileId: string) => Promise<void>;
@@ -32,6 +34,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activePageId: null,
   generation: 1,
   lockLost: false,
+  lastFinalizedDocumentId: null,
+  lastFinalizedRevisionId: null,
 
   ensureDevice() {
     const existing = localStorage.getItem("studyai.device_id");
@@ -103,11 +107,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (result.is_finalized) {
       set({
         pages: pages.map((p) => (p.id === activePageId ? { ...p, is_finalized: true } : p)),
+        lastFinalizedDocumentId: result.document_id ?? null,
+        lastFinalizedRevisionId: result.revision_id ?? null,
       });
     }
   },
 
   reset() {
-    set({ sessionId: null, session: null, pages: [], activePageId: null, lockLost: false });
+    set({ sessionId: null, session: null, pages: [], activePageId: null, lockLost: false, lastFinalizedDocumentId: null, lastFinalizedRevisionId: null });
   },
 }));

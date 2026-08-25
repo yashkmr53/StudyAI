@@ -56,7 +56,7 @@ export const canvasApi = {
     });
   },
 
-  finalizePage(pageId: string, ctx: LockContext): Promise<{ page_id: string; is_finalized: boolean; already_finalized: boolean }> {
+  finalizePage(pageId: string, ctx: LockContext): Promise<{ page_id: string; is_finalized: boolean; already_finalized: boolean; document_id?: string | null; revision_id?: string | null; job_id?: string | null }> {
     return apiRequest(`/canvas/pages/${pageId}/finalize`, { method: "POST", body: ctx });
   },
 };

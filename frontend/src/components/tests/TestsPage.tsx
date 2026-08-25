@@ -49,6 +49,7 @@ export function TestsPage() {
       const created = await testsApi.create(
         subjectId,
         t("tests.defaultTitle", { subject: subjectName }),
+        5,
       );
       setTests((prev) => [...(prev ?? []), created]);
     } catch {
@@ -159,17 +160,29 @@ function TestRunner({ test, onExit }: { test: TestSummary; onExit: () => void })
   }, [test.id]);
 
   async function submit() {
-    try {
-      const result = await testsApi.submitAttempt(test.id, answers);
-      setScore(result.score);
-      setSubmitted(true);
-    } catch {
-      // Grade locally when attempts aren't supported yet.
-      const correct = (questions ?? []).filter(
-        (q) => q.answerIndex != null && answers[q.id] === q.answerIndex,
-      ).length;
-      setScore(questions?.length ? correct / questions.length : 0);
-      setSubmitted(true);
+    setSubmitted(true);
+    setError(null);
+    let correctCount = 0;
+    let totalAnswered = 0;
+    const masteryUpdates: { tag: string; value: number; status: string }[] = [];
+    for (const q of questions ?? []) {
+      const selected = answers[q.id];
+      if (selected == null) continue;
+      totalAnswered++;
+      try {
+        const result = await testsApi.submitAttempt(test.id, q.id, selected);
+        if (result.attempt.correct) correctCount++;
+        if (result.mastery) masteryUpdates.push(result.mastery);
+      } catch {
+        const isCorrect = q.answerIndex != null && selected === q.answerIndex;
+        if (isCorrect) correctCount++;
+      }
+    }
+    const score = totalAnswered ? correctCount / totalAnswered : 0;
+    setScore(score);
+    if (masteryUpdates.length > 0) {
+      const latest = masteryUpdates[masteryUpdates.length - 1];
+      setError(`${latest.tag}: ${latest.status} (${Math.round(latest.value * 100)}%)`);
     }
   }
 

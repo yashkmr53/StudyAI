@@ -33,7 +33,7 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
         </span>
       </span>
       <span className="note-row__end">
-        <TranscriptionChip status="transcribed" />
+        {note.source === "upload" && <TranscriptionChip status="pending" />}
         {services.enrichment && <EnrichmentStateChip noteId={note.id} />}
       </span>
     </Link>

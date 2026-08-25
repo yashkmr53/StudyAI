@@ -17,6 +17,7 @@ export interface PageStatus {
   ocr_status: string;
   needs_review: boolean;
   current_revision_id: string | null;
+  image_ref?: string | null;
 }
 
 export interface LinePayload {
@@ -50,6 +51,7 @@ export interface JobInfo {
 export interface DigitizedInfo {
   id: string;
   document: string;
+  revision_ids?: { revision_id: string; page_number: number }[];
   renderer_version: string;
   file_size: number | null;
   created_at: string;
@@ -67,7 +69,8 @@ export const documentsApi = {
     return fetch(url, { method: "PUT", headers: { "Content-Type": contentType }, body: data }).then(
       async (r) => {
         if (!r.ok) throw new Error(`Upload failed (${r.status})`);
-        return r.json();
+        if (r.status === 204) return undefined;
+        return r.json().catch(() => undefined);
       },
     );
   },
@@ -119,6 +122,12 @@ export const documentsApi = {
   getDownloadUrl(digitizedId: string) {
     return apiRequest<{ url: string; expires_in: number; file_size: number | null }>(
       `/digitized-documents/${digitizedId}/download`,
+    );
+  },
+
+  getPageDownloadUrl(pageId: string) {
+    return apiRequest<{ url: string; expires_in: number; file_size: number | null }>(
+      `/documents/pages/${pageId}/download`,
     );
   },
 };

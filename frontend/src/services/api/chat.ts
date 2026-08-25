@@ -82,27 +82,12 @@ export const chatApi = {
     sessionId: string,
     content: string,
   ): Promise<{ user: ChatMessageItem; assistant: ChatMessageItem }> {
-    return apiRequest<unknown>(`/chat/sessions/${sessionId}/messages`, {
+    return apiRequest<WireMessage>(`/chat/sessions/${sessionId}/messages`, {
       method: "POST",
-      body: { role: "user", content },
-    }).then((payload) => {
-      // The backend may reply with the full exchange or just the answer text.
-      let assistantContent = "";
-      let citations: CitationRef[] = [];
-      if (typeof payload === "string") {
-        assistantContent = payload;
-      } else if (payload && typeof payload === "object") {
-        const rec = payload as Record<string, unknown>;
-        const reply = (rec.assistant ?? rec.reply ?? rec.message) as
-          | WireMessage
-          | string
-          | undefined;
-        if (typeof reply === "string") assistantContent = reply;
-        else if (reply?.content) {
-          assistantContent = reply.content;
-          citations = normalizeCitations(reply.citations);
-        }
-      }
+      body: { content },
+    }).then((reply) => {
+      const assistantContent = reply.content ?? "";
+      const citations = normalizeCitations(reply.citations);
       const now = () => crypto.randomUUID();
       return {
         user: { id: `u-${now()}`, role: "user", content, citations: [] },

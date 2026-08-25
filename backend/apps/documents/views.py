@@ -287,6 +287,24 @@ class DigitizedDownloadView(APIView):
         return Response(payload)
 
 
+class PageDownloadView(APIView):
+    """GET /api/v1/documents/pages/{page_id}/download — signed URL for a page scan."""
+
+    def get(self, request, page_id):
+        from providers.registry import get_object_storage
+
+        page = DocumentPage.objects.select_related("document__profile").get(pk=page_id)
+        if page.document.profile.user_id != request.user.pk:
+            raise ResourceNotFound("Page not found.")
+        if not page.image_ref:
+            raise ResourceNotFound("Page has no image.")
+        storage = get_object_storage()
+        if not storage.exists(page.image_ref):
+            raise ResourceNotFound("Page image is missing from storage.")
+        url = storage.signed_download_url(page.image_ref, ttl_seconds=settings.SIGNED_URL_TTL_SECONDS)
+        return Response({"url": url, "expires_in": settings.SIGNED_URL_TTL_SECONDS, "file_size": None})
+
+
 class FinalizeUploadView(APIView):
     """Explicit §46 step: POST /api/v1/documents/pages/{page_id}/finalize-upload."""
 

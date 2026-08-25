@@ -197,8 +197,10 @@ export function WritingPage() {
           lock_generation: stateRef.current.generation,
         });
         applySession(s);
-      } catch {
-        /* transient */
+      } catch (err) {
+        if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "SESSION_LOCK_LOST") {
+          markLockLost();
+        }
       }
     }, HEARTBEAT_MS);
     const flush = window.setInterval(() => void flushOutbox(), FLUSH_MS);
@@ -206,7 +208,7 @@ export function WritingPage() {
       window.clearInterval(beat);
       window.clearInterval(flush);
     };
-  }, [sessionId, lockLost, applySession]);
+  }, [sessionId, lockLost, applySession, markLockLost]);
 
   useEffect(() => {
     const flushOnLeave = () => void flushOutbox();

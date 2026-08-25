@@ -70,8 +70,10 @@ export interface CanvasSessionInfo {
   lock_holder: string | null;
   lock_generation: number;
   lock_expires_at: string | null;
+  document?: string | null;
   pages: CanvasPageMeta[];
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface StrokePayload {

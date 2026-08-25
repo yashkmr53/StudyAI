@@ -58,10 +58,10 @@ export const testsApi = {
     return wire.map(normalizeTest).filter((t): t is TestSummary => t !== null);
   },
 
-  create(subjectId: string | null, title: string): Promise<TestSummary> {
+  create(subjectId: string | null, title: string, numQuestions = 5): Promise<TestSummary> {
     return apiRequest<WireTest>("/tests", {
       method: "POST",
-      body: { subject: subjectId, title },
+      body: { subject: subjectId, title, num_questions: numQuestions },
     }).then((wire) => {
       const t = normalizeTest(wire);
       if (!t) throw new Error(appI18n.t("errors.testCreateFailed"));
@@ -85,11 +85,15 @@ export const testsApi = {
 
   submitAttempt(
     testId: string,
-    answers: Record<string, number>,
-  ): Promise<{ score: number }> {
-    return apiRequest<{ score?: number }>(`/tests/${testId}/attempts`, {
-      method: "POST",
-      body: { answers },
-    }).then((r) => ({ score: r.score ?? 0 }));
+    questionId: string,
+    selectedIndex: number,
+  ): Promise<{ attempt: { correct: boolean }; mastery?: { tag: string; value: number; status: string } | null }> {
+    return apiRequest<{ attempt: { correct: boolean }; mastery?: { tag: string; value: number; status: string } | null }>(
+      `/tests/${testId}/attempts`,
+      {
+        method: "POST",
+        body: { question_id: questionId, selected_index: selectedIndex, confidence: 0.8 },
+      },
+    );
   },
 };
