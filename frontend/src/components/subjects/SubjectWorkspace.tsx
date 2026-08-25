@@ -9,7 +9,6 @@ import { FolderCard } from "../folders/FolderCard";
 import { NewFolderDialog } from "../folders/NewFolderDialog";
 import { EmptyState, ErrorState } from "../ui/primitives";
 import {
-  ChatIcon,
   ClipboardIcon,
   FolderIcon,
   PenIcon,
@@ -146,7 +145,7 @@ export function SubjectWorkspace() {
         </div>
 
         {/* AI Classroom capability cards — each gated by its own service */}
-        {services.tests || services.qa || services.chat ? (
+        {services.tests || services.qa ? (
           <section className="ai-banner" aria-label={t("modules.classroomBanner")}>
             <div className="ai-banner__label">{t("modules.classroomBanner")}</div>
             <div className="card-grid">
@@ -166,15 +165,6 @@ export function SubjectWorkspace() {
                   icon={<ClipboardIcon size={17} />}
                   iconColor={{ bg: "#fdf3d8", fg: "#9a6700" }}
                   to={`/subjects/${subjectId}/tests`}
-                />
-              </ServiceGate>
-              <ServiceGate service="chat">
-                <ServiceCard
-                  title={t("modules.cards.chat.title")}
-                  description={t("modules.cards.chat.description")}
-                  icon={<ChatIcon size={17} />}
-                  iconColor={{ bg: "#eef0fc", fg: "#4f5bd5" }}
-                  to={`/subjects/${subjectId}/chat`}
                 />
               </ServiceGate>
             </div>

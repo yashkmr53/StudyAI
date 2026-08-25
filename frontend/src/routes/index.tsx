@@ -82,9 +82,12 @@ function RequireOnboarding({ children }: { children: React.ReactNode }) {
  * instead of rendering a dead feature screen.
  */
 function ServiceRoute({ service, children }: { service: ServiceId; children: React.ReactNode }) {
-  const { subjectId } = useParams<{ subjectId: string }>();
+  const { subjectId } = useParams<{ subjectId?: string }>();
   const { services } = useSubjectModule(subjectId);
-  if (!services[service]) return <Navigate to={`/subjects/${subjectId ?? ""}`} replace />;
+  if (!services[service]) {
+    if (subjectId) return <Navigate to={`/subjects/${subjectId}`} replace />;
+    return <Navigate to="/subjects" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -155,13 +158,21 @@ export function AppRoutes() {
             </ServiceRoute>
           }
         />
+        <Route
+          path="ai-classroom/chat"
+          element={
+            <ServiceRoute service="chat">
+              <ChatPage />
+            </ServiceRoute>
+          }
+        />
       </Route>
 
       {/* legacy paths from earlier phases */}
       <Route path="/notespace" element={<Navigate to="/subjects" replace />} />
       <Route path="/canvas" element={<Navigate to="/subjects" replace />} />
       <Route path="/tests" element={<Navigate to="/subjects" replace />} />
-      <Route path="/chat" element={<Navigate to="/subjects" replace />} />
+      <Route path="/chat" element={<Navigate to="/ai-classroom/chat" replace />} />
       <Route path="/revision" element={<Navigate to="/subjects" replace />} />
       <Route path="/ai-classroom" element={<Navigate to="/subjects" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
