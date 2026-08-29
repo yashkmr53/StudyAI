@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.chat",
     "apps.revision",
     "apps.references",
+    "apps.seed",
     "apps.jobs",
     "apps.evaluation",
     "apps.audit",
