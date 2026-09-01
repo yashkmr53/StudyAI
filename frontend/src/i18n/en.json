@@ -391,9 +391,11 @@
   "chat": {
     "title": "Ask StudyAI",
     "subtitle": "Chat with your study material for {{subject}}.",
+    "subtitleModule": "Chat with your study material across all subjects.",
     "chatsAria": "Chats",
     "newChat": "New chat",
     "defaultThreadTitle": "{{subject}} chat",
+    "defaultThreadTitleModule": "AI Classroom chat",
     "threadsEmpty": "No chats yet.",
     "noThreadTitle": "No chat selected.",
     "noThreadDescription": "Start a new chat to ask questions about your material.",

@@ -15,7 +15,7 @@ import type { AgentMessage } from "../../types/agent";
 
 /** Ask StudyAI (§25) — module-scoped chat with optional agent mode (Phase 2). */
 export function ChatPage() {
-  const { subjectId } = useParams<{ subjectId: string }>();
+  const { subjectId } = useParams<{ subjectId?: string }>();
   const subjects = useWorkspaceStore((s) => s.subjects);
   const subjectName = subjects.find((s) => s.id === subjectId)?.name ?? "";
   const { moduleId, services } = useSubjectModule(subjectId);
@@ -51,7 +51,7 @@ export function ChatPage() {
       .listSessions()
       .then((all) => {
         if (cancelled) return;
-        const mine = all.filter((t) => !subjectId || t.subjectId === null || t.subjectId === subjectId);
+        const mine = all.filter((t) => !subjectId ? t.subjectId === null : t.subjectId === null || t.subjectId === subjectId);
         setThreads(mine);
         setActiveThreadId(mine[0]?.id ?? null);
       })
@@ -83,9 +83,9 @@ export function ChatPage() {
     try {
       const thread = await chatApi.createSession(
         subjectId ?? "",
-        subjectName
+        subjectId
           ? t("chat.defaultThreadTitle", { subject: subjectName })
-          : t("chat.newChat"),
+          : t("chat.defaultThreadTitleModule"),
       );
       setThreads((prev) => [thread, ...(prev ?? [])]);
       setActiveThreadId(thread.id);
@@ -135,18 +135,25 @@ export function ChatPage() {
     <ModuleProvider value={{ moduleId, services }}>
       <div className="content__inner content__inner--wide" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <Breadcrumbs
-          crumbs={[
-            { label: t("common.breadcrumb.subjects"), to: "/subjects" },
-            ...(subjectName ? [{ label: subjectName, to: `/subjects/${subjectId}` }] : []),
-            { label: t("chat.title") },
-          ]}
+          crumbs={
+            subjectId
+              ? [
+                  { label: t("common.breadcrumb.subjects"), to: "/subjects" },
+                  { label: subjectName, to: `/subjects/${subjectId}` },
+                  { label: t("chat.title") },
+                ]
+              : [
+                  { label: t("modules.classroomBanner", { defaultValue: "AI Classroom" }), to: "/subjects" },
+                  { label: t("chat.title") },
+                ]
+          }
         />
 
         <div className="page-heading page-heading__row" style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <h1>{t("chat.title")}</h1>
             <p className="subtitle" style={{ marginTop: 5 }}>
-              {t("chat.subtitle", { subject: subjectName })}
+              {subjectId ? t("chat.subtitle", { subject: subjectName }) : t("chat.subtitleModule")}
             </p>
           </div>
           <label className="flex items-center gap-2 cursor-pointer" style={{ marginTop: 4 }}>
@@ -179,7 +186,10 @@ export function ChatPage() {
                   className={thread.id === activeThreadId ? "chat-thread-item active" : "chat-thread-item"}
                   onClick={() => setActiveThreadId(thread.id)}
                 >
-                  <span className="chat-thread-item__title">{thread.title}</span>
+                  <span className="chat-thread-item__title">
+                    {thread.title}
+                    {!thread.subjectId ? ` ${t("modules.classroomBanner", { defaultValue: "(AI Classroom)" })}` : ""}
+                  </span>
                 </button>
               ))}
               {threads && threads.length === 0 && (
