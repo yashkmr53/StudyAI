@@ -17,8 +17,8 @@ class EvidenceResult(ToolOutput):
     page_end: int
     snippet: str
     scores: dict[str, float | None]
-    document_title: str | None = None
-    subject_name: str | None = None
+    document_title: str = ""
+    subject_name: str = ""
 
 
 class SearchNotesInput(ToolInput):
@@ -73,8 +73,8 @@ class SearchNotesTool(BaseTool):
                     "keyword": e.keyword_rank,
                     "rrf": e.rrf_score,
                 },
-                document_title=e.document_title,
-                subject_name=e.subject_name,
+                document_title=getattr(e, "document_title", None) or "",
+                subject_name=getattr(e, "subject_name", None) or "",
             )
             for e in evidence
         ]
@@ -137,8 +137,8 @@ class SearchReferenceBooksTool(BaseTool):
                     "keyword": e.keyword_rank,
                     "rrf": e.rrf_score,
                 },
-                document_title=e.document_title,
-                subject_name=e.subject_name,
+                document_title=getattr(e, "document_title", None) or "",
+                subject_name=getattr(e, "subject_name", None) or "",
             )
             for e in ref_evidence
         ]

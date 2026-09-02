@@ -255,6 +255,8 @@ class TestToolRegistry:
                 input_instance = tool.metadata.input_schema(document_id=str(uuid4()))
             elif tool.metadata.name == "get_subject_context":
                 input_instance = tool.metadata.input_schema(subject_id=str(uuid4()))
+            elif tool.metadata.name == "search_web":
+                input_instance = tool.metadata.input_schema(query="test", max_results=5)
             else:
                 input_instance = tool.metadata.input_schema()
             assert input_instance is not None
