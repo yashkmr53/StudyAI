@@ -124,20 +124,26 @@ class BaseTool:
         for field_name, field_info in self.metadata.output_schema.model_fields.items():
             if field_name in output_data:
                 continue
-            default = field_info.default
-            if default is None or default is PydanticUndefined:
-                if field_info.annotation in (list, set, tuple):
-                    output_data[field_name] = []
-                elif field_info.annotation is str:
-                    output_data[field_name] = ""
-                elif field_info.annotation is int:
-                    output_data[field_name] = 0
-                elif field_info.annotation is bool:
-                    output_data[field_name] = False
-                elif field_info.annotation is dict:
-                    output_data[field_name] = {}
+            if field_info.default is not None and field_info.default is not PydanticUndefined:
+                output_data[field_name] = field_info.default
                 continue
-            output_data[field_name] = default
+            annotation = field_info.annotation
+            if annotation is None:
+                continue
+            origin = getattr(annotation, "__origin__", None)
+            if origin in (list, set, tuple, dict) or annotation in (list, set, tuple, dict):
+                if origin is dict or annotation is dict:
+                    output_data[field_name] = {}
+                else:
+                    output_data[field_name] = []
+            elif annotation is str:
+                output_data[field_name] = ""
+            elif annotation is int:
+                output_data[field_name] = 0
+            elif annotation is bool:
+                output_data[field_name] = False
+            elif annotation is float:
+                output_data[field_name] = 0.0
         return self.metadata.output_schema(**output_data)
 
 

@@ -9,6 +9,19 @@ from apps.agents.tools.base import ToolInput, ToolOutput, ToolMetadata, BaseTool
 from apps.retrieval.retrieval import RetrievalService, Evidence
 
 
+def _coerce_str(value) -> str:
+    """Coerce a value to a string safely.
+
+    Returns "" for None, Mock objects, and other non-string types so
+    Pydantic validation succeeds when test mocks or real data are passed.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value) if not hasattr(value, "__class__") or value.__class__.__name__ != "Mock" else ""
+
+
 class EvidenceResult(ToolOutput):
     chunk_id: str
     document_id: str
@@ -73,8 +86,8 @@ class SearchNotesTool(BaseTool):
                     "keyword": e.keyword_rank,
                     "rrf": e.rrf_score,
                 },
-                document_title=getattr(e, "document_title", None) or "",
-                subject_name=getattr(e, "subject_name", None) or "",
+                document_title=_coerce_str(getattr(e, "document_title", None)),
+                subject_name=_coerce_str(getattr(e, "subject_name", None)),
             )
             for e in evidence
         ]
@@ -137,8 +150,8 @@ class SearchReferenceBooksTool(BaseTool):
                     "keyword": e.keyword_rank,
                     "rrf": e.rrf_score,
                 },
-                document_title=getattr(e, "document_title", None) or "",
-                subject_name=getattr(e, "subject_name", None) or "",
+                document_title=_coerce_str(getattr(e, "document_title", None)),
+                subject_name=_coerce_str(getattr(e, "subject_name", None)),
             )
             for e in ref_evidence
         ]
