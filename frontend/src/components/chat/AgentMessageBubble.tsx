@@ -14,19 +14,44 @@ export function AgentMessageBubble({ message }: AgentMessageBubbleProps) {
     <div className="msg msg--assistant agent-message">
       <div className="msg__bubble">{message.content}</div>
 
-      {/* Citations */}
-      {citations.length > 0 && (
-        <div className="citations-row mt-2 flex flex-wrap gap-1">
-          {citations.map((citation, i) => (
-            <span
-              key={i}
-              className="citation-chip inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200"
-            >
-              Page {citation.page}
-            </span>
-          ))}
-        </div>
-      )}
+       {/* Citations */}
+       {citations.length > 0 && (
+         <div className="citations-row mt-2 flex flex-wrap gap-1">
+           {citations
+             .filter((c) => c.source_type !== "verification")
+             .map((citation, i) => {
+               const num = i + 1;
+               const title = citation.document_title || citation.subject_name || "Your notes";
+               const pages = citation.page_start
+                 ? citation.page_end && citation.page_end !== citation.page_start
+                   ? `pp. ${citation.page_start}-${citation.page_end}`
+                   : `p. ${citation.page_start}`
+                 : "";
+               const label = `${num} ${title}${pages ? " · " + pages : ""}`;
+               if (citation.url) {
+                 return (
+                   <a
+                     key={citation.source_id ?? num}
+                     href={citation.url}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="citation-chip inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200"
+                   >
+                     {label}
+                   </a>
+                 );
+               }
+               return (
+                 <span
+                   key={citation.source_id ?? num}
+                   className="citation-chip inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200"
+                 >
+                   {label}
+                 </span>
+               );
+             })}
+         </div>
+       )}
 
       {/* Verification Status */}
       {verificationStatus && (

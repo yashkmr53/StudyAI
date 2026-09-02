@@ -83,9 +83,34 @@ export interface SourcePageRef {
   pageNumber: number;
 }
 
+/* ---- Chat ---- */
+
 export interface CitationRef {
   page: number;
   bbox?: number[] | null;
+}
+
+export interface ChatCitation {
+  /** Stable internal source ID assigned by the backend (e.g. "src-001"). */
+  source_id?: string;
+  /** "database" | "web" */
+  source_type: string;
+  chunk_id?: string;
+  document_id?: string;
+  /** Human-readable document title, e.g. "DSA Notes — Dynamic Programming" */
+  document_title?: string | null;
+  /** Subject / topic name from the user's curriculum */
+  subject_name?: string | null;
+  page_start?: number;
+  page_end?: number;
+  snippet?: string;
+  rrf_score?: number;
+  /** Web-specific fields */
+  url?: string | null;
+  /** Web page title (for web sources) */
+  title?: string | null;
+  /** Domain of the web source, e.g. "docs.python.org" */
+  domain?: string | null;
 }
 
 /* ---- Enriched view ---- */
@@ -127,7 +152,7 @@ export interface ChatMessageItem {
   id: string;
   role: "user" | "assistant";
   content: string;
-  citations: CitationRef[];
+  citations: ChatCitation[];
   pending?: boolean;
 }
 

@@ -80,8 +80,14 @@ DEFAULT_PROMPTS = [
         "output_schema_version": "v1",
         "template": (
             "Draft a structured enrichment grounded ONLY in the provided evidence.\n"
-            "Evidence JSON follows. Produce blocks with block_type/title/content,\n"
-            "generation_method and source_chunk_ids referencing the evidence ids."
+            "CRITICAL: You must respond with ONLY valid JSON. No other text, no YAML, no Markdown.\n"
+            "Output a JSON object with a 'blocks' array. Each block must have:\n"
+            "- block_type (string): one of overview, key_concept, explanation, example, gap_fill\n"
+            "- title (string): concise heading\n"
+            "- content (string): 1-3 sentences grounded in evidence\n"
+            "- generation_method (string): llm, rule_based, user_edited, or transcribed\n"
+            "- source_chunk_ids (array of strings): ids from the evidence\n"
+            "Evidence JSON follows."
         ),
         "configuration": {"temperature": 0},
     },
@@ -91,7 +97,9 @@ DEFAULT_PROMPTS = [
         "output_schema_version": "v1",
         "template": (
             "Compare user-note coverage against reference coverage. Report topics\n"
-            "present in references but missing from user notes as gaps."
+            "present in references but missing from user notes as gaps.\n"
+            "CRITICAL: Respond with ONLY valid JSON. No other text.\n"
+            'Output: {"gaps": [{"topic": "...", "reference_chunk_id": "..."}]}'
         ),
         "configuration": {"temperature": 0},
     },
@@ -101,7 +109,11 @@ DEFAULT_PROMPTS = [
         "output_schema_version": "v1",
         "template": (
             "Fill each gap using ONLY the cited reference chunk. Mark blocks\n"
-            'with block_type="gap_fill" and cite the reference chunk id.'
+            'with block_type="gap_fill" and cite the reference chunk id.\n'
+            "CRITICAL: Respond with ONLY valid JSON. No other text.\n"
+            "Output: {\"blocks\": [{\"block_type\": \"gap_fill\", \"title\": \"...\", "
+            "\"content\": \"...\", \"generation_method\": \"llm\", "
+            "\"source_chunk_ids\": [\"...\"]}]}"
         ),
         "configuration": {"temperature": 0},
     },
@@ -111,11 +123,11 @@ QUALIFIED = {p["prompt_name"]: f"{p['prompt_name']}:{p['version']}" for p in DEF
 
 
 def seed_prompt_versions() -> int:
-    """Idempotent registry seeding; returns number of rows created."""
+    """Idempotent registry seeding; returns number of rows created/updated."""
     created = 0
     model = getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
     for spec in DEFAULT_PROMPTS:
-        _, was_created = PromptVersion.objects.get_or_create(
+        obj, was_created = PromptVersion.objects.update_or_create(
             prompt_name=spec["prompt_name"],
             version=spec["version"],
             defaults={

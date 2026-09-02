@@ -9,6 +9,7 @@ import time
 import logging
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_core import PydanticUndefined
 
 from apps.profiles.models import Profile
 from shared.authorization.services import ProfileAuthorizationService
@@ -119,10 +120,30 @@ class BaseTool:
     def _error_output(self, error: str, latency_ms: int) -> ToolOutput:
         # Create a minimal valid output with required fields
         output_data = {"success": False, "error": error, "latency_ms": latency_ms}
-        # Add default values for required fields
+        # Add default values for required fields (skip PydanticUndefined defaults)
         for field_name, field_info in self.metadata.output_schema.model_fields.items():
-            if field_name not in output_data and field_info.default is not None:
+            if field_name in output_data:
+                continue
+            if field_info.default is not None and field_info.default is not PydanticUndefined:
                 output_data[field_name] = field_info.default
+                continue
+            annotation = field_info.annotation
+            if annotation is None:
+                continue
+            origin = getattr(annotation, "__origin__", None)
+            if origin in (list, set, tuple, dict) or annotation in (list, set, tuple, dict):
+                if origin is dict or annotation is dict:
+                    output_data[field_name] = {}
+                else:
+                    output_data[field_name] = []
+            elif annotation is str:
+                output_data[field_name] = ""
+            elif annotation is int:
+                output_data[field_name] = 0
+            elif annotation is bool:
+                output_data[field_name] = False
+            elif annotation is float:
+                output_data[field_name] = 0.0
         return self.metadata.output_schema(**output_data)
 
 

@@ -3,7 +3,7 @@
  * `/chat/sessions/{id}/messages`. Wire shapes parsed defensively.
  */
 import { apiRequest } from "./client";
-import type { ChatMessageItem, ChatThreadSummary, CitationRef } from "../../types/domain";
+import type { ChatCitation, ChatThreadSummary, ChatMessageItem } from "../../types/domain";
 import { listAll } from "./pagination";
 
 interface WireSession {
@@ -20,21 +20,30 @@ interface WireMessage {
   citations?: unknown;
 }
 
-function normalizeCitations(raw: unknown): CitationRef[] {
+function normalizeCitations(raw: unknown): ChatCitation[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((r) => {
-      if (typeof r === "number") return { page: r };
-      if (r && typeof r === "object" && typeof (r as WireSourceRef).page_number === "number") {
-        return { page: (r as WireSourceRef).page_number as number };
+    .map((r): ChatCitation | null => {
+      if (r && typeof r === "object") {
+        const obj = r as Record<string, unknown>;
+        return {
+          source_id: typeof obj.source_id === "string" ? obj.source_id : undefined,
+          source_type: typeof obj.source_type === "string" ? obj.source_type : "database",
+          chunk_id: typeof obj.chunk_id === "string" ? obj.chunk_id : undefined,
+          document_id: typeof obj.document_id === "string" ? obj.document_id : undefined,
+          document_title: typeof obj.document_title === "string" ? obj.document_title : obj.document_title ?? null,
+          subject_name: typeof obj.subject_name === "string" ? obj.subject_name : obj.subject_name ?? null,
+          page_start: typeof obj.page_start === "number" ? obj.page_start : undefined,
+          page_end: typeof obj.page_end === "number" ? obj.page_end : undefined,
+          snippet: typeof obj.snippet === "string" ? obj.snippet : undefined,
+          rrf_score: typeof obj.rrf_score === "number" ? obj.rrf_score : undefined,
+          url: typeof obj.url === "string" ? obj.url : obj.url ?? null,
+        } as ChatCitation;
       }
+      if (typeof r === "number") return { page_start: r } as ChatCitation;
       return null;
     })
-    .filter((c): c is CitationRef => c !== null);
-}
-
-interface WireSourceRef {
-  page_number?: number;
+    .filter((c): c is ChatCitation => c !== null);
 }
 
 export const chatApi = {
@@ -56,7 +65,7 @@ export const chatApi = {
       body: { subject: subjectId || null, title },
     }).then((s) => ({
       id: s.id as string,
-      title: s.title || title,
+      title: s.title || title || "New chat",
       subjectId: s.subject ?? null,
       createdAt: s.created_at,
     }));

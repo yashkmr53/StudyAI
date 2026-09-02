@@ -169,12 +169,18 @@ def format_response_node(state: AgentState, config=None) -> dict:
                 if "snippet" in r:
                     evidence_parts.append(r["snippet"][:200])
                 if "chunk_id" in r:
+                    src_id = f"src-{len(citations) + 1:03d}"
                     citations.append({
+                        "source_id": src_id,
+                        "source_type": "database",
                         "chunk_id": r.get("chunk_id"),
-                        "source_type": r.get("source_type", "note"),
+                        "document_id": r.get("document_id"),
+                        "document_title": r.get("document_title"),
+                        "subject_name": r.get("subject_name"),
                         "page_start": r.get("page_start"),
                         "page_end": r.get("page_end"),
                         "snippet": r.get("snippet", "")[:200],
+                        "url": None,
                     })
 
     if evidence_parts:

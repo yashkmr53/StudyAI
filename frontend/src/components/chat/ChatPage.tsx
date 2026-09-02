@@ -28,6 +28,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [agentMode, setAgentMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const sendingRef = useRef(false);
 
   const {
     sendMessage,
@@ -64,7 +65,10 @@ export function ChatPage() {
   useEffect(() => {
     if (!activeThreadId) return;
     let cancelled = false;
-    setMessages([]);
+    // Don't clear messages if a send is in progress (avoids race condition)
+    if (!sendingRef.current) {
+      setMessages([]);
+    }
     chatApi
       .listMessages(activeThreadId)
       .then((m) => !cancelled && setMessages(m))
@@ -83,9 +87,7 @@ export function ChatPage() {
     try {
       const thread = await chatApi.createSession(
         subjectId ?? "",
-        subjectId
-          ? t("chat.defaultThreadTitle", { subject: subjectName })
-          : t("chat.defaultThreadTitleModule"),
+        "",
       );
       setThreads((prev) => [thread, ...(prev ?? [])]);
       setActiveThreadId(thread.id);
@@ -97,8 +99,9 @@ export function ChatPage() {
 
   async function send() {
     const content = draft.trim();
-    if (!content || !activeThreadId || sending) return;
+    if (!content || !activeThreadId || sending || sendingRef.current) return;
     setDraft("");
+    sendingRef.current = true;
 
     const pendingId = `pending-${crypto.randomUUID()}`;
     const userMsg: ChatMessageItem = { id: `u-${pendingId}`, role: "user", content, citations: [] };
@@ -109,16 +112,17 @@ export function ChatPage() {
     try {
       if (agentMode) {
         await sendMessage(content);
+        setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
       } else {
         const reply = await chatApi.sendMessage(activeThreadId, content);
         setMessages((prev) => [
-          ...prev.filter((m) => m.id !== pendingId),
+          ...prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id),
           reply.user,
           reply.assistant,
         ]);
       }
     } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+      setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
       setMessages((prev) => [
         ...prev,
         {
@@ -128,6 +132,8 @@ export function ChatPage() {
           citations: [],
         },
       ]);
+    } finally {
+      sendingRef.current = false;
     }
   }
 
@@ -187,8 +193,7 @@ export function ChatPage() {
                   onClick={() => setActiveThreadId(thread.id)}
                 >
                   <span className="chat-thread-item__title">
-                    {thread.title}
-                    {!thread.subjectId ? ` ${t("modules.classroomBanner", { defaultValue: "(AI Classroom)" })}` : ""}
+                    {thread.title || t("modules.classroomBanner", { defaultValue: "AI Classroom" })}
                   </span>
                 </button>
               ))}
@@ -252,11 +257,44 @@ export function ChatPage() {
                       </div>
                       {message.citations.length > 0 && (
                         <div className="citations-row">
-                          {message.citations.map((citation, i) => (
-                            <span key={i} className="citation-chip" role="presentation">
-                              Page {citation.page}
-                            </span>
-                          ))}
+                          <span className="citations-label">Sources</span>
+                          {message.citations
+                            .filter((c) => c.source_type !== "verification")
+                            .map((citation, i) => {
+                              const num = i + 1;
+                              let label: string;
+                              if (citation.source_type === "web") {
+                                // Web citation: show title + domain
+                                const title = citation.title || citation.url || "Web source";
+                                const domain = citation.domain || "";
+                                label = domain ? `${num} ${title} — ${domain}` : `${num} ${title}`;
+                                 return (
+                                  <a
+                                    key={citation.source_id ?? num}
+                                    href={citation.url ?? undefined}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="citation-chip citation-chip--web"
+                                    role="presentation"
+                                  >
+                                    {label}
+                                  </a>
+                                );
+                              }
+                              // Database citation: show document title + pages
+                              const title = citation.document_title || citation.subject_name || "Your notes";
+                              const pages = citation.page_start
+                                ? citation.page_end && citation.page_end !== citation.page_start
+                                  ? `pp. ${citation.page_start}-${citation.page_end}`
+                                  : `p. ${citation.page_start}`
+                                : "";
+                              label = `${num} ${title}${pages ? " · " + pages : ""}`;
+                              return (
+                                <span key={citation.source_id ?? num} className="citation-chip" role="presentation">
+                                  {label}
+                                </span>
+                              );
+                            })}
                         </div>
                       )}
                     </div>

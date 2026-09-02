@@ -194,6 +194,10 @@ RETRIEVAL_CANDIDATES = 50               # per-channel depth before fusion
 # LLM Provider Chain (Phase 11)
 LLM_PROVIDER_CHAIN = "ollama,mock"     # primary, fallback — comma-separated string
 
+# Web Search Provider (Phase 13: grounded RAG + web retrieval)
+WEB_SEARCH_PROVIDER = "duckduckgo"     # duckduckgo (real) | mock (tests)
+WEB_SEARCH_MAX_RESULTS = 5
+
 # Jobs runtime (architecture §19–20)
 JOBS_MAX_ATTEMPTS = 3
 JOBS_RETRY_BASE_SECONDS = 5

@@ -27,6 +27,8 @@ class Evidence:
     dense_rank: float | None
     keyword_rank: float | None
     rrf_score: float
+    document_title: str | None = None
+    subject_name: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -36,6 +38,8 @@ class Evidence:
             "page_start": self.page_start,
             "page_end": self.page_end,
             "snippet": self.content_snippet,
+            "document_title": self.document_title,
+            "subject_name": self.subject_name,
             "scores": {
                 "dense": self.dense_rank,
                 "keyword": self.keyword_rank,
@@ -134,7 +138,7 @@ class RetrievalService:
         if not ordered_ids:
             return []
 
-        rows = NoteChunk.objects.filter(pk__in=ordered_ids).select_related("document", "reference_book")
+        rows = NoteChunk.objects.filter(pk__in=ordered_ids).select_related("document", "reference_book", "subject")
         by_id = {str(r.pk): r for r in rows}
 
         evidence: list[Evidence] = []
@@ -145,6 +149,11 @@ class RetrievalService:
             # READY-gate reference chunks defensively at read time too (§15)
             if r.source_type == "reference" and getattr(r.reference_book, "status", None) != "ready":
                 continue
+            doc_title = None
+            if r.reference_book_id and hasattr(r, "reference_book") and r.reference_book:
+                doc_title = getattr(r.reference_book, "title", None)
+            if not doc_title and r.subject:
+                doc_title = f"{r.subject.name} Notes"
             evidence.append(
                 Evidence(
                     chunk_id=cid,
@@ -156,6 +165,8 @@ class RetrievalService:
                     dense_rank=dense_ids.get(cid),
                     keyword_rank=keyword_ids.get(cid),
                     rrf_score=fused[cid],
+                    document_title=doc_title,
+                    subject_name=r.subject.name if r.subject else None,
                 )
             )
         return evidence

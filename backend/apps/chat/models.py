@@ -35,6 +35,8 @@ class ChatMessage(models.Model):
     citations = models.JSONField(default=list)  # [{source_type, chunk_id, page_start/end, snippet, verification_status, score}]
     model = models.CharField(max_length=128, blank=True)
     prompt_version = models.CharField(max_length=64, blank=True)
+    verification_status = models.CharField(max_length=24, blank=True, default="not_verified")
+    verification_score = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

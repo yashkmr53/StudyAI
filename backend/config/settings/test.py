@@ -30,3 +30,11 @@ CACHES = {
 }
 
 RATE_LIMITING_ENABLED = False  # enabled per-test via override_settings
+
+# Use mock providers for deterministic tests
+LLM_PROVIDER_CHAIN = "mock,mock"
+WEB_SEARCH_PROVIDER = "mock"
+OCR_PROVIDER_CHAIN = "mock,mock"
+EMAIL_BACKEND = "console"
+# Embeddings: keep sentence_transformers because tests assert on
+# embedding_model="sentence_transformers" (see test_retrieval.py)

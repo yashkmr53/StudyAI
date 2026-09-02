@@ -6,7 +6,7 @@ import time
 from ai.langgraph.state.enrichment_state import EnrichmentState
 from ai.tracing.config import log_llm_call
 from ai.tracing.decorators import traced_node
-from apps.ai_classroom.prompts import active_prompt, validate_stage_output
+from apps.ai_classroom.prompts import active_prompt, validate_stage_output, SCHEMAS
 from apps.retrieval.models import NoteChunk
 from apps.documents.models import Document
 from providers.registry import get_llm_provider
@@ -68,6 +68,7 @@ def draft_node(state: EnrichmentState, config=None) -> dict:
     started = time.monotonic()
     result = llm.generate_structured(
         prompt=prompt,
+        schema=SCHEMAS.get("enrichment_draft"),
         request_id=f"enrich:{state.get('job_id')}:draft",
     )
     latency_ms = int((time.monotonic() - started) * 1000)
@@ -103,6 +104,7 @@ def gap_detection_node(state: EnrichmentState, config=None) -> dict:
     started = time.monotonic()
     result = llm.generate_structured(
         prompt=prompt,
+        schema=SCHEMAS.get("gap_detection"),
         request_id=f"enrich:{state.get('job_id')}:gaps",
     )
     latency_ms = int((time.monotonic() - started) * 1000)
@@ -140,6 +142,7 @@ def gap_fill_node(state: EnrichmentState, config=None) -> dict:
     started = time.monotonic()
     result = llm.generate_structured(
         prompt=prompt,
+        schema=SCHEMAS.get("gap_filling"),
         request_id=f"enrich:{state.get('job_id')}:fill",
     )
     latency_ms = int((time.monotonic() - started) * 1000)
