@@ -3,6 +3,7 @@
 Provider selection is driven by environment variables:
 - OCR_PROVIDER: "mock", "tesseract", "paddleocr" (default: "mock")
 - LLM_PROVIDER: "mock", "ollama", "ollama-chat" (default: "mock")
+- WEB_SEARCH_PROVIDER: "duckduckgo", "mock" (default: "duckduckgo")
 - EMBEDDING_PROVIDER: "hashing", "sentence_transformers" (default: "hashing")
 - STORAGE_BACKEND: "local", "minio", "s3" (default: "local")
 - EMAIL_BACKEND: "mailpit", "smtp", "console" (default: "mailpit" for dev, "console" for tests)
@@ -20,6 +21,7 @@ from providers.base import (
     ObjectStorageProvider,
     EmailProvider,
 )
+from providers.web.base import WebSearchProvider
 
 # OCR
 from providers.ocr.chain import OCRChainProvider
@@ -29,6 +31,9 @@ from providers.ocr.mock import MockOCRProvider
 from providers.llm.chain import LLMChainProvider
 from providers.llm.mock import MockLLMProvider
 from providers.llm.failing import FailingLLMProvider
+
+# Web search
+from providers.web.mock import MockWebSearchProvider
 
 # Embeddings
 from providers.embeddings.hashing import HashingEmbeddingProvider
@@ -152,13 +157,38 @@ def _build_llm(name: str):
 
 def get_llm_provider() -> LLMChainProvider:
     """Get LLM provider chain (primary + fallback).
-    
+
     LLM_PROVIDER_CHAIN can be a comma-separated list: "ollama,mock"
     Defaults to ["mock", "mock"] for backward compatibility.
     """
     chain_str = _get_env("LLM_PROVIDER_CHAIN", "mock,mock")
     names = [n.strip() for n in chain_str.split(",") if n.strip()]
     return LLMChainProvider([_build_llm(n) for n in names])
+
+
+# ============================================================================
+# Web Search
+# ============================================================================
+
+def _build_web_search(name: str):
+    """Build single web search provider by name."""
+    if name == "mock":
+        return MockWebSearchProvider()
+    if name == "duckduckgo":
+        from providers.web.duckduckgo import DuckDuckGoWebSearchProvider
+        return DuckDuckGoWebSearchProvider()
+    raise ValueError(f"Unknown web search provider: {name}")
+
+
+def get_web_search_provider() -> WebSearchProvider:
+    """Get web search provider.
+
+    WEB_SEARCH_PROVIDER env var selects the provider.
+    Defaults to "duckduckgo" (real web search, no API key).
+    Use "mock" for deterministic tests.
+    """
+    name = _get_env("WEB_SEARCH_PROVIDER", "duckduckgo")
+    return _build_web_search(name)
 
 
 # ============================================================================

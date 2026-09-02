@@ -35,35 +35,78 @@ class ChatService:
         from apps.ai_classroom.budget import assert_within_budget
 
         assert_within_budget(session.profile_id)
+
+        # Load conversation history BEFORE creating the user message
+        # so the current message is not duplicated in the prompt.
+        previous_messages = list(
+            ChatMessage.objects.filter(session=session)
+            .order_by("-created_at")[:20]
+            .values("role", "content")
+        )
+        previous_messages = list(reversed(previous_messages))
+
+        # Create user message
         ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
+
+        # Generate title from first message if this is a new thread
+        if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
+            session.title = ChatService._generate_title(content)
+            session.save(update_fields=["title"])
 
         # Agent mode: use StudyAIAgent for multi-step orchestration
         if use_agent and getattr(settings, "AGENT_ENABLED", True):
             return ChatService._ask_agent(session, content)
 
         # Classic RAG mode (original implementation)
-        return ChatService._ask_classic(session, content)
+        return ChatService._ask_classic(session, content, previous_messages=previous_messages)
 
     @staticmethod
-    def _ask_classic(session: ChatSession, content: str) -> ChatMessage:
+    def _generate_title(content: str) -> str:
+        """Generate a thread title from the first user message."""
+        # Use the first 50 chars of the message, truncated at word boundary
+        content = content.strip()
+        if len(content) <= 50:
+            return content
+        # Truncate at word boundary
+        truncated = content[:50]
+        last_space = truncated.rfind(" ")
+        if last_space > 20:
+            return truncated[:last_space]
+        return truncated
+
+    @staticmethod
+    def _ask_classic(session: ChatSession, content: str, previous_messages: list[dict] | None = None) -> ChatMessage:
         """LangGraph-based RAG chatbot implementation."""
         from ai.langgraph.graphs.chat_graph import invoke_chat_graph
         from ai.langgraph.state.chat_state import ChatState
+
+        if previous_messages is None:
+            previous_messages = list(
+                ChatMessage.objects.filter(session=session)
+                .order_by("-created_at")[:20]
+                .values("role", "content")
+            )
+            previous_messages = list(reversed(previous_messages))
 
         initial_state = ChatState(
             user_request=content,
             profile_id=str(session.profile_id),
             subject_id=str(session.subject_id) if session.subject_id else None,
             session_id=str(session.pk),
+            route=None,
+            messages=previous_messages,
             retrieved_evidence=[],
+            web_evidence=[],
             selected_evidence=[],
             answer="",
             citations=[],
+            cited_contents=[],
             verification_status="not_verified",
             verification_score=0.0,
             retry_count=0,
             errors=[],
             execution_metadata={},
+            current_date=None,
         )
 
         final_state = invoke_chat_graph(initial_state)
@@ -73,16 +116,27 @@ class ChatService:
         verification_status = final_state.get("verification_status", "not_verified")
         verification_score = final_state.get("verification_score")
 
+        # Determine if citations should be shown:
+        # Only show citations for RAG responses (material/general_knowledge routes)
+        # where evidence was actually retrieved and used.
+        route = final_state.get("route")
+        has_evidence = bool(final_state.get("selected_evidence") or final_state.get("retrieved_evidence") or final_state.get("web_evidence"))
+
+        # Conversational/date/time responses should never have citations
+        if route == "conversational" or not has_evidence:
+            citations = []
+
         message = ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
             content=answer,
-            citations=citations + [{"verification_status": verification_status, "verification_score": verification_score,
-                                     "verifier_version": EvidenceVerifier.VERSION}],
-            model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+            citations=citations,
+            model=final_state.get("model", getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")),
             prompt_version=CHAT_PROMPT_VERSION,
+            verification_status=verification_status,
+            verification_score=verification_score,
         )
-        logger.info("Chat %s answered with %s citation(s) [%s]", session.pk, len(citations), verification_status)
+        logger.info("Chat %s answered with %s citation(s) [%s] (route=%s)", session.pk, len(citations), verification_status, route)
         return message
 
     @staticmethod

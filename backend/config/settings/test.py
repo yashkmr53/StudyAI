@@ -30,3 +30,12 @@ CACHES = {
 }
 
 RATE_LIMITING_ENABLED = False  # enabled per-test via override_settings
+
+# Use mock providers for deterministic tests
+LLM_PROVIDER_CHAIN = "mock,mock"
+WEB_SEARCH_PROVIDER = "mock"
+EMBEDDING_PROVIDER = "hashing"
+STORAGE_BACKEND = "local"
+OBJECT_STORAGE_BACKEND = "local"
+OCR_PROVIDER_CHAIN = "mock,mock"
+EMAIL_BACKEND = "console"
