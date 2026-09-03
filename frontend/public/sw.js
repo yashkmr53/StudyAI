@@ -10,7 +10,7 @@
 /// <reference lib="webworker" />
 
 const OUTBOX_SYNC_TAG = "outbox-flush";
-const CACHE_NAME = "studyai-v1";
+const CACHE_NAME = "studyai-v2";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
