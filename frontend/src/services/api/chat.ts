@@ -2,7 +2,7 @@
  * ChatService client (§25). Subject-scoped sessions; messages posted to
  * `/chat/sessions/{id}/messages`. Wire shapes parsed defensively.
  */
-import { apiRequest } from "./client";
+import { apiRequest, apiStream } from "./client";
 import type { ChatCitation, ChatThreadSummary, ChatMessageItem } from "../../types/domain";
 import { listAll } from "./pagination";
 
@@ -45,6 +45,38 @@ function normalizeCitations(raw: unknown): ChatCitation[] {
     })
     .filter((c): c is ChatCitation => c !== null);
 }
+
+export interface StreamTitleEvent {
+  title: string;
+  session_id: string;
+}
+
+export interface StreamTokenEvent {
+  delta: string;
+}
+
+export interface StreamCitationsEvent {
+  citations: ChatCitation[];
+}
+
+export interface StreamDoneEvent {
+  message_id: string;
+  verification_status?: string;
+  verification_score?: number | null;
+  model?: string;
+}
+
+export interface StreamErrorEvent {
+  message: string;
+}
+
+export type ChatStreamEvent =
+  | { event: "title"; data: StreamTitleEvent }
+  | { event: "token"; data: StreamTokenEvent }
+  | { event: "citations"; data: StreamCitationsEvent }
+  | { event: "done"; data: StreamDoneEvent }
+  | { event: "error"; data: StreamErrorEvent }
+  | { event: string; data: unknown };
 
 export const chatApi = {
   async listSessions(): Promise<ChatThreadSummary[]> {
@@ -108,5 +140,27 @@ export const chatApi = {
         },
       };
     });
+  },
+
+  /**
+   * Stream a chat turn via Server-Sent Events.
+   *
+   * Yields typed events as the assistant answer streams in. The caller is
+   * expected to consume `token` events to update the UI in real time,
+   * patch the thread list when a `title` event arrives, and resolve
+   * only after the `done` (or `error`) event has been received.
+   */
+  sendMessageStream(
+    sessionId: string,
+    content: string,
+    options: { signal?: AbortSignal; agentMode?: boolean } = {},
+  ): AsyncGenerator<ChatStreamEvent, void, void> {
+    const headers: Record<string, string> = {};
+    if (options.agentMode) headers["X-Agent-Mode"] = "true";
+    return apiStream<unknown>(`/chat/sessions/${sessionId}/messages/stream`, {
+      method: "POST",
+      body: { content },
+      signal: options.signal,
+    }) as AsyncGenerator<ChatStreamEvent, void, void>;
   },
 };

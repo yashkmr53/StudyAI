@@ -79,6 +79,30 @@ class ChatSessionViewSet(
         messages = ChatMessage.objects.filter(session=session)
         return Response(ChatMessageSerializer(messages, many=True).data)
 
+    @action(detail=True, methods=["post"], url_path="messages/stream",
+            throttle_classes=[AIBudgetThrottle])
+    def stream_message(self, request, pk=None):
+        """Stream the assistant answer for a user message via SSE.
+
+        Emits: `title`, `token` (multiple), `citations`, `done`, `error`.
+        """
+        from django.http import StreamingHttpResponse
+
+        session = self.get_object()
+        serializer = MessageInSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
+        content = serializer.validated_data["content"]
+
+        response = StreamingHttpResponse(
+            ChatService.stream(session, content, use_agent=use_agent),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache, no-transform"
+        response["X-Accel-Buffering"] = "no"
+        response["Connection"] = "keep-alive"
+        return response
+
     def send_message(self, request, pk=None):
         session = self.get_object()
         serializer = MessageInSerializer(data=request.data)

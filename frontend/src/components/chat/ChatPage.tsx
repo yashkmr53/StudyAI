@@ -27,12 +27,14 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [agentMode, setAgentMode] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const {
-    sendMessage,
-    sending,
+    sendMessage: sendAgentMessage,
+    sending: agentSending,
     toolCalls,
   } = useAgentChat({
     sessionId: activeThreadId || "",
@@ -41,7 +43,6 @@ export function ChatPage() {
     },
     onError: (err) => {
       setError(err.message);
-      // Remove pending messages on error
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("pending-")));
     },
   });
@@ -65,7 +66,6 @@ export function ChatPage() {
   useEffect(() => {
     if (!activeThreadId) return;
     let cancelled = false;
-    // Don't clear messages if a send is in progress (avoids race condition)
     if (!sendingRef.current) {
       setMessages([]);
     }
@@ -81,6 +81,21 @@ export function ChatPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
+
+  // Auto-scroll while streaming so users see tokens arrive live.
+  useEffect(() => {
+    if (!streaming) return;
+    const id = window.setInterval(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [streaming]);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
+  }, []);
 
   async function newThread() {
     setError(null);
@@ -99,43 +114,132 @@ export function ChatPage() {
 
   async function send() {
     const content = draft.trim();
-    if (!content || !activeThreadId || sending || sendingRef.current) return;
+    if (!content || !activeThreadId || sendingRef.current) return;
     setDraft("");
     sendingRef.current = true;
 
     const pendingId = `pending-${crypto.randomUUID()}`;
     const userMsg: ChatMessageItem = { id: `u-${pendingId}`, role: "user", content, citations: [] };
-    const pendingAssistantMsg: ChatMessageItem = { id: pendingId, role: "assistant", content: "", citations: [], pending: true };
+    const pendingAssistantMsg: ChatMessageItem = {
+      id: pendingId,
+      role: "assistant",
+      content: "",
+      citations: [],
+      pending: true,
+    };
 
     setMessages((prev) => [...prev, userMsg, pendingAssistantMsg]);
+    setError(null);
+
+    if (agentMode) {
+      try {
+        const reply = await sendAgentMessage(content);
+        if (!reply) {
+          setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
+        }
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: pendingId,
+            role: "assistant",
+            content: t("chat.sendFailedBubble"),
+            citations: [],
+          },
+        ]);
+      } finally {
+        sendingRef.current = false;
+      }
+      return;
+    }
+
+    // Streaming classic RAG chat
+    const abort = new AbortController();
+    streamAbortRef.current = abort;
+    setStreaming(true);
+
+    const appendToken = (delta: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === pendingId ? { ...m, content: m.content + delta, pending: false } : m,
+        ),
+      );
+    };
+
+    const setCitations = (citations: ChatMessageItem["citations"]) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === pendingId ? { ...m, citations } : m)),
+      );
+    };
+
+    const finalize = (fallbackContent?: string) => {
+      setMessages((prev) => {
+        const exists = prev.some((m) => m.id === pendingId);
+        if (!exists) return prev;
+        return prev.map((m) =>
+          m.id === pendingId
+            ? { ...m, pending: false, content: m.content || fallbackContent || "" }
+            : m,
+        );
+      });
+    };
 
     try {
-      if (agentMode) {
-        await sendMessage(content);
-        setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
-      } else {
-        const reply = await chatApi.sendMessage(activeThreadId, content);
-        setMessages((prev) => [
-          ...prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id),
-          reply.user,
-          reply.assistant,
-        ]);
+      for await (const evt of chatApi.sendMessageStream(activeThreadId, content, {
+        signal: abort.signal,
+        agentMode: false,
+      })) {
+        if (abort.signal.aborted) break;
+        if (evt.event === "title") {
+          const data = evt.data as { title: string; session_id: string };
+          setThreads((prev) => {
+            const list = prev ?? [];
+            const existing = list.find((th) => th.id === data.session_id);
+            if (existing && existing.title === data.title) return list;
+            if (existing) {
+              return list.map((th) =>
+                th.id === data.session_id ? { ...th, title: data.title } : th,
+              );
+            }
+            return [
+              {
+                id: data.session_id,
+                title: data.title,
+                subjectId: subjectId ?? null,
+                createdAt: new Date().toISOString(),
+              },
+              ...list,
+            ];
+          });
+        } else if (evt.event === "token") {
+          const data = evt.data as { delta: string };
+          if (data?.delta) appendToken(data.delta);
+        } else if (evt.event === "citations") {
+          const data = evt.data as { citations: ChatMessageItem["citations"] };
+          setCitations(normalizeCitations(data?.citations));
+        } else if (evt.event === "done") {
+          finalize();
+          break;
+        } else if (evt.event === "error") {
+          const data = evt.data as { message: string };
+          finalize(data?.message || t("chat.sendFailedBubble"));
+          setError(data?.message || t("chat.sendFailedBubble"));
+          break;
+        }
       }
-    } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== pendingId && m.id !== userMsg.id));
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: pendingId,
-          role: "assistant",
-          content: t("chat.sendFailedBubble"),
-          citations: [],
-        },
-      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("chat.sendFailedBubble");
+      finalize(message);
+      setError(message);
     } finally {
+      setStreaming(false);
+      streamAbortRef.current = null;
       sendingRef.current = false;
     }
   }
+
+  const sending = streaming || agentSending;
 
   return (
     <ModuleProvider value={{ moduleId, services }}>
@@ -235,7 +339,6 @@ export function ChatPage() {
                   </p>
                 )}
                 {messages.map((message) => {
-                  // Check if this is an agent message with tool calls
                   const agentMsg = message as AgentMessage;
                   if (agentMsg.toolCalls && agentMsg.toolCalls.length > 0) {
                     return (
@@ -244,8 +347,8 @@ export function ChatPage() {
                   }
                   return (
                     <div key={message.id} className={message.role === "user" ? "msg msg--user" : "msg msg--assistant"}>
-                      <div className={message.pending ? "msg__bubble pending" : "msg__bubble"}>
-                        {message.pending ? (
+                      <div className={message.pending && !message.content ? "msg__bubble pending" : "msg__bubble"}>
+                        {message.pending && !message.content ? (
                           <span className="typing-dots" aria-label={t("chat.thinkingAria")}>
                             <span />
                             <span />
@@ -264,11 +367,10 @@ export function ChatPage() {
                               const num = i + 1;
                               let label: string;
                               if (citation.source_type === "web") {
-                                // Web citation: show title + domain
                                 const title = citation.title || citation.url || "Web source";
                                 const domain = citation.domain || "";
                                 label = domain ? `${num} ${title} — ${domain}` : `${num} ${title}`;
-                                 return (
+                                return (
                                   <a
                                     key={citation.source_id ?? num}
                                     href={citation.url ?? undefined}
@@ -281,7 +383,6 @@ export function ChatPage() {
                                   </a>
                                 );
                               }
-                              // Database citation: show document title + pages
                               const title = citation.document_title || citation.subject_name || "Your notes";
                               const pages = citation.page_start
                                 ? citation.page_end && citation.page_end !== citation.page_start
@@ -300,8 +401,7 @@ export function ChatPage() {
                     </div>
                   );
                 })}
-                {/* Active tool calls during agent execution */}
-                {agentMode && sending && toolCalls.length > 0 && (
+                {agentMode && agentSending && toolCalls.length > 0 && (
                   <div className="active-tool-calls space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-100 animate-pulse">
                     <div className="text-sm font-medium text-blue-700">Agent is working…</div>
                     <div className="space-y-1 mt-1">
@@ -338,4 +438,30 @@ export function ChatPage() {
       </div>
     </ModuleProvider>
   );
+}
+
+// Local helper kept in this file because the page is the only consumer.
+function normalizeCitations(raw: unknown): ChatMessageItem["citations"] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r): import("../../types/domain").ChatCitation | null => {
+      if (r && typeof r === "object") {
+        const obj = r as Record<string, unknown>;
+        return {
+          source_id: typeof obj.source_id === "string" ? obj.source_id : undefined,
+          source_type: typeof obj.source_type === "string" ? obj.source_type : "database",
+          chunk_id: typeof obj.chunk_id === "string" ? obj.chunk_id : undefined,
+          document_id: typeof obj.document_id === "string" ? obj.document_id : undefined,
+          document_title: typeof obj.document_title === "string" ? obj.document_title : obj.document_title ?? null,
+          subject_name: typeof obj.subject_name === "string" ? obj.subject_name : obj.subject_name ?? null,
+          page_start: typeof obj.page_start === "number" ? obj.page_start : undefined,
+          page_end: typeof obj.page_end === "number" ? obj.page_end : undefined,
+          snippet: typeof obj.snippet === "string" ? obj.snippet : undefined,
+          rrf_score: typeof obj.rrf_score === "number" ? obj.rrf_score : undefined,
+          url: typeof obj.url === "string" ? obj.url : obj.url ?? null,
+        } as import("../../types/domain").ChatCitation;
+      }
+      return null;
+    })
+    .filter((c): c is import("../../types/domain").ChatCitation => c !== null);
 }
