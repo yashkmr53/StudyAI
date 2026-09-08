@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../features/auth/authStore";
-import { useModuleConfigStore, servicesFor } from "../../state/moduleConfigStore";
-import { defaultProfileModuleConfig } from "../../types/modules";
+import { useModuleConfigStore } from "../../state/moduleConfigStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { EmptyState, ErrorState, SkeletonCardGrid } from "../ui/primitives";
 import { BookIcon, ChatIcon, PlusIcon } from "../ui/icons";
 import { NewSubjectDialog } from "./NewSubjectDialog";
 import { SubjectCard } from "./SubjectCard";
-import type { ModuleId } from "../../types/modules";
+import { MODULE_SERVICE_MATRIX, type ModuleId } from "../../types/modules";
 
 /** Subjects home (§7): clean grid; no AI surface lives here (Rule 1). */
 export function SubjectsPage() {
@@ -22,19 +21,18 @@ export function SubjectsPage() {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace);
 
   const hydrateConfig = useModuleConfigStore((s) => s.hydrateFor);
-  const moduleConfig = useModuleConfigStore((s) => (profile?.id ? s.configFor(profile.id) : null));
   const [newSubjectOpen, setNewSubjectOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const moduleId: ModuleId = moduleConfig?.defaultModule ?? "NOTE_SPACE";
-  const services = servicesFor(moduleConfig ?? defaultProfileModuleConfig(), moduleId);
+  const moduleId: ModuleId = (profile?.module as ModuleId) ?? "NOTE_SPACE";
+  const services = MODULE_SERVICE_MATRIX[moduleId] ?? MODULE_SERVICE_MATRIX.NOTE_SPACE;
 
   // Module/service config is hydrated exactly once when the profile session
   // starts — never on navigation or module toggles (§26).
   useEffect(() => {
     if (profile?.id) hydrateConfig(profile.id);
-  }, [profile?.id, hydrateConfig]);
+  }, [profile?.id, profile?.module, hydrateConfig]);
 
   useEffect(() => {
     if (profile?.id && !loaded && !loading) void loadWorkspace(profile.id);

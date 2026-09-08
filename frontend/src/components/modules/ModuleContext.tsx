@@ -1,7 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useAuthStore } from "../../features/auth/authStore";
-import { servicesFor, useModuleConfigStore } from "../../state/moduleConfigStore";
-import { useUiStore } from "../../state/uiStore";
 import type { ModuleId, ServiceId } from "../../types/modules";
 import { MODULE_SERVICE_MATRIX } from "../../types/modules";
 
@@ -46,26 +44,17 @@ export function useServices(): Services {
 
 /**
  * Module state for a subject outside the workspace component tree
- * (note detail, tests, practice, chat routes). Same client-side model:
- * defaults come from profile config, overrides live in uiStore.
+ * (note detail, tests, practice, chat routes). Module is derived from
+ * the active profile's backend module — no client-side overrides (§27).
  */
-export function useSubjectModule(subjectId: string | undefined): {
+export function useSubjectModule(_subjectId: string | undefined): {
   moduleId: ModuleId;
   services: Services;
-  setModule: (moduleId: ModuleId) => void;
 } {
   const profile = useAuthStore((s) => s.profile);
-  const config = useModuleConfigStore((s) => s.configFor(profile?.id));
-  const override = useUiStore((s) => (subjectId ? s.activeModuleBySubject[subjectId] : undefined));
-  const setActiveModule = useUiStore((s) => s.setActiveModule);
-  const moduleId: ModuleId = override ?? config.defaultModule;
-  return {
-    moduleId,
-    services: servicesFor(config, moduleId),
-    setModule: (m) => {
-      if (subjectId) setActiveModule(subjectId, m);
-    },
-  };
+  const moduleId: ModuleId = (profile?.module as ModuleId) ?? "NOTE_SPACE";
+  const services: Services = MODULE_SERVICE_MATRIX[moduleId] ?? MODULE_SERVICE_MATRIX.NOTE_SPACE;
+  return { moduleId, services };
 }
 
 /**

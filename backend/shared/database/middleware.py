@@ -4,6 +4,10 @@ Reads ``X-Active-Profile`` from the request, validates it against the
 authenticated user, and binds ``app.current_profile_id`` transaction-locally
 via ``SET LOCAL`` so PostgreSQL RLS policies can scope rows.
 
+Also enforces module isolation: when ``X-Active-Module`` is present, the
+active profile must belong to that module. Cross-module profile reuse is
+rejected with ``403 Forbidden``.
+
 Celery workers already call ``profile_scoped_transaction`` directly; this
 middleware covers the HTTP request path.
 """

@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../auth/authStore";
-import { saveProgress } from "./onboardingState";
+import { isOnboarded, saveProgress } from "./onboardingState";
 
 /** Step 2 — Create Profile (§6): the profile is the study context. */
 export function ProfileStep() {
@@ -15,6 +15,13 @@ export function ProfileStep() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const current = profile ?? (profiles.length > 0 ? { id: profiles[0].id } : null);
+    if (current?.id && isOnboarded(current.id)) {
+      navigate("/subjects", { replace: true });
+    }
+  }, [profile, profiles, navigate]);
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
@@ -34,6 +41,11 @@ export function ProfileStep() {
   }
 
   function keepExisting() {
+    const current = profile ?? (profiles.length > 0 ? { id: profiles[0].id, name: profiles[0].name } : null);
+    if (current?.id && isOnboarded(current.id)) {
+      navigate("/subjects");
+      return;
+    }
     saveProgress({ lastStep: "module" });
     navigate("/onboarding/module");
   }

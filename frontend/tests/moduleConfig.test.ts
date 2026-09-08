@@ -4,7 +4,6 @@ import {
   MODULE_SERVICE_MATRIX,
 } from "../src/types/modules";
 import { hasService, servicesFor } from "../src/state/moduleConfigStore";
-import type { ProfileModuleConfig } from "../src/types/modules";
 
 /**
  * The acceptance-criteria matrix (UI prompt §35):
@@ -32,11 +31,12 @@ describe("module service matrix", () => {
   });
 
   it("selectors answer per-service questions without module branching", () => {
-    const config: ProfileModuleConfig = defaultProfileModuleConfig();
-    expect(hasService(config, "NOTE_SPACE", "enrichment")).toBe(false);
-    expect(hasService(config, "NOTE_SPACE", "write")).toBe(true);
-    expect(hasService(config, "AI_CLASSROOM", "enrichment")).toBe(true);
-    expect(servicesFor(config, "AI_CLASSROOM").chat).toBe(true);
+    const ns = MODULE_SERVICE_MATRIX.NOTE_SPACE;
+    const ai = MODULE_SERVICE_MATRIX.AI_CLASSROOM;
+    expect(hasService(ns, "NOTE_SPACE", "enrichment")).toBe(false);
+    expect(hasService(ns, "NOTE_SPACE", "write")).toBe(true);
+    expect(hasService(ai, "AI_CLASSROOM", "enrichment")).toBe(true);
+    expect(servicesFor(ai, "AI_CLASSROOM").chat).toBe(true);
   });
 
   it("default config uses NoteSpace unless told otherwise", () => {

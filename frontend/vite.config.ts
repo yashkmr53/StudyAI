@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      disable: process.env.VITE_DISABLE_PWA === "1",
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["favicon.svg"],
       manifest: {
         name: "StudyAI",
@@ -18,6 +20,8 @@ export default defineConfig({
         start_url: "/",
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallbackDenylist: [/^\/api\//],
       },
@@ -25,9 +29,10 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    host: "0.0.0.0",
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: process.env.VITE_API_TARGET || "http://127.0.0.1:8000",
         changeOrigin: true,
       },
     },
