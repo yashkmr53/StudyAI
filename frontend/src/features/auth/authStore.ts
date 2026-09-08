@@ -49,6 +49,10 @@ function saveSelectedProfileId(module: ModuleId, profileId: string | null) {
   }
 }
 
+function persistModule(module: ModuleId) {
+  localStorage.setItem("studyai.module", module);
+}
+
 function pickActiveForModule(profiles: Profile[], module: ModuleId, selectedIds: Record<ModuleId, string | null>): Profile | null {
   if (profiles.length === 0) return null;
   const remembered = selectedIds[module];
@@ -89,6 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (profile) {
           saveSelectedProfileId(module, profile.id);
           localStorage.setItem("studyai.profile", profile.id);
+          persistModule(module);
           setActiveModule(module);
           setActiveProfileId(profile.id);
         } else {
@@ -120,6 +125,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       if (profile) {
         saveSelectedProfileId(module, profile.id);
         localStorage.setItem("studyai.profile", profile.id);
+        persistModule(module);
         setActiveModule(module);
         setActiveProfileId(profile.id);
       } else {
@@ -148,6 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const profile = profiles.find((p) => p.id === data.profile.id) ?? data.profile;
       saveSelectedProfileId(module, profile.id);
       localStorage.setItem("studyai.profile", profile.id);
+      persistModule(module);
       setActiveModule(module);
       setActiveProfileId(profile.id);
       set({
@@ -179,6 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       if (profile) {
         saveSelectedProfileId(module, profile.id);
         localStorage.setItem("studyai.profile", profile.id);
+        persistModule(module);
         setActiveModule(module);
         setActiveProfileId(profile.id);
       } else {
@@ -199,6 +207,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const module = get().module;
       saveSelectedProfileId(module, id);
       localStorage.setItem("studyai.profile", id);
+      persistModule(module);
       setActiveModule(module);
       setActiveProfileId(id);
       set({ profile, module, selectedProfileIds: { ...get().selectedProfileIds, [module]: id } });
@@ -208,6 +217,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const module = profile.module as ModuleId;
       saveSelectedProfileId(module, profile.id);
       localStorage.setItem("studyai.profile", profile.id);
+      localStorage.setItem("studyai.module", module);
       setActiveModule(module);
       setActiveProfileId(profile.id);
       set({
@@ -223,6 +233,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const module = (created.module as ModuleId) ?? get().module;
       saveSelectedProfileId(module, created.id);
       localStorage.setItem("studyai.profile", created.id);
+      persistModule(module);
       setActiveModule(module);
       setActiveProfileId(created.id);
       set({
