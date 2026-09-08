@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import { ModuleProvider, useSubjectModule } from "../modules/ModuleContext";
 import { EmptyState, ErrorState } from "../ui/primitives";
-import { ChatIcon, PlusIcon, SparkleIcon } from "../ui/icons";
+import { ChatIcon, ChevronRightIcon, PlusIcon, SparkleIcon } from "../ui/icons";
 import { chatApi } from "../../services/api/chat";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { useAgentChat } from "../../hooks/useAgentChat";
@@ -28,6 +28,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [agentMode, setAgentMode] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -107,6 +108,7 @@ export function ChatPage() {
       setThreads((prev) => [thread, ...(prev ?? [])]);
       setActiveThreadId(thread.id);
       setMessages([]);
+      setSidebarOpen(true);
     } catch {
       setError(t("chat.createSessionFailed"));
     }
@@ -281,13 +283,26 @@ export function ChatPage() {
           </label>
         </div>
 
-        <div className="chat-layout grow" style={{ minHeight: 480 }}>
-          <aside aria-label={t("chat.chatsAria")}>
+        <div className={`chat-layout grow${sidebarOpen ? "" : " chat-layout--collapsed"}`} style={{ minHeight: 480 }}>
+          <aside className={`chat-sidebar${sidebarOpen ? "" : " chat-sidebar--collapsed"}`} aria-label={t("chat.chatsAria")}>
+            <div className="chat-sidebar__header">
+              <span className="chat-sidebar__title">{t("chat.threadsTitle", { defaultValue: "Chats" })}</span>
+              <button
+                type="button"
+                className="chat-sidebar__toggle"
+                onClick={() => setSidebarOpen((prev) => !prev)}
+                aria-label={sidebarOpen ? t("chat.collapseSidebar", { defaultValue: "Collapse sidebar" }) : t("chat.expandSidebar", { defaultValue: "Expand sidebar" })}
+              >
+                <span style={{ display: "inline-flex", transform: sidebarOpen ? "rotate(180deg)" : "none", transition: "transform 220ms ease" }}>
+                  <ChevronRightIcon size={16} />
+                </span>
+              </button>
+            </div>
             <button type="button" className="btn btn--secondary btn--sm btn--block" onClick={() => void newThread()}>
               <PlusIcon size={13} />
               {t("chat.newChat")}
             </button>
-            <div className="chat-thread-list" style={{ marginTop: 10 }}>
+            <div className="chat-thread-list">
               {!threads && <div className="skeleton" style={{ height: 64 }} />}
               {threads?.map((thread) => (
                 <button
@@ -309,6 +324,17 @@ export function ChatPage() {
             </div>
           </aside>
 
+          {!sidebarOpen && (
+            <button
+              type="button"
+              className="chat-sidebar__floating-toggle"
+              onClick={() => setSidebarOpen(true)}
+              aria-label={t("chat.expandSidebar", { defaultValue: "Expand sidebar" })}
+            >
+              <ChevronRightIcon size={16} />
+            </button>
+          )}
+
           {error ? (
             <ErrorState
               message={error}
@@ -316,7 +342,7 @@ export function ChatPage() {
               retryLabel={t("chat.retryNewChat")}
             />
           ) : !activeThreadId ? (
-            <div className="card chat-panel">
+            <div className={`card chat-panel chat-panel--empty`}>
               <EmptyState
                 plain
                 icon={<ChatIcon size={20} />}
@@ -347,12 +373,26 @@ export function ChatPage() {
                   }
                   return (
                     <div key={message.id} className={message.role === "user" ? "msg msg--user" : "msg msg--assistant"}>
-                      <div className={message.pending && !message.content ? "msg__bubble pending" : "msg__bubble"}>
+                      <div
+                        className={
+                          message.pending && !message.content
+                            ? "msg__bubble pending"
+                            : streaming && message.role === "assistant" && !message.content
+                              ? "msg__bubble streaming"
+                              : "msg__bubble"
+                        }
+                      >
                         {message.pending && !message.content ? (
-                          <span className="typing-dots" aria-label={t("chat.thinkingAria")}>
-                            <span />
-                            <span />
-                            <span />
+                          <span className="thinking-indicator" aria-label={t("chat.thinkingAria")}>
+                            <span className="thinking-dot" />
+                            <span className="thinking-dot" />
+                            <span className="thinking-dot" />
+                          </span>
+                        ) : streaming && message.role === "assistant" && !message.content ? (
+                          <span className="thinking-indicator" aria-label={t("chat.thinkingAria")}>
+                            <span className="thinking-dot" />
+                            <span className="thinking-dot" />
+                            <span className="thinking-dot" />
                           </span>
                         ) : (
                           message.content || t("chat.emptyResponse")

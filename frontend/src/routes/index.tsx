@@ -56,10 +56,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 /** Sends fresh accounts through the four-step flow (§6). */
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const profile = useAuthStore((s) => s.profile);
+  const subjects = useWorkspaceStore((s) => s.subjects);
+  const loaded = useWorkspaceStore((s) => s.loaded);
   const pathname = window.location.pathname;
 
   if (!profile) return <Navigate to="/onboarding/profile" replace />;
-  if (isOnboarded(profile.id)) {
+  if (isOnboarded(profile.id) || (loaded && subjects.length > 0)) {
     return <Navigate to="/subjects" replace />;
   }
   const progress = loadProgress();
@@ -94,8 +96,12 @@ function ServiceRoute({ service, children }: { service: ServiceId; children: Rea
 /** "/" decides between finishing onboarding and the subjects home. */
 function RootRedirect() {
   const profile = useAuthStore((s) => s.profile);
+  const subjects = useWorkspaceStore((s) => s.subjects);
+  const loaded = useWorkspaceStore((s) => s.loaded);
+  const loading = useWorkspaceStore((s) => s.loading);
   if (!profile) return <Navigate to="/onboarding/profile" replace />;
-  if (!isOnboarded(profile.id)) {
+  if (!loaded && loading) return null;
+  if (!isOnboarded(profile.id) && !(loaded && subjects.length > 0)) {
     const progress = loadProgress();
     const target =
       progress?.lastStep === "subjects"
@@ -104,6 +110,9 @@ function RootRedirect() {
           ? "/onboarding/module"
           : "/onboarding/profile";
     return <Navigate to={target} replace />;
+  }
+  if (loaded && subjects.length > 0) {
+    return <Navigate to={`/subjects/${subjects[0].id}`} replace />;
   }
   return <Navigate to="/subjects" replace />;
 }

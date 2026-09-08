@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import { ModuleProvider, ServiceGate, type Services } from "../modules/ModuleContext";
-import { ModuleToggle } from "../modules/ModuleToggle";
 import { ServiceCard } from "../modules/ServiceCard";
 import { FolderCard } from "../folders/FolderCard";
 import { NewFolderDialog } from "../folders/NewFolderDialog";
@@ -17,11 +16,10 @@ import {
   UploadIcon,
 } from "../ui/icons";
 import { useAuthStore } from "../../features/auth/authStore";
-import { servicesFor, useModuleConfigStore } from "../../state/moduleConfigStore";
-import { useUiStore } from "../../state/uiStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import { documentsApi } from "../../services/api/documents";
 import type { ModuleId } from "../../types/modules";
+import { MODULE_SERVICE_MATRIX } from "../../types/modules";
 import { UNFILED_FOLDER_ID } from "../../types/domain";
 import { childrenOf } from "../../utils/folderTree";
 
@@ -36,15 +34,11 @@ export function SubjectWorkspace() {
   const location = useLocation();
 
   const profile = useAuthStore((s) => s.profile);
-  const config = useModuleConfigStore((s) => s.configFor(profile?.id));
   const subjects = useWorkspaceStore((s) => s.subjects);
   const folders = useWorkspaceStore((s) => s.folders);
   const notes = useWorkspaceStore((s) => s.notes);
   const loading = useWorkspaceStore((s) => s.loading);
   const touchSubject = useWorkspaceStore((s) => s.touchSubject);
-
-  const activeModuleBySubject = useUiStore((s) => s.activeModuleBySubject);
-  const setActiveModule = useUiStore((s) => s.setActiveModule);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -57,10 +51,8 @@ export function SubjectWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjectId]);
 
-  // Default to the profile's onboarding choice until the user toggles here.
-  const moduleId: ModuleId =
-    (subjectId && activeModuleBySubject[subjectId]) || config.defaultModule;
-  const services: Services = servicesFor(config, moduleId);
+  const moduleId: ModuleId = (profile?.module as ModuleId) ?? "NOTE_SPACE";
+  const services: Services = MODULE_SERVICE_MATRIX[moduleId] ?? MODULE_SERVICE_MATRIX.NOTE_SPACE;
 
   const subjectFolders = useMemo(
     () => folders.filter((f) => f.subjectId === subjectId),
@@ -138,9 +130,6 @@ export function SubjectWorkspace() {
         <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
           <div>
             <h1>{subject.name}</h1>
-          </div>
-          <div className="page-heading__actions">
-            <ModuleToggle value={moduleId} onChange={(m) => subjectId && setActiveModule(subjectId, m)} />
           </div>
         </div>
 

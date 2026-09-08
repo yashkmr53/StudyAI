@@ -45,6 +45,12 @@ class ChatSessionViewSet(
     def get_queryset(self):
         return ChatSession.objects.filter(profile__user=self.request.user)
 
+    def perform_content_negotiation(self, request):
+        if getattr(self, "action", None) == "stream_message":
+            from rest_framework.renderers import JSONRenderer
+            return (JSONRenderer(), "application/json")
+        return super().perform_content_negotiation(request)
+
     def create(self, request, *args, **kwargs):
         serializer = CreateSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

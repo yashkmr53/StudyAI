@@ -7,6 +7,7 @@ export interface User {
 export interface Profile {
   id: string;
   name: string;
+  module?: string;
   created_at?: string;
   updated_at?: string;
 }

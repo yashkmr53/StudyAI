@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../auth/authStore";
 import { MODULE_SERVICE_MATRIX, type ModuleId } from "../../types/modules";
 import { useModuleConfigStore } from "../../state/moduleConfigStore";
+import { profilesApi } from "../../services/api/profiles";
 import { saveProgress } from "./onboardingState";
 import { OnboardingLayout } from "./OnboardingLayout";
 
@@ -46,17 +47,19 @@ export function ModuleStep() {
   const navigate = useNavigate();
   const profileId = useAuthStore((s) => s.profile?.id ?? null);
   const hydrateFor = useModuleConfigStore((s) => s.hydrateFor);
-  const setDefaultModule = useModuleConfigStore((s) => s.setDefaultModule);
   const [choice, setChoice] = useState<ModuleId | null>(null);
   const { t } = useTranslation();
   const options = useOption(t);
 
   function next() {
     if (!choice) return;
-    // Seed the once-per-session config cache with the onboarding choice.
-    hydrateFor(profileId ?? "", choice);
-    if (profileId) setDefaultModule(profileId, choice);
+    // Seed the once-per-session config cache.
+    hydrateFor(profileId ?? "");
     saveProgress({ lastStep: "subjects", moduleChoice: choice });
+    // Update the backend profile to match the selected module.
+    if (profileId && choice) {
+      void profilesApi.setModule(profileId, choice).catch(() => undefined);
+    }
     navigate("/onboarding/subjects");
   }
 

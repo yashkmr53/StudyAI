@@ -110,3 +110,80 @@ class ModelConstraintTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Subject.objects.create(profile=profile, name="X")
+
+
+class ModuleIsolationTests(TestCase):
+    def setUp(self):
+        self.alice = authenticated_client("alice@example.com", "s3curePass!x")
+        self.user = User.objects.get(email="alice@example.com")
+        self.ns_profile = Profile.objects.create(user=self.user, name="NS Profile", module=Profile.Module.NOTE_SPACE)
+        self.ai_profile = Profile.objects.create(user=self.user, name="AI Profile", module=Profile.Module.AI_CLASSROOM)
+
+    def _auth_headers(self, profile_id=None, module=None):
+        headers = {"HTTP_X_ACTIVE_PROFILE": str(profile_id) if profile_id else None}
+        if module:
+            headers["HTTP_X_ACTIVE_MODULE"] = module
+        return {k: v for k, v in headers.items() if v is not None}
+
+    def test_create_profile_sets_module_from_header(self):
+        response = self.alice.post(
+            "/api/v1/profiles",
+            {"name": "New NS"},
+            content_type="application/json",
+            **self._auth_headers(module=Profile.Module.NOTE_SPACE),
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["module"], Profile.Module.NOTE_SPACE)
+
+    def test_list_profiles_filtered_by_module(self):
+        response = self.alice.get(
+            "/api/v1/profiles",
+            **self._auth_headers(module=Profile.Module.AI_CLASSROOM),
+        )
+        self.assertEqual(response.status_code, 200)
+        names = [p["name"] for p in response.json()["results"]]
+        self.assertIn("AI Profile", names)
+        self.assertNotIn("NS Profile", names)
+
+    def test_cross_module_profile_access_rejected(self):
+        response = self.alice.get(
+            f"/api/v1/profiles/{self.ns_profile.id}",
+            **self._auth_headers(profile_id=self.ns_profile.id, module=Profile.Module.AI_CLASSROOM),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_cross_module_subject_access_rejected(self):
+        Subject.objects.create(profile=self.ns_profile, name="NS Subject")
+        response = self.alice.get(
+            f"/api/v1/subjects?profile={self.ns_profile.id}",
+            **self._auth_headers(profile_id=self.ns_profile.id, module=Profile.Module.AI_CLASSROOM),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_profile_module_update_via_patch(self):
+        response = self.alice.patch(
+            f"/api/v1/profiles/{self.ns_profile.id}",
+            {"module": Profile.Module.AI_CLASSROOM},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["module"], Profile.Module.AI_CLASSROOM)
+
+    def test_unique_name_per_module(self):
+        from django.db import IntegrityError, transaction
+
+        Profile.objects.create(user=self.user, name="A", module=Profile.Module.NOTE_SPACE)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Profile.objects.create(user=self.user, name="A", module=Profile.Module.NOTE_SPACE)
+
+    def test_subject_unique_per_profile_name(self):
+        from django.db import IntegrityError, transaction
+
+        user = User.objects.create_user(email="u2@example.com", password="s3curePass!x")
+        profile = Profile.objects.create(user=user, name="A")
+        Subject.objects.create(profile=profile, name="X")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Subject.objects.create(profile=profile, name="X")

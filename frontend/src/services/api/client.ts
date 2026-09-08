@@ -2,20 +2,30 @@ import { ApiError, type ApiErrorBody } from "../../types/api";
 
 const API_BASE = "/api/v1";
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: string;
   body?: unknown;
   auth?: boolean;
   retry?: boolean;
+  module?: string;
 }
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let onSessionExpired: (() => void) | null = null;
 let activeProfileId: string | null = null;
+let activeModule: string | null = null;
 
 export function setActiveProfileId(profileId: string | null): void {
   activeProfileId = profileId;
+}
+
+export function setActiveModule(module: string | null): void {
+  activeModule = module;
+}
+
+export function getActiveModule(): string | null {
+  return activeModule;
 }
 
 export function setTokens(access: string | null, refresh: string | null): void {
@@ -62,12 +72,14 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, auth = true, retry = true } = options;
+  const { method = "GET", body, auth = true, retry = true, module } = options;
 
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
   if (activeProfileId) headers["X-Active-Profile"] = activeProfileId;
+  if (module) headers["X-Active-Module"] = module;
+  else if (activeModule) headers["X-Active-Module"] = activeModule;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,
@@ -130,10 +142,11 @@ export async function* apiStream<T = unknown>(
 ): AsyncGenerator<SseEvent<T>, void, void> {
   const { method = "POST", body, auth = true, signal } = options;
 
-  const headers: Record<string, string> = { Accept: "text/event-stream" };
+  const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
   if (activeProfileId) headers["X-Active-Profile"] = activeProfileId;
+  if (activeModule) headers["X-Active-Module"] = activeModule;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,

@@ -3,12 +3,15 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../features/auth/authStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
+import { profilesApi } from "../../services/api/profiles";
 import {
   BookIcon,
   CheckIcon,
   ChevronDownIcon,
   PlusIcon,
 } from "../ui/icons";
+import type { ModuleId } from "../../types/modules";
+import type { Profile } from "../../types/api";
 
 const GLYPH_PALETTE = [
   "#eef0fc,#4f5bd5",
@@ -31,15 +34,17 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
   const subjects = useWorkspaceStore((s) => s.subjects);
   const loading = useWorkspaceStore((s) => s.loading);
 
-  const profiles = useAuthStore((s) => s.profiles);
   const profile = useAuthStore((s) => s.profile);
-  const switchProfile = useAuthStore((s) => s.switchProfile);
+  const switchToProfile = useAuthStore((s) => s.switchToProfile);
   const addProfile = useAuthStore((s) => s.addProfile);
   const refreshProfiles = useAuthStore((s) => s.refreshProfiles);
   const logout = useAuthStore((s) => s.logout);
+  const module = useAuthStore((s) => s.module);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
+  const [dropdownModule, setDropdownModule] = useState<ModuleId>(module);
+  const [dropdownProfiles, setDropdownProfiles] = useState<Profile[]>([]);
 
   useEffect(() => {
     void refreshProfiles().catch(() => undefined);
@@ -57,6 +62,25 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [switcherOpen]);
 
+  // Sync dropdown module with the actual app module when the dropdown opens.
+  useEffect(() => {
+    if (switcherOpen) {
+      setDropdownModule(module);
+    }
+  }, [switcherOpen, module]);
+
+  // Fetch profiles for the currently selected dropdown module.
+  useEffect(() => {
+    if (!switcherOpen) return;
+    let cancelled = false;
+    profilesApi.list(dropdownModule).then((list) => {
+      if (!cancelled) setDropdownProfiles(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dropdownModule, switcherOpen]);
+
   async function onAddProfile() {
     const name = window.prompt(t("nav.newProfilePrompt"));
     if (!name?.trim()) return;
@@ -72,6 +96,13 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
   async function onSignOut() {
     await logout();
     navigate("/login");
+  }
+
+  async function onProfileClick(selected: Profile) {
+    switchToProfile(selected);
+    await refreshProfiles();
+    setSwitcherOpen(false);
+    navigate("/subjects");
   }
 
   return (
@@ -129,7 +160,26 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
       <div className="sidebar__footer" ref={popRef}>
         {switcherOpen && (
           <div className="popover" role="menu" aria-label={t("nav.switchProfile")}>
-            {profiles.map((p) => (
+            <div className="popover__section-label" style={{ padding: "8px 12px 4px" }}>
+              {t("modules.toggleLabel", { defaultValue: "Module" })}
+            </div>
+            <div className="segmented" role="tablist">
+              {(["NOTE_SPACE", "AI_CLASSROOM"] as ModuleId[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={dropdownModule === id}
+                  className={dropdownModule === id ? "segmented__option active" : "segmented__option"}
+                  onClick={() => setDropdownModule(id)}
+                >
+                  <span className="dot" aria-hidden />
+                  {t(`onboarding.module.${id === "NOTE_SPACE" ? "noteSpaceName" : "aiClassroomName"}`)}
+                </button>
+              ))}
+            </div>
+            <div className="popover__divider" />
+            {dropdownProfiles.map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -140,11 +190,7 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
                     ? "popover__item selected"
                     : "popover__item"
                 }
-                onClick={() => {
-                  switchProfile(p.id);
-                  setSwitcherOpen(false);
-                  navigate("/subjects");
-                }}
+                onClick={() => void onProfileClick(p)}
               >
                 <span className="avatar">{initials(p.name)}</span>
                 <span className="grow nowrap">{p.name}</span>
