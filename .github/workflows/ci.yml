@@ -130,8 +130,8 @@ jobs:
       - name: Test Docker compose up
         run: |
           docker compose up -d --wait --wait-timeout 300
-          curl -fsS http://localhost/healthz
-          curl -fsS http://localhost/readyz
+          curl -fsS http://localhost:8000/healthz
+          curl -fsS http://localhost:8000/readyz
           docker compose down -v
 
   openapi-drift:
