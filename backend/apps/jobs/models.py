@@ -70,7 +70,7 @@ class Job(models.Model):
         self.status = self.Status.FAILED_DEAD_LETTER
         self.last_error = error[:4000]
         self.finished_at = timezone.now()
-        self.save(update_fields=("status", "last_error", "finished_at))
+        self.save(update_fields=("status", "last_error", "finished_at"))
 
 
 class JobExecutionState(models.Model):
