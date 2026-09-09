@@ -29,7 +29,7 @@ class EvidenceResult(ToolOutput):
     page_start: int
     page_end: int
     snippet: str
-    scores: dict[str, float | None]
+    scores: dict[str, Optional[float]]
     document_title: str = ""
     subject_name: str = ""
 

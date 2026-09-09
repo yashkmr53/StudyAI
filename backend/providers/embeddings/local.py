@@ -45,8 +45,8 @@ class SentenceTransformerEmbeddingProvider:
     def __init__(
         self,
         *,
-        model_name: str | None = None,
-        device: str | None = None,
+        model_name: Optional[str] = None,
+        device: Optional[str] = None,
         batch_size: int = 32,
         fail: bool = False,
         name: str = "sentence_transformers",

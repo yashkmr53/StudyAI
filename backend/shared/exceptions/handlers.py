@@ -11,6 +11,7 @@ Every error response uses the envelope:
       }
     }
 """
+from typing import Optional
 from rest_framework.views import exception_handler as drf_exception_handler
 
 ERROR_INVALID_REQUEST = "INVALID_REQUEST"
@@ -34,7 +35,7 @@ class APIError(Exception):
     code = ERROR_INVALID_REQUEST
     default_message = "Invalid request."
 
-    def __init__(self, message: str | None = None, *, details: dict | None = None):
+    def __init__(self, message: Optional[str] = None, *, details: Optional[dict] = None):
         super().__init__(message or self.default_message)
         self.message = message or self.default_message
         self.details = details or {}
@@ -98,77 +99,3 @@ class ProviderError(APIError):
     status_code = 502
     code = ERROR_PROVIDER_ERROR
     default_message = "Upstream provider failed."
-
-
-_STATUS_TO_CODE = {
-    400: ERROR_INVALID_REQUEST,
-    401: ERROR_UNAUTHENTICATED,
-    403: ERROR_FORBIDDEN,
-    404: ERROR_RESOURCE_NOT_FOUND,
-    405: ERROR_INVALID_REQUEST,
-    406: ERROR_INVALID_REQUEST,
-    409: ERROR_REVISION_CONFLICT,
-    415: ERROR_INVALID_REQUEST,
-    429: ERROR_RATE_LIMITED,
-    500: ERROR_INTERNAL_ERROR,
-    502: ERROR_PROVIDER_ERROR,
-    503: ERROR_PROVIDER_UNAVAILABLE,
-}
-
-
-def exception_handler(exc, context):
-    from rest_framework.exceptions import ValidationError as DRFValidationError
-    from shared.observability.request_id import get_request_id
-
-    if isinstance(exc, DRFValidationError) and not isinstance(exc, APIError):
-        exc = ValidationError(details=exc.detail)
-
-    response = drf_exception_handler(exc, context)
-    request_id = get_request_id() or "req_unknown"
-
-    if response is None:
-        if isinstance(exc, APIError):
-            return _error_response(exc.status_code, exc.code, exc.message, exc.details, request_id)
-        return None
-
-    details = getattr(response, "data", None)
-    if isinstance(details, dict) and set(details.keys()) == {"error"}:
-        return response
-
-    if isinstance(exc, APIError):
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details, request_id)
-
-    code = _STATUS_TO_CODE.get(response.status_code, ERROR_INTERNAL_ERROR)
-    message = _summarize(details)
-    return _error_response(response.status_code, code, message, details, request_id)
-
-
-def _error_response(status, code, message, details, request_id):
-    from rest_framework.response import Response
-
-    payload = {
-        "error": {
-            "code": code,
-            "message": message,
-            "request_id": request_id,
-            "details": details if isinstance(details, dict) else {},
-        }
-    }
-    return Response(payload, status=status)
-
-
-def _summarize(details) -> str:
-    if isinstance(details, dict):
-        for key in ("detail", "non_field_errors"):
-            value = details.get(key)
-            if isinstance(value, list) and value:
-                return str(value[0])
-            if isinstance(value, str):
-                return value
-        first = next(iter(details.items()), None)
-        if first:
-            field, value = first
-            if isinstance(value, list) and value:
-                return f"{field}: {value[0]}"
-            return f"{field}: {value}"
-    return "Request failed."

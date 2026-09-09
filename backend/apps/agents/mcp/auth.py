@@ -67,8 +67,8 @@ class MCPAuthenticator:
         self,
         user: User,
         client_id: str,
-        scopes: list[str] | None = None,
-        ttl_hours: int | None = None,
+        scopes: Optional[list[str]] = None,
+        ttl_hours: Optional[int] = None,
     ) -> MCPToken:
         """Create a new MCP access token for a user."""
         ttl_hours = ttl_hours or self.DEFAULT_TTL_HOURS
@@ -181,7 +181,7 @@ class MCPTokenValidator:
     
     def validate_request(
         self,
-        auth_header: str | None,
+        auth_header: Optional[str],
         tool_name: str,
         tool_category: str,
     ) -> MCPUserContext:
@@ -231,7 +231,7 @@ class MCPRateLimiter:
         self.default_limit = getattr(settings, "MCP_RATE_LIMIT", 60)  # requests per minute
         self.burst_limit = getattr(settings, "MCP_BURST_LIMIT", 10)
     
-    def check_rate_limit(self, client_id: str, limit: int | None = None) -> tuple[bool, dict]:
+    def check_rate_limit(self, client_id: str, limit: Optional[int] = None) -> tuple[bool, dict]:
         """Check if client is within rate limits. Returns (allowed, headers)."""
         limit = limit or self.default_limit
         cache_key = f"mcp_ratelimit:{client_id}"

@@ -3,6 +3,7 @@
 Business logic depends on these protocols only; provider SDKs must not
 leak into apps.
 """
+from typing import Optional
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -12,7 +13,7 @@ class OCRResult:
     lines: list[dict] = field(default_factory=list)
     confidence: float = 0.0
     provider: str = ""
-    raw_ref: str | None = None
+    raw_ref: Optional[str] = None
 
 
 @dataclass
@@ -78,8 +79,8 @@ class EmailProvider(Protocol):
         to: list[str],
         subject: str,
         body_text: str,
-        body_html: str | None = None,
-        from_email: str | None = None,
+        body_html: Optional[str] = None,
+        from_email: Optional[str] = None,
     ) -> None: ...
     
     def send_password_reset_email(

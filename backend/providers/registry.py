@@ -13,6 +13,7 @@ Local providers work without any external credentials.
 """
 import os
 from django.conf import settings
+from typing import Optional
 
 from providers.base import (
     EmbeddingProvider,
@@ -45,9 +46,10 @@ from providers.storage.local import LocalObjectStorage
 from providers.email import MailpitEmailProvider, SMTPEmailProvider
 
 
-def _get_env(name: str, default: str | None = None) -> str | None:
+def _get_env(name: str, default: Optional[str] = None) -> Optional[str]:
     """Get environment variable with Django settings fallback.
     
+from typing import Optional
     Handles both string and list formats from settings.
     """
     value = getattr(settings, name, None) or os.environ.get(name, default)

@@ -10,6 +10,7 @@ falls back to keyword-only so suites stay portable.
 """
 from dataclasses import dataclass
 
+from typing import Optional
 from django.conf import settings
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db import connection
@@ -24,11 +25,11 @@ class Evidence:
     page_start: int
     page_end: int
     content_snippet: str
-    dense_rank: float | None
-    keyword_rank: float | None
+    dense_rank: Optional[float]
+    keyword_rank: Optional[float]
     rrf_score: float
-    document_title: str | None = None
-    subject_name: str | None = None
+    document_title: Optional[str] = None
+    subject_name: Optional[str] = None
 
     def as_dict(self) -> dict:
         return {
@@ -46,7 +47,6 @@ class Evidence:
                 "rrf": round(self.rrf_score, 6),
             },
         }
-
 
 def _rrf_k() -> int:
     return int(getattr(settings, "RETRIEVAL_RRF_K", 60))

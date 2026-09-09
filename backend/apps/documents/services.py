@@ -8,6 +8,7 @@
 - create_user_revision: user edits create a NEW immutable revision (§48).
 """
 import hashlib
+from typing import Union
 import json
 import logging
 
@@ -35,7 +36,7 @@ def compute_content_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def snapshot_hash(snapshot: dict | list) -> str:
+def snapshot_hash(snapshot: Union[dict, list]) -> str:
     return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
 
 

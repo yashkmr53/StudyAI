@@ -37,6 +37,33 @@ class User(AbstractUser):
         return self.email
 
 
+class PasswordResetToken(models.Model):
+    """Token for password reset flow (§23)."""
+
+    class Metrics(models.TextChoices):
+        ONE_HOUR = "1h", "1 hour"
+        ONE_DAY = "24h", "24 hours"
+        THREE_DAYS = "72h", "72 hours"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_reset_tokens"
+    )
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("token",)),
+        ]
+
+    def __str__(self) -> str:
+        return f"Password reset token for {self.user.email}"
+
+
 class UserProfile(models.Model):
     """Per-user AI settings + budget (§21/§74, B8)."""
 

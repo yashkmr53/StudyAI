@@ -1,5 +1,6 @@
 """MCP Server (Phase 3).
 
+from typing import Optional
 Implements the Model Context Protocol (MCP) server for StudyAI.
 Supports JSON-RPC 2.0 over HTTP/SSE and stdio.
 """
@@ -77,9 +78,9 @@ class MCPServer:
     
     def __init__(
         self,
-        tool_registry: MCPToolRegistry | None = None,
-        authenticator: MCPAuthenticator | None = None,
-        token_validator: MCPTokenValidator | None = None,
+        tool_registry: Optional[MCPToolRegistry] = None,
+        authenticator: Optional[MCPAuthenticator] = None,
+        token_validator: Optional[MCPTokenValidator] = None,
         rate_limiter: Optional["MCPRateLimiter"] = None,
     ):
         self.tool_registry = tool_registry or get_mcp_tool_registry()
@@ -95,7 +96,7 @@ class MCPServer:
             "ping": self._handle_ping,
         }
     
-    def handle_request(self, request_data: dict, auth_header: str | None = None) -> JSONRPCResponse:
+    def handle_request(self, request_data: dict, auth_header: Optional[str] = None) -> JSONRPCResponse:
         """Handle a JSON-RPC request."""
         try:
             req = JSONRPCRequest(**request_data)
@@ -126,7 +127,7 @@ class MCPServer:
             logger.exception("MCP method error: %s", req.method)
             return self._error_response(req.id, MCPErrorCode.INTERNAL_ERROR, f"Internal error: {e}")
     
-    def _handle_initialize(self, params: dict, auth_header: str | None) -> dict:
+    def _handle_initialize(self, params: dict, auth_header: Optional[str]) -> dict:
         """Handle initialize request."""
         return {
             "protocolVersion": "2024-11-05",
@@ -139,17 +140,17 @@ class MCPServer:
             },
         }
     
-    def _handle_ping(self, params: dict, auth_header: str | None) -> dict:
+    def _handle_ping(self, params: dict, auth_header: Optional[str]) -> dict:
         """Handle ping request."""
         return {"status": "ok", "timestamp": time.time()}
     
-    def _handle_tools_list(self, params: dict, auth_header: str | None) -> dict:
+    def _handle_tools_list(self, params: dict, auth_header: Optional[str]) -> dict:
         """Handle tools/list request."""
         # No auth required for listing tools
         tools = self.tool_registry.get_tool_definitions()
         return {"tools": tools}
     
-    def _handle_tools_call(self, params: dict, auth_header: str | None) -> dict:
+    def _handle_tools_call(self, params: dict, auth_header: Optional[str]) -> dict:
         """Handle tools/call request."""
         # Extract parameters
         tool_name = params.get("name")
@@ -275,9 +276,9 @@ class MCPHTTPView(View):
 
 
 def create_mcp_server(
-    tool_registry: MCPToolRegistry | None = None,
-    authenticator: MCPAuthenticator | None = None,
-    token_validator: MCPTokenValidator | None = None,
+    tool_registry: Optional[MCPToolRegistry] = None,
+    authenticator: Optional[MCPAuthenticator] = None,
+    token_validator: Optional[MCPTokenValidator] = None,
     rate_limiter: Optional["MCPRateLimiter"] = None,
 ) -> MCPServer:
     """Create and configure an MCP server instance."""

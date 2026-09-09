@@ -9,6 +9,7 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
     blocks = serializers.SerializerMethodField()
     job_status = serializers.SerializerMethodField()
 
+from typing import Optional
     class Meta:
         model = EnrichedNote
         fields = (
@@ -41,7 +42,7 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
             })
         return out
 
-    def get_job_status(self, obj) -> str | None:
+    def get_job_status(self, obj) -> Optional[str]:
         job = (
             Job.objects.filter(resource_type="document", resource_id=str(obj.document_id))
             .order_by("-created_at")

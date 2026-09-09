@@ -1,5 +1,6 @@
 """Mastery scoring + adaptive test generation (architecture §17–18, §55–58).
 
+from typing import Union
 MasteryScoringService: deterministic EMA update on attempts; tags without
 attempts are not_assessed (no row), never zero.
 TestGenerationService: deterministic priority ordering over eligible
@@ -17,6 +18,7 @@ from apps.tests.models import MasteryScore, TestAttempt, TestInstance, TestQuest
 
 logger = logging.getLogger(__name__)
 
+from typing import Optional, Union
 WEAK_THRESHOLD = 0.4
 STRONG_THRESHOLD = 0.8
 RECENCY_DAYS = 7
@@ -24,7 +26,7 @@ RECENCY_DAYS = 7
 
 class MasteryScoringService:
     @staticmethod
-    def mastery_status(score: "MasteryScore | None") -> str:
+    def mastery_status(score: "Union[MasteryScore, None]") -> str:
         if score is None or score.attempt_count == 0:
             return "not_assessed"
         if score.mastery >= STRONG_THRESHOLD:
@@ -43,7 +45,7 @@ class MasteryScoringService:
 
     @staticmethod
     @transaction.atomic
-    def record_attempt(profile, question: Question, *, correct: bool, confidence: float | None) -> MasteryScore | None:
+    def record_attempt(profile, question: Question, *, correct: bool, confidence: float) -> Union[MasteryScore, None]:
         """Single-transaction attempt scoring (§56). Returns updated row or
         None when the question has no tag to score against."""
         from apps.questions.models import QuestionTagLink

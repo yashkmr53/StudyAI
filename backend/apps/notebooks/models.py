@@ -1,5 +1,6 @@
 """Notebooks module models (architecture §60 CRUD).
 
+from typing import Optional
 Mirrors the canonical Document/DocumentPage/DocumentLine layer but simplified
 for handwritten note-taking without OCR pipeline. Each notebook belongs to a
 profile and subject; pages contain stroke data (client-side canvas).

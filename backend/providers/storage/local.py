@@ -9,6 +9,7 @@ views in providers.storage.views; with S3 these views disappear in favor of
 direct-to-bucket uploads.
 """
 import hashlib
+from typing import Optional
 import hmac
 import time
 from pathlib import Path
@@ -30,11 +31,11 @@ class LocalObjectStorage:
             raise ValueError("Invalid object key.")
         return path
 
-    def create_upload_url(self, key: str, *, content_type: str, ttl_seconds: int | None = None) -> str:
+    def create_upload_url(self, key: str, *, content_type: str, ttl_seconds: Optional[int] = None) -> str:
         ttl = ttl_seconds if ttl_seconds is not None else settings.SIGNED_URL_TTL_SECONDS
         return self._sign("upload", key, ttl, content_type=content_type)
 
-    def create_download_url(self, key: str, *, ttl_seconds: int | None = None) -> str:
+    def create_download_url(self, key: str, *, ttl_seconds: Optional[int] = None) -> str:
         ttl = ttl_seconds if ttl_seconds is not None else settings.SIGNED_URL_TTL_SECONDS
         return self._sign("download", key, ttl)
 
@@ -57,7 +58,7 @@ class LocalObjectStorage:
         return self._safe_path(key).stat().st_size
 
     @staticmethod
-    def verify(token: str, expected_action: str | None = None) -> dict:
+    def verify(token: str, expected_action: Optional[str] = None) -> dict:
         signer = TimestampSigner()
         try:
             payload = signer.unsign_object(token, max_age=settings.SIGNED_URL_TTL_SECONDS)
@@ -71,7 +72,7 @@ class LocalObjectStorage:
             raise Forbidden("Signed URL action mismatch.")
         return payload
 
-    def _sign(self, action: str, key: str, ttl_seconds: int, *, content_type: str | None = None) -> str:
+    def _sign(self, action: str, key: str, ttl_seconds: int, *, content_type: Optional[str] = None) -> str:
         signer = TimestampSigner()
         payload = {"action": action, "key": key}
         if content_type:

@@ -9,6 +9,7 @@ Agent mode (Phase 1): When X-Agent-Mode header is present or AGENT_ENABLED,
 uses StudyAIAgent for multi-step tool-use orchestration.
 """
 import json
+from typing import Optional
 import logging
 import re
 import time
@@ -22,6 +23,7 @@ from apps.chat.models import ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
 
+from typing import Optional
 CHAT_PROMPT_VERSION = "chat:v1"
 AGENT_PROMPT_VERSION = getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1")
 
@@ -106,7 +108,7 @@ class ChatService:
         return truncated
 
     @staticmethod
-    def _ask_classic(session: ChatSession, content: str, previous_messages: list[dict] | None = None) -> ChatMessage:
+    def _ask_classic(session: ChatSession, content: str, previous_messages: Optional[list[dict]] = None) -> ChatMessage:
         """LangGraph-based RAG chatbot implementation."""
         from ai.langgraph.graphs.chat_graph import invoke_chat_graph
         from ai.langgraph.state.chat_state import ChatState
@@ -243,7 +245,7 @@ class ChatService:
                 ChatMessage.objects.create(
                     session=session, role=ChatMessage.Role.USER, content=content
                 )
-                generated_title: str | None = None
+                generated_title: Optional[str] = None
                 if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
                     session.title = ChatService._generate_title(content)
                     session.save(update_fields=["title"])

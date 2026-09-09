@@ -1,5 +1,6 @@
 """Tool abstraction layer (Phase 1).
 
+from typing import Optional
 Strongly typed tool interface with Pydantic schema validation,
 authorization enforcement, and observability.
 """
@@ -26,7 +27,7 @@ class ToolInput(BaseModel):
 class ToolOutput(BaseModel):
     """Base output schema — all tools must define concrete schema."""
     success: bool = True
-    error: str | None = None
+    error: Optional[str] = None
     latency_ms: int = 0
 
     model_config = ConfigDict(extra="forbid")

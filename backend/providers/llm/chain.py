@@ -1,4 +1,5 @@
 """LLM provider fallback chain (architecture §28).
+from typing import Optional
 
 Mirrors OCRChainProvider: primary attempt → fallback attempt(s) →
 ProviderUnavailable. Every attempt is recorded in ProviderCallLog for
@@ -61,7 +62,7 @@ def record_provider_call(
     output_tokens: int = 0,
     total_tokens: int = 0,
     estimated_cost_usd: float = 0.0,
-    metadata: dict | None = None,
+    metadata = None,
 ) -> None:
     """Best-effort provider usage telemetry (§25). Never raises."""
     try:

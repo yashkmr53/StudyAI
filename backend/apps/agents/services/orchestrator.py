@@ -26,14 +26,14 @@ class ToolCallRecord:
     result: dict
     latency_ms: int
     success: bool
-    error: str | None = None
+    error: Optional[str] = None
 
 
 @dataclass
 class AgentDecision:
     is_final_answer: bool
-    tool_name: str | None = None
-    tool_args: dict | None = None
+    tool_name: Optional[str] = None
+    tool_args: Optional[dict] = None
     reasoning: str = ""
     final_answer: str = ""
     citations: list[dict] = field(default_factory=list)
@@ -49,8 +49,8 @@ class AgentResult:
     total_latency_ms: int
     outcome: str
     trace_id: str
-    verification_status: str | None = None
-    verification_score: float | None = None
+    verification_status: Optional[str] = None
+    verification_score: Optional[float] = None
 
 
 class AgentOrchestrator:
@@ -58,10 +58,10 @@ class AgentOrchestrator:
 
     def __init__(
         self,
-        max_iterations: int | None = None,
-        max_tool_calls: int | None = None,
-        request_timeout_seconds: int | None = None,
-        per_tool_timeout_seconds: int | None = None,
+        max_iterations: Optional[int] = None,
+        max_tool_calls: Optional[int] = None,
+        request_timeout_seconds: Optional[int] = None,
+        per_tool_timeout_seconds: Optional[int] = None,
     ):
         self.max_iterations = max_iterations or getattr(settings, "AGENT_MAX_ITERATIONS", 5)
         self.max_tool_calls = max_tool_calls or getattr(settings, "AGENT_MAX_TOOL_CALLS", 10)
@@ -288,7 +288,7 @@ class AgentOrchestrator:
         answer: str,
         citations: list[dict],
         request_id: str,
-    ) -> tuple[str | None, float | None]:
+    ) -> tuple[Optional[str], Optional[float]]:
         """Verify the final answer against cited sources."""
         if not citations:
             return None, None

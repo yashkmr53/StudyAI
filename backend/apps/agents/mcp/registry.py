@@ -3,7 +3,7 @@
 Maps StudyAI internal tools to MCP tool definitions with JSON Schema.
 """
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from dataclasses import dataclass, field
 
 from apps.agents.tools import get_tool_registry
@@ -20,7 +20,7 @@ class MCPToolDefinition:
     requires_auth: bool = True
     category: str = "general"
     # Internal tool reference
-    _internal_tool: BaseTool | None = field(default=None, repr=False)
+    _internal_tool: Optional[BaseTool] = field(default=None, repr=False)
 
     def to_mcp_dict(self) -> dict:
         """Convert to MCP tool definition format."""
@@ -66,7 +66,7 @@ class MCPToolRegistry:
         """Get all MCP tool definitions."""
         return list(self._tools.values())
     
-    def get_tool(self, name: str) -> MCPToolDefinition | None:
+    def get_tool(self, name: str) -> Optional[MCPToolDefinition]:
         """Get a specific tool by name."""
         return self._tools.get(name)
     
@@ -108,7 +108,7 @@ class MCPToolRegistry:
 
 
 # Singleton instance
-_mcp_registry: MCPToolRegistry | None = None
+_mcp_registry: Optional[MCPToolRegistry] = None
 
 def get_mcp_tool_registry() -> MCPToolRegistry:
     """Get the singleton MCP tool registry."""

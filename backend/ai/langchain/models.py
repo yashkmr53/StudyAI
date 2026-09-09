@@ -19,8 +19,8 @@ class LangChainChatModelAdapter(LLMProvider):
     def __init__(
         self,
         *,
-        base_url: str | None = None,
-        model: str | None = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
         temperature: float = 0.1,
         timeout: int = 120,
         name: str = "ollama-langchain",
@@ -188,8 +188,8 @@ class LangChainEmbeddingAdapter(EmbeddingProvider):
     def __init__(
         self,
         *,
-        model_name: str | None = None,
-        device: str | None = None,
+        model_name: Optional[str] = None,
+        device: Optional[str] = None,
         batch_size: int = 32,
         name: str = "sentence_transformers_langchain",
     ):

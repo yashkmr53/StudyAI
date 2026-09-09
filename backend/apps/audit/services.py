@@ -1,5 +1,6 @@
 """Audit service — explicit, non-blocking audit writes (§23)."""
 import logging
+from typing import Optional
 
 from django.db import transaction
 
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def audit(*, actor=None, action: str, resource_type: str = "", resource_id: str = "",
-          request=None, metadata: dict | None = None) -> None:
+          request=None, metadata: Optional[dict] = None) -> None:
     """Record an administrative/audit event. Never raises into caller flow."""
     try:
         ip = None

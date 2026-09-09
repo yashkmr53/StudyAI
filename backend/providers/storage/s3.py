@@ -15,6 +15,7 @@ from providers.base import ObjectStorageProvider
 
 logger = logging.getLogger(__name__)
 
+from typing import Optional
 
 class MinIOStorageProvider:
     """MinIO / S3-compatible object storage provider.
@@ -44,13 +45,13 @@ class MinIOStorageProvider:
     def __init__(
         self,
         *,
-        backend: str | None = None,
-        endpoint: str | None = None,
-        access_key: str | None = None,
-        secret_key: str | None = None,
-        bucket: str | None = None,
-        region: str | None = None,
-        secure: bool | None = None,
+        backend: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        bucket: Optional[str] = None,
+        region: Optional[str] = None,
+        secure: Optional[bool] = None,
         fail: bool = False,
         name: str = "minio",
     ):

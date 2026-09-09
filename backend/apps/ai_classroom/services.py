@@ -31,6 +31,7 @@ from shared.exceptions import ResourceNotFound, ValidationError
 
 logger = logging.getLogger(__name__)
 
+from typing import Optional
 
 def _verifier_version() -> str:
     return getattr(settings, "VERIFIER_VERSION", "sim-v1")
@@ -88,7 +89,7 @@ class EvidenceVerifier:
         return float(getattr(settings, "VERIFIER_PARTIAL_THRESHOLD", 0.30))
 
     @classmethod
-    def verify(cls, block_content: str, source_refs: list[dict]) -> tuple[str, float | None]:
+    def verify(cls, block_content: str, source_refs: list[dict]) -> tuple[str, Optional[float]]:
         if not source_refs:
             return CitationBlock.VerificationStatus.NOT_VERIFIED, None
 
@@ -103,7 +104,7 @@ class EvidenceVerifier:
         return cls._classify(block_content, cited_contents)
 
     @classmethod
-    def _classify(cls, block_content: str, cited_contents: list[str]) -> tuple[str, float | None]:
+    def _classify(cls, block_content: str, cited_contents: list[str]) -> tuple[str, Optional[float]]:
         """DB-free classification over already-resolved chunk contents."""
         score = cls._lexical_support(block_content, cited_contents)
         if score >= cls._supported_threshold():

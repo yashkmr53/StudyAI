@@ -33,10 +33,10 @@ class MailpitEmailProvider:
     def __init__(
         self,
         *,
-        host: str | None = None,
-        port: int | None = None,
-        api_url: str | None = None,
-        from_email: str | None = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        api_url: Optional[str] = None,
+        from_email: Optional[str] = None,
         fail: bool = False,
         name: str = "mailpit",
     ):
@@ -67,8 +67,8 @@ class MailpitEmailProvider:
         to: list[str],
         subject: str,
         body_text: str,
-        body_html: str | None = None,
-        from_email: str | None = None,
+        body_html: Optional[str] = None,
+        from_email: Optional[str] = None,
     ) -> None:
         """Send email via Mailpit SMTP."""
         if self.fail:
@@ -152,13 +152,13 @@ class SMTPEmailProvider:
     def __init__(
         self,
         *,
-        host: str | None = None,
-        port: int | None = None,
-        username: str | None = None,
-        password: str | None = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         use_tls: bool = True,
         use_ssl: bool = False,
-        from_email: str | None = None,
+        from_email: Optional[str] = None,
         fail: bool = False,
         name: str = "smtp",
     ):
@@ -198,8 +198,8 @@ class SMTPEmailProvider:
         to: list[str],
         subject: str,
         body_text: str,
-        body_html: str | None = None,
-        from_email: str | None = None,
+        body_html: Optional[str] = None,
+        from_email: Optional[str] = None,
     ) -> None:
         """Send email via SMTP."""
         if self.fail:
@@ -276,8 +276,8 @@ class ConsoleEmailProvider:
         to: list[str],
         subject: str,
         body_text: str,
-        body_html: str | None = None,
-        from_email: str | None = None,
+        body_html: Optional[str] = None,
+        from_email: Optional[str] = None,
     ) -> None:
         if self.fail:
             raise RuntimeError(f"{self.name}: simulated provider failure")

@@ -82,7 +82,7 @@ class LogoutView(APIView):
 
 
 class PasswordResetView(APIView):
-    """Always returns 202; never reveals whether an email exists."""
+    """Initiate password reset: create token + dispatch email (§23)."""
 
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -92,8 +92,42 @@ class PasswordResetView(APIView):
         email = request.data.get("email")
         if not email:
             raise ValidationError("Email is required.")
-        # v1: dispatch through the email backend when configured.
-        return Response({"detail": "If the address exists, a reset link has been sent."}, status=202)
+        user = User.objects.filter(email=email).first()
+        if user:
+            from shared.crypto import generate_token
+            from apps.accounts.services import PasswordResetTokenService
+
+            token_service = PasswordResetTokenService(user)
+            token_service.create_and_send()
+        # Always return 200 without revealing whether address exists
+        return Response({"detail": "If the address exists, a reset link has been sent."}, status=200)
+
+
+class PasswordResetConfirmView(APIView):
+    """Confirm password reset with token (§23)."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        token_str = request.data.get("token")
+        new_password = request.data.get("new_password")
+        if not token_str or not new_password:
+            raise ValidationError("Token and new password are required.")
+        from apps.accounts.services import PasswordResetTokenService
+
+        result = PasswordResetTokenService.confirm(token_str, new_password)
+        if result["success"]:
+            return Response({"detail": "Password reset successful."}, status=status.HTTP_200_OK)
+        raise ValidationError(result["error"])
+
+
+class RefreshView(TokenRefreshView):
+    """Token refresh with rotation+blacklist (config from SIMPLE_JWT)."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
 
 
 class RefreshView(TokenRefreshView):
