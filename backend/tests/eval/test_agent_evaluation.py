@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
