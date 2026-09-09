@@ -85,7 +85,7 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
     const name = window.prompt(t("nav.newProfilePrompt"));
     if (!name?.trim()) return;
     try {
-      await addProfile(name.trim());
+      await addProfile(name.trim(), dropdownModule);
       setSwitcherOpen(false);
       navigate("/subjects");
     } catch {

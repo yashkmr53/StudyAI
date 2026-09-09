@@ -31,7 +31,7 @@ interface AuthState {
   refreshProfiles: () => Promise<void>;
   switchProfile: (id: string) => void;
   switchToProfile: (profile: Profile) => void;
-  addProfile: (name: string) => Promise<Profile>;
+  addProfile: (name: string, module?: ModuleId) => Promise<Profile>;
 }
 
 function loadSelectedProfileIds(): Record<ModuleId, string | null> {
@@ -227,20 +227,20 @@ export const useAuthStore = create<AuthState>((set, get) => {
       });
     },
 
-    async addProfile(name) {
-      const created = await profilesApi.create(name);
+    async addProfile(name, module?: ModuleId) {
+      const created = await profilesApi.create(name, module);
       const profiles = [...get().profiles, created];
-      const module = (created.module as ModuleId) ?? get().module;
-      saveSelectedProfileId(module, created.id);
+      const newModule = (created.module as ModuleId) ?? module ?? get().module;
+      saveSelectedProfileId(newModule, created.id);
       localStorage.setItem("studyai.profile", created.id);
-      persistModule(module);
-      setActiveModule(module);
+      persistModule(newModule);
+      setActiveModule(newModule);
       setActiveProfileId(created.id);
       set({
         profiles,
         profile: created,
-        module,
-        selectedProfileIds: { ...get().selectedProfileIds, [module]: created.id },
+        module: newModule,
+        selectedProfileIds: { ...get().selectedProfileIds, [newModule]: created.id },
       });
       return created;
     },

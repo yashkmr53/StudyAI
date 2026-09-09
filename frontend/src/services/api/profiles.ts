@@ -11,8 +11,8 @@ export const profilesApi = {
     return toList<Profile>(await apiRequest<unknown>("/profiles", opts));
   },
 
-  create(name: string): Promise<Profile> {
-    return apiRequest<Profile>("/profiles", { method: "POST", body: { name } });
+  create(name: string, module?: ModuleId): Promise<Profile> {
+    return apiRequest<Profile>("/profiles", { method: "POST", body: { name }, module });
   },
 
   rename(id: string, name: string): Promise<Profile> {
