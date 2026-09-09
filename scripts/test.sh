@@ -77,4 +77,7 @@ labels=("$@")
 step "Running tests (settings: config.settings.ci, database: PostgreSQL/pgvector)"
 exec docker compose exec -T \
     -e DJANGO_SETTINGS_MODULE=config.settings.ci \
+    -e LANGSMITH_TRACING=false \
+    -e EMBEDDING_PROVIDER=hashing \
+    -e EMBEDDING_MODEL_VERSION=hashing-384-v1 \
     api python manage.py test "${labels[@]}" --noinput -v 2

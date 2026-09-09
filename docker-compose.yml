@@ -161,6 +161,45 @@ services:
     volumes:
       - objectstore:/app/var/objectstore
 
+  # Test runner service - uses test settings with hashing embedder and no LangSmith
+  test:
+    build: ./backend
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+    environment:
+      <<: *backend-env
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      EMBEDDING_PROVIDER: hashing
+      EMBEDDING_MODEL_VERSION: hashing-384-v1
+      LANGSMITH_TRACING: "false"
+    command: python -m pytest --tb=short
+    volumes:
+      - objectstore:/app/var/objectstore
+
+  # Test runner for CI - uses PostgreSQL service
+  test-ci:
+    build: ./backend
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      EMBEDDING_PROVIDER: hashing
+      EMBEDDING_MODEL_VERSION: hashing-384-v1
+      LANGSMITH_TRACING: "false"
+      POSTGRES_DB: studyai
+      POSTGRES_USER: studyai
+      POSTGRES_PASSWORD: studyai
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      STORAGE_BACKEND: local
+      OCR_PROVIDER_CHAIN: mock,mock
+      LLM_PROVIDER_CHAIN: mock,mock
+      EMAIL_BACKEND: console
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+    command: python -m pytest --tb=short
+
   frontend:
     build: ./frontend
     restart: unless-stopped

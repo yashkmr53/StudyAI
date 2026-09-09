@@ -37,3 +37,7 @@ OBJECT_STORAGE_BACKEND = "local"
 WEB_SEARCH_PROVIDER = "mock"
 
 LANGSMITH_TRACING = False
+
+# Use hashing embedder for CI (no ML dependencies)
+EMBEDDING_PROVIDER = "hashing"
+EMBEDDING_MODEL_VERSION = "hashing-384-v1"
