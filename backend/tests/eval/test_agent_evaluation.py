@@ -1,5 +1,6 @@
 """Agent evaluation suite (Phase 5).
 
+from typing import Optional
 Provides evaluation scenarios and metrics for the StudyAI Agent.
 """
 import hashlib
@@ -7,7 +8,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -34,7 +35,7 @@ class EvalScenario:
     expected_outcome: str = "success"
     min_tool_calls: int = 0
     max_tool_calls: int = 10
-    guardrail_test: str | None = None
+    guardrail_test: Optional[str] = None
 
 
 class AgentEvaluationScenarios:

@@ -1,5 +1,6 @@
 """Typed state for the Ask StudyAI (Chat) LangGraph workflow."""
 from typing import TypedDict, Optional, Any
+from typing import Optional
 
 from ai.langgraph.state.base_state import BaseStudyAIState
 

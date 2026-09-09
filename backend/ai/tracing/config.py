@@ -136,7 +136,7 @@ def log_llm_call(
     latency_ms: int,
     success: bool,
     error: str = "",
-    metadata: dict | None = None,
+    metadata: Optional[dict] = None,
 ) -> None:
     """Log an LLM call to LangSmith.
 
@@ -174,7 +174,7 @@ def log_tool_call(
     latency_ms: int,
     success: bool,
     error: str = "",
-    metadata: dict | None = None,
+    metadata: Optional[dict] = None,
 ) -> None:
     """Log a tool call to LangSmith."""
     client = get_client()
@@ -203,11 +203,11 @@ def log_retrieval(
     *,
     query: str,
     profile_id: str,
-    subject_id: str | None,
+    subject_id: Optional[str],
     k: int,
     results_count: int,
     latency_ms: int,
-    metadata: dict | None = None,
+    metadata: Optional[dict] = None,
 ) -> None:
     """Log a retrieval operation to LangSmith."""
     client = get_client()

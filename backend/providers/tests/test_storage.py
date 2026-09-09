@@ -15,6 +15,13 @@ class TestLocalObjectStorage(TestCase):
     def setUp(self):
         self.provider = LocalObjectStorage()
 
+    def tearDown(self):
+        for key in ["test/exists.txt", "test/delete.txt", "test/file.txt", "test/size.txt"]:
+            try:
+                self.provider.delete(key)
+            except Exception:
+                pass
+
     def test_store_and_read_bytes(self):
         """Should store and read bytes correctly."""
         key = "test/file.txt"
@@ -56,6 +63,7 @@ class TestLocalObjectStorage(TestCase):
     def test_exists(self):
         """Should check existence."""
         key = "test/exists.txt"
+        self.provider.delete(key)
         assert not self.provider.exists(key)
         
         self.provider.store_bytes(key, b"data")

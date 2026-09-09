@@ -1,5 +1,7 @@
 """Local Ollama LLM provider (Phase 11).
 
+from typing import Union
+from typing import Optional
 Communicates with a local Ollama server for LLM inference.
 Supports structured output via JSON schema.
 """
@@ -7,7 +9,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Optional, Union
 
 import requests
 
@@ -30,8 +32,8 @@ class OllamaLLMProvider:
     def __init__(
         self,
         *,
-        base_url: str | None = None,
-        model: str | None = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
         fail: bool = False,
         name: str = "ollama",
         timeout: int = 120,
@@ -77,7 +79,7 @@ class OllamaLLMProvider:
         self,
         *,
         prompt: Prompt,
-        schema: type | dict = None,
+        schema: Union[type, dict] = None,
         request_id: str,
     ) -> StructuredLLMResult:
         """Generate structured output from Ollama.
@@ -159,7 +161,7 @@ class OllamaLLMProvider:
             logger.exception("Ollama generation failed")
             raise RuntimeError(f"Ollama generation failed: {e}") from e
     
-    def _build_system_prompt(self, prompt: Prompt, schema: type | dict | None) -> str:
+    def _build_system_prompt(self, prompt: Prompt, schema: Union[type, dict, None]) -> str:
         """Build system prompt with schema instructions."""
         parts = []
         
@@ -185,14 +187,14 @@ class OllamaLLMProvider:
         
         return "\n\n".join(parts)
     
-    def _resolve_format(self, schema: type | dict | None) -> str | dict | None:
+    def _resolve_format(self, schema: Union[type, dict, None]) -> Union[str, dict, None]:
         """Resolve the format value to send to Ollama."""
         if not schema:
             return None
         schema_dict = self._schema_to_dict(schema)
         return schema_dict if isinstance(schema_dict, dict) else "json"
     
-    def _schema_to_dict(self, schema: type | dict) -> dict:
+    def _schema_to_dict(self, schema: Union[type, dict]) -> dict:
         """Convert schema (Pydantic type or dict) to JSON schema dict."""
         if isinstance(schema, dict):
             return schema
@@ -202,7 +204,7 @@ class OllamaLLMProvider:
             return schema.schema()
         return {"type": "object"}
     
-    def _validate_output(self, data: dict, schema: type | dict | None) -> None:
+    def _validate_output(self, data: dict, schema: Union[type, dict, None]) -> None:
         """Validate parsed output against schema. Raises RuntimeError if invalid."""
         if not schema:
             return
@@ -237,8 +239,8 @@ class OllamaChatProvider:
     def __init__(
         self,
         *,
-        base_url: str | None = None,
-        model: str | None = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
         fail: bool = False,
         name: str = "ollama-chat",
         timeout: int = 120,
@@ -253,7 +255,7 @@ class OllamaChatProvider:
         self,
         *,
         prompt: Prompt,
-        schema: type | dict = None,
+        schema: Union[type, dict] = None,
         request_id: str,
     ) -> StructuredLLMResult:
         """Generate using Ollama chat API."""
@@ -325,7 +327,7 @@ class OllamaChatProvider:
             logger.exception("Ollama chat generation failed")
             raise RuntimeError(f"Ollama chat generation failed: {e}") from e
     
-    def _build_system_prompt(self, prompt: Prompt, schema: type | dict | None) -> str:
+    def _build_system_prompt(self, prompt: Prompt, schema: Union[type, dict, None]) -> str:
         parts = []
         if prompt.system:
             parts.append(prompt.system)

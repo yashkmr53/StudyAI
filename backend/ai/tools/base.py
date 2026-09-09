@@ -1,5 +1,6 @@
 """Base tool wrapper preserving StudyAI auth/validation boundaries."""
 from typing import Any, Callable, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 

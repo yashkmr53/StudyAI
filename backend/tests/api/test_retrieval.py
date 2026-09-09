@@ -13,6 +13,7 @@ from apps.jobs.models import Job
 from apps.profiles.models import Profile
 from apps.retrieval.models import NoteChunk
 from providers.registry import get_embedding_provider
+from shared.exceptions import ProviderError
 from tests.api.utils import authenticated_client
 
 
@@ -55,8 +56,9 @@ def _make_ocr_document(client, profile, page_texts: list[list[str]]) -> str:
 class EmbeddingProviderTests(TestCase):
     def test_deterministic_normalized_vectors(self):
         provider = get_embedding_provider()
-        v1 = provider.embed(["quicksort partition pivot"], model_version="hashing-384-v1")
-        v2 = provider.embed(["quicksort partition pivot"], model_version="hashing-384-v1")
+        version = provider.model_version
+        v1 = provider.embed(["quicksort partition pivot"], model_version=version)
+        v2 = provider.embed(["quicksort partition pivot"], model_version=version)
         self.assertEqual(v1, v2)
         vec = v1[0]
         self.assertEqual(len(vec), 384)
@@ -65,9 +67,64 @@ class EmbeddingProviderTests(TestCase):
 
     def test_different_texts_differ(self):
         provider = get_embedding_provider()
-        a = provider.embed(["binary search trees"], model_version="m")[0]
-        b = provider.embed(["red black tree rotations"], model_version="m")[0]
+        version = provider.model_version
+        a = provider.embed(["binary search trees"], model_version=version)[0]
+        b = provider.embed(["red black tree rotations"], model_version=version)[0]
         self.assertNotEqual(a, b)
+
+    def test_version_mismatch_raises_provider_error(self):
+        provider = get_embedding_provider()
+        with self.assertRaises(ProviderError) as cm:
+            provider.embed(["test"], model_version="wrong-version")
+        self.assertIn("Embedding model version mismatch", str(cm.exception))
+
+
+class ModelVersionMigrationTests(TestCase):
+    def test_stale_chunk_reembedding_on_version_change(self):
+        client = authenticated_client("alice@example.com", "s3curePass!x")
+        profile = Profile.objects.get(user__email="alice@example.com")
+        doc_id = _make_ocr_document(
+            client,
+            profile,
+            [["Version sensitive content for migration test."]],
+        )
+        document = Document.objects.get(pk=doc_id)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            from apps.retrieval.services import index_document
+            index_document(document)
+
+        chunk = NoteChunk.objects.filter(document=document, stale=False).first()
+        self.assertIsNotNone(chunk)
+        self.assertIsNotNone(chunk.embedding)
+        self.assertEqual(chunk.embedding_model, "hashing")
+        original_version = chunk.embedding_version
+        self.assertIsNotNone(original_version)
+
+        chunk.stale = True
+        chunk.save(update_fields=("stale",))
+
+        fake_version = "hashing-fake-model-v99"
+        fake_vectors = [[0.5] * 384]
+
+        from unittest.mock import patch, MagicMock
+
+        mock_provider = MagicMock()
+        mock_provider.name = "hashing"
+        mock_provider.model_version = fake_version
+        mock_provider.embed.return_value = fake_vectors
+        mock_provider.dimension = 384
+
+        with patch("providers.registry.get_embedding_provider", return_value=mock_provider), patch(
+            "providers.registry.embedding_model_version", return_value=fake_version
+        ):
+            index_document(document)
+
+        chunk.refresh_from_db()
+        self.assertFalse(chunk.stale)
+        self.assertIsNotNone(chunk.embedding)
+        self.assertEqual(chunk.embedding_version, fake_version)
+        mock_provider.embed.assert_called_once()
 
 
 class ChunkingTests(TestCase):
@@ -117,7 +174,7 @@ class ChunkingTests(TestCase):
         for chunk in chunks:
             self.assertIsNotNone(chunk.embedding)
             self.assertEqual(len(chunk.embedding), 384)
-            self.assertEqual(chunk.embedding_model, "sentence_transformers")
+            self.assertEqual(chunk.embedding_model, "hashing")
 
     def test_index_rerun_is_incremental_not_duplicating(self):
         from apps.retrieval.services import enqueue_index_job

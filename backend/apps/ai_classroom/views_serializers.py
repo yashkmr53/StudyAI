@@ -1,4 +1,5 @@
 """Serializers for the AI Classroom generated layer (§9/§12 shapes)."""
+from typing import Optional
 from rest_framework import serializers
 
 from apps.ai_classroom.models import EnrichedNote
@@ -41,7 +42,7 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
             })
         return out
 
-    def get_job_status(self, obj) -> str | None:
+    def get_job_status(self, obj) -> Optional[str]:
         job = (
             Job.objects.filter(resource_type="document", resource_id=str(obj.document_id))
             .order_by("-created_at")

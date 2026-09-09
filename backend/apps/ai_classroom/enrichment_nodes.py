@@ -7,8 +7,9 @@ from ai.langgraph.state.enrichment_state import EnrichmentState
 from ai.tracing.config import log_llm_call
 from ai.tracing.decorators import traced_node
 from apps.ai_classroom.prompts import active_prompt, validate_stage_output, SCHEMAS
-from apps.retrieval.models import NoteChunk
 from apps.documents.models import Document
+from apps.retrieval.retrieval import RetrievalService
+from apps.retrieval.models import NoteChunk
 from providers.registry import get_llm_provider
 from providers.base import Prompt
 
@@ -24,15 +25,44 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
         .select_related("reference_book")
         .order_by("chunk_index")[:8]
     )
-    reference_chunks = list(
-        NoteChunk.objects.filter(
-            source_type="reference",
-            stale=False,
-            reference_book__status="ready",
-        ).exclude(reference_book__isnull=True)
-        .select_related("reference_book")
-        .order_by("?")[:6]
-    )
+
+    # Use RetrievalService to fetch reference chunks by relevance to document content
+    # instead of non-deterministic order_by("?") (§51, G10).
+    # We embed the document's content to find the most relevant reference chunks.
+    from_provider = get_llm_provider()  # placeholder - not used, kept for import context
+    try:
+        # Try to use RetrievalService with document content as query
+        # For reference chunks, we search within the same document's profile
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        # Get a user from the document's profile - use the profile's user
+        profile = document.profile
+        user = profile.user if profile else None
+        if user:
+            ref_evidence = RetrievalService.search(user, document.content or "", top_k=6, include_reference=True)
+            reference_chunks = [NoteChunk.objects.get(pk=ev.chunk_id) for ev in ref_evidence if ev.chunk_id]
+        else:
+            # Fallback: deterministic selection without randomness
+            reference_chunks = list(
+                NoteChunk.objects.filter(
+                    source_type="reference",
+                    stale=False,
+                    reference_book__status="ready",
+                ).exclude(reference_book__isnull=True)
+                .select_related("reference_book")
+                .order_by("-chunk_index")[:6]
+            )
+    except Exception:
+        # Fallback to deterministic selection if retrieval fails
+        reference_chunks = list(
+            NoteChunk.objects.filter(
+                source_type="reference",
+                stale=False,
+                reference_book__status="ready",
+            ).exclude(reference_book__isnull=True)
+            .select_related("reference_book")
+            .order_by("-chunk_index")[:6]
+        )
 
     def as_evidence(chunks):
         return [{"chunk_id": str(c.pk), "content": c.content} for c in chunks]
@@ -47,8 +77,8 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
                          "document_id": str(c.document_id), "page_start": c.page_start,
                          "page_end": c.page_end, "revision_ids": c.revision_ids} for c in user_chunks],
         "reference_chunks": [{"chunk_id": str(c.pk), "content": c.content, "source_type": c.source_type,
-                               "document_id": str(c.document_id), "page_start": c.page_start,
-                               "page_end": c.page_end, "revision_ids": c.revision_ids} for c in reference_chunks],
+                              "document_id": str(c.document_id), "page_start": c.page_start,
+                              "page_end": c.page_end, "revision_ids": c.revision_ids} for c in reference_chunks],
         "evidence_payload": evidence_payload,
     }
 

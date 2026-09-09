@@ -36,5 +36,10 @@ LLM_PROVIDER_CHAIN = "mock,mock"
 WEB_SEARCH_PROVIDER = "mock"
 OCR_PROVIDER_CHAIN = "mock,mock"
 EMAIL_BACKEND = "console"
-# Embeddings: keep sentence_transformers because tests assert on
-# embedding_model="sentence_transformers" (see test_retrieval.py)
+
+# Use hashing embedder for tests (no ML dependencies)
+EMBEDDING_PROVIDER = "hashing"
+EMBEDDING_MODEL_VERSION = "hashing-384-v1"
+
+# Disable LangSmith tracing during tests to avoid rate limits
+LANGSMITH_TRACING = False

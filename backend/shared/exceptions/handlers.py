@@ -11,7 +11,11 @@ Every error response uses the envelope:
       }
     }
 """
+import logging
+from typing import Optional
 from rest_framework.views import exception_handler as drf_exception_handler
+from rest_framework.response import Response
+from shared.observability.request_id import get_request_id
 
 ERROR_INVALID_REQUEST = "INVALID_REQUEST"
 ERROR_UNAUTHENTICATED = "UNAUTHENTICATED"
@@ -34,7 +38,7 @@ class APIError(Exception):
     code = ERROR_INVALID_REQUEST
     default_message = "Invalid request."
 
-    def __init__(self, message: str | None = None, *, details: dict | None = None):
+    def __init__(self, message: Optional[str] = None, *, details: Optional[dict] = None):
         super().__init__(message or self.default_message)
         self.message = message or self.default_message
         self.details = details or {}
@@ -100,75 +104,73 @@ class ProviderError(APIError):
     default_message = "Upstream provider failed."
 
 
-_STATUS_TO_CODE = {
-    400: ERROR_INVALID_REQUEST,
-    401: ERROR_UNAUTHENTICATED,
-    403: ERROR_FORBIDDEN,
-    404: ERROR_RESOURCE_NOT_FOUND,
-    405: ERROR_INVALID_REQUEST,
-    406: ERROR_INVALID_REQUEST,
-    409: ERROR_REVISION_CONFLICT,
-    415: ERROR_INVALID_REQUEST,
-    429: ERROR_RATE_LIMITED,
-    500: ERROR_INTERNAL_ERROR,
-    502: ERROR_PROVIDER_ERROR,
-    503: ERROR_PROVIDER_UNAVAILABLE,
-}
-
-
 def exception_handler(exc, context):
-    from rest_framework.exceptions import ValidationError as DRFValidationError
-    from shared.observability.request_id import get_request_id
-
-    if isinstance(exc, DRFValidationError) and not isinstance(exc, APIError):
-        exc = ValidationError(details=exc.detail)
-
-    response = drf_exception_handler(exc, context)
-    request_id = get_request_id() or "req_unknown"
-
-    if response is None:
-        if isinstance(exc, APIError):
-            return _error_response(exc.status_code, exc.code, exc.message, exc.details, request_id)
-        return None
-
-    details = getattr(response, "data", None)
-    if isinstance(details, dict) and set(details.keys()) == {"error"}:
-        return response
-
+    """Custom exception handler that wraps DRF's handler with our error envelope."""
+    # Handle our custom APIError exceptions first
     if isinstance(exc, APIError):
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details, request_id)
+        return Response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "request_id": get_request_id() or "unknown",
+                    "details": exc.details,
+                }
+            },
+            status=exc.status_code,
+        )
 
-    code = _STATUS_TO_CODE.get(response.status_code, ERROR_INTERNAL_ERROR)
-    message = _summarize(details)
-    return _error_response(response.status_code, code, message, details, request_id)
+    # Let DRF handle the exception first
+    response = drf_exception_handler(exc, context)
 
+    # If DRF couldn't handle it, return a generic 500
+    if response is None:
+        logger = logging.getLogger(__name__)
+        logger.exception("Unhandled exception", exc_info=exc)
+        return Response(
+            {
+                "error": {
+                    "code": ERROR_INTERNAL_ERROR,
+                    "message": "An unexpected error occurred.",
+                    "request_id": get_request_id() or "unknown",
+                    "details": {},
+                }
+            },
+            status=500,
+        )
 
-def _error_response(status, code, message, details, request_id):
-    from rest_framework.response import Response
+    # Map DRF exception types to our error codes and status codes
+    error_code = ERROR_INVALID_REQUEST
+    status_code = response.status_code
+    
+    if hasattr(exc, "default_code"):
+        # DRF built-in exceptions
+        if exc.default_code == "not_found":
+            error_code = ERROR_RESOURCE_NOT_FOUND
+        elif exc.default_code == "permission_denied":
+            error_code = ERROR_FORBIDDEN
+            status_code = 403
+        elif exc.default_code == "not_authenticated":
+            error_code = ERROR_UNAUTHENTICATED
+            status_code = 401
+        elif exc.default_code == "throttled":
+            error_code = ERROR_RATE_LIMITED
+            status_code = 429
+        elif exc.default_code == "invalid":
+            error_code = ERROR_VALIDATION_ERROR
+            status_code = 422
+        else:
+            error_code = ERROR_INVALID_REQUEST
 
-    payload = {
+    # Build our standardized error envelope
+    error_data = {
         "error": {
-            "code": code,
-            "message": message,
-            "request_id": request_id,
-            "details": details if isinstance(details, dict) else {},
+            "code": error_code,
+            "message": str(exc) if str(exc) else response.data.get("detail", "Error"),
+            "request_id": get_request_id() or "unknown",
+            "details": response.data if isinstance(response.data, dict) else {"detail": response.data},
         }
     }
-    return Response(payload, status=status)
 
-
-def _summarize(details) -> str:
-    if isinstance(details, dict):
-        for key in ("detail", "non_field_errors"):
-            value = details.get(key)
-            if isinstance(value, list) and value:
-                return str(value[0])
-            if isinstance(value, str):
-                return value
-        first = next(iter(details.items()), None)
-        if first:
-            field, value = first
-            if isinstance(value, list) and value:
-                return f"{field}: {value[0]}"
-            return f"{field}: {value}"
-    return "Request failed."
+    # Return new response with our envelope
+    return Response(error_data, status=status_code)

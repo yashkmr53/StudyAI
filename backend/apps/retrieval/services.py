@@ -185,6 +185,8 @@ def index_document(document: Document) -> dict:
         Question.objects.filter(source_chunk_id__in=superseded_ids, stale=False).update(stale=True)
 
     new_chunks = [c for c in desired if c["content_hash"] not in keep_hashes]
+    provider = get_embedding_provider()
+    model_version = embedding_model_version()
     created_rows: list[NoteChunk] = []
     with transaction.atomic():
         for c in new_chunks:
@@ -206,12 +208,23 @@ def index_document(document: Document) -> dict:
             )
             if obj_created:
                 created_rows.append(obj)
-            elif obj.stale:  # previously-staled hash re-appears → resurrect without re-embedding
-                obj.stale = False
-                obj.save(update_fields=("stale",))
-
-    provider = get_embedding_provider()
-    model_version = embedding_model_version()
+            elif obj.stale:
+                current_model = provider.name
+                current_version = model_version
+                if obj.embedding_model == current_model and obj.embedding_version == current_version:
+                    obj.stale = False
+                    obj.save(update_fields=("stale",))
+                    # Resurrected chunk with existing embedding - track for embedding
+                    if obj.embedding is None:
+                        created_rows.append(obj)
+                else:
+                    obj.stale = False
+                    obj.embedding = None
+                    obj.embedding_model = None
+                    obj.embedding_version = None
+                    obj.save(update_fields=("stale", "embedding", "embedding_model", "embedding_version"))
+                    # Resurrected chunk without embedding - track for re-embedding
+                    created_rows.append(obj)
 
     # Embed only new/changed chunks: freshly created rows + any active row
     # still missing a vector. De-duplicated by pk.
@@ -227,8 +240,28 @@ def index_document(document: Document) -> dict:
         seen.add(chunk.pk)
         embeddable.append(chunk)
 
-    vectors = provider.embed([c.content for c in embeddable], model_version=model_version) if embeddable else []
+    vectors = []
+    if embeddable:
+        try:
+            vectors = provider.embed([c.content for c in embeddable], model_version=model_version)
+        except Exception as exc:  # noqa: BLE001 — embedding failure; job will retry
+            logger.error(
+                "Embedding failed for document %s: %s",
+                document.pk,
+                exc,
+            )
+            # Transactions will roll back; job will retry and try again
+            vectors = [None] * len(embeddable)  # placeholder to avoid unbound variable error
     for chunk, vector in zip(embeddable, vectors):
+        if vector is None:
+            # Embedding failed for this chunk; skip saving embedding
+            # The job will retry and try to embed again
+            logger.warning(
+                "Embedding failed for chunk %s of document %s; will retry",
+                chunk.pk,
+                document.pk,
+            )
+            continue
         chunk.embedding = vector
         chunk.embedding_model = provider.name
         chunk.embedding_version = model_version

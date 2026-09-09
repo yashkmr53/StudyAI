@@ -12,6 +12,7 @@ from shared.observability.metrics import incr
 
 logger = logging.getLogger(__name__)
 
+from typing import Optional
 
 def record_agent_execution(
     *,
@@ -27,8 +28,8 @@ def record_agent_execution(
     total_tokens: int,
     total_latency_ms: int,
     outcome: str,
-    citation_verification_status: str | None = None,
-    citation_verification_score: float | None = None,
+    citation_verification_status: Optional[str] = None,
+    citation_verification_score: Optional[float] = None,
     guardrail_violations: int = 0,
 ) -> AgentExecutionLog:
     """Persist agent execution log and emit metrics."""

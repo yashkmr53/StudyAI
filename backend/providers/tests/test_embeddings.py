@@ -133,15 +133,16 @@ class TestSentenceTransformerEmbeddingProvider(TestCase):
         assert call_args[1]["batch_size"] == 2
         assert call_args[1]["normalize_embeddings"] is True
 
-    def test_model_version_mismatch_warning(self):
-        """Should warn on model version mismatch."""
+    def test_model_version_mismatch_raises(self):
+        """Should raise ProviderError on model version mismatch."""
         from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        from shared.exceptions import ProviderError
         provider = SentenceTransformerEmbeddingProvider()
         
-        with self.assertLogs(level="WARNING") as cm:
+        with self.assertRaises(ProviderError) as cm:
             provider.embed(["test"], model_version="different-version")
         
-        assert any("Model version mismatch" in msg for msg in cm.output)
+        assert "Embedding model version mismatch" in str(cm.exception)
 
     def test_missing_dependency_handled(self):
         """Should handle missing sentence-transformers gracefully."""
@@ -198,6 +199,7 @@ class TestEmbeddingBackfill(TestCase):
     def test_model_version_changes_require_backfill(self):
         """Changing model version should indicate backfill needed."""
         from providers.embeddings.local import SentenceTransformerEmbeddingProvider
+        from shared.exceptions import ProviderError
         with patch("sentence_transformers.SentenceTransformer") as mock_st_class:
             mock_model = MagicMock()
             mock_model.encode.return_value = np.array([[0.1] * 384], dtype=np.float32)
@@ -207,11 +209,11 @@ class TestEmbeddingBackfill(TestCase):
             # Manually change version to simulate model update
             provider_v1._model_version = "sentence-transformers-test-model-v2"
             
-            # Embedding with old version should warn
-            with self.assertLogs(level="WARNING") as cm:
+            # Embedding with old version should raise ProviderError
+            with self.assertRaises(ProviderError) as cm:
                 provider_v1.embed(["test"], model_version="sentence-transformers-test-model-v1")
             
-            assert any("Model version mismatch" in msg for msg in cm.output)
+            assert "Embedding model version mismatch" in str(cm.exception)
 
     def test_embedding_model_metadata(self):
         """Provider should expose metadata for backfill tracking."""

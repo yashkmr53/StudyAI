@@ -51,14 +51,22 @@ export function ModuleStep() {
   const { t } = useTranslation();
   const options = useOption(t);
 
-  function next() {
+  async function next() {
     if (!choice) return;
     // Seed the once-per-session config cache.
     hydrateFor(profileId ?? "");
     saveProgress({ lastStep: "subjects", moduleChoice: choice });
     // Update the backend profile to match the selected module.
     if (profileId && choice) {
-      void profilesApi.setModule(profileId, choice).catch(() => undefined);
+      try {
+        const updated = await profilesApi.setModule(profileId, choice);
+        // Update local auth store with the new module
+        useAuthStore.setState((state) => ({
+          profile: state.profile ? { ...state.profile, module: updated.module } : null,
+        }));
+      } catch {
+        // Ignore backend errors; local store will reflect choice on next init
+      }
     }
     navigate("/onboarding/subjects");
   }

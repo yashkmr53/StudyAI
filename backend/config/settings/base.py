@@ -90,13 +90,20 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Database: PostgreSQL is the durable source of truth (architecture §2, §32).
+# RLS requires a restricted non-superuser role. The "studyai_app" role is
+# created in docker-compose.yml with NOSUPERUSER; connecting as this role
+# enables PostgreSQL RLS policies. The "yash" user is a superuser which
+# PostgreSQL exempts from RLS, so it must not be used for app connections.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "studyai",
-        "USER": "yash",
+        "USER": "studyai_app",
         "HOST": "/tmp",
         "PORT": "5432",
+        "OPTIONS": {
+            "role": "studyai_app",  # enforce RLS context within transactions
+        },
     }
 }
 
@@ -208,8 +215,19 @@ JOBS_RETRY_CAP_SECONDS = 300
 JOBS_TIMEOUT_SECONDS = 600
 
 # CORS / CSRF (§23)
-CORS_ALLOWED_ORIGINS = []
-CSRF_TRUSTED_ORIGINS = []
+# Development origins - override for production with actual domain
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
 
 # Redis throttle cache (§23, D3)
 REDIS_THROTTLE_URL = "redis://redis:6379/2"
@@ -252,18 +270,15 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "structured": {
-            "format": "{levelname} {asctime} {name} request_id={request_id} {message}",
+            "format": "{levelname} {asctime} {name} {message}",
             "style": "{",
         },
     },
-    "filters": {
-        "request_id": {"()": "shared.observability.request_id.RequestIDLogFilter"},
-    },
+    "filters": {},
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "structured",
-            "filters": ["request_id"],
         },
     },
     "root": {"handlers": ["console"], "level": "INFO"},

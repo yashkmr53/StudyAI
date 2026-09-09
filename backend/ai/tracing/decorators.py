@@ -1,5 +1,6 @@
 """LangSmith tracing decorators for graph nodes and functions."""
 import functools
+from typing import Optional
 import time
 from typing import Callable, Any, Optional
 from contextvars import ContextVar
