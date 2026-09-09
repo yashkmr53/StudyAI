@@ -3,10 +3,10 @@ import logging
 import threading
 import uuid
 from contextvars import ContextVar
+from typing import Optional
 
 _request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 
-from typing import Optional
 REQUEST_ID_HEADER = "X-Request-ID"
 
 
