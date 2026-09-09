@@ -204,7 +204,8 @@ class EvalHarnessTests(TestCase):
         from apps.profiles.models import Profile
         profile = Profile.objects.create(user=user, name="EvalProfile")
         doc = Document.objects.create(profile=profile, source="upload", source_type="image")
-        evidence = get_embedding_provider().embed(["alpha beta gamma"], model_version="hashing-384-v1")[0]
+        provider = get_embedding_provider()
+        evidence = provider.embed(["alphabeta gamma"], model_version=provider.model_version)[0]
         from apps.retrieval.models import NoteChunk
 
         chunk = NoteChunk.objects.create(
@@ -212,7 +213,7 @@ class EvalHarnessTests(TestCase):
             revision_id="00000000-0000-0000-0000-000000000001",
             revision_ids=[], page_start=1, page_end=1, chunk_index=0,
             content="alpha beta gamma", content_hash="h" * 64, source_type="image",
-            embedding=evidence, embedding_model="hashing", embedding_version="hashing-384-v1",
+            embedding=evidence, embedding_model=provider.model_name, embedding_version=provider.model_version,
         )
         metrics = RetrievalSearchRunner(user, [str(chunk.pk)])
         self.assertEqual(metrics["recall_at_k"], 1.0)

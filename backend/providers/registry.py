@@ -61,8 +61,12 @@ def _get_env(name: str, default: str | None = None) -> str | None:
 # ============================================================================
 
 def get_object_storage() -> ObjectStorageProvider:
-    """Get object storage provider based on STORAGE_BACKEND."""
-    backend = _get_env("STORAGE_BACKEND", "local")
+    """Get object storage provider based on STORAGE_BACKEND / OBJECT_STORAGE_BACKEND."""
+    backend = getattr(settings, "STORAGE_BACKEND", None)
+    if not backend:
+        backend = getattr(settings, "OBJECT_STORAGE_BACKEND", None)
+    if not backend:
+        backend = os.environ.get("STORAGE_BACKEND", "local")
     
     if backend == "local":
         return LocalObjectStorage()
@@ -197,7 +201,9 @@ def get_web_search_provider() -> WebSearchProvider:
 
 def get_embedding_provider() -> EmbeddingProvider:
     """Get embedding provider based on EMBEDDING_PROVIDER."""
-    name = _get_env("EMBEDDING_PROVIDER", "hashing")
+    name = _get_env("EMBEDDING_PROVIDER")
+    if not name:
+        raise ValueError("EMBEDDING_PROVIDER is not configured")
     
     if name == "hashing":
         return HashingEmbeddingProvider()
@@ -221,7 +227,9 @@ def get_embedding_provider() -> EmbeddingProvider:
 
 def embedding_model_version() -> str:
     """Get embedding model version for cache invalidation."""
-    provider = _get_env("EMBEDDING_PROVIDER", "hashing")
+    provider = _get_env("EMBEDDING_PROVIDER")
+    if not provider:
+        raise ValueError("EMBEDDING_PROVIDER is not configured")
     if provider == "sentence_transformers":
         model_name = _get_env("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
         return f"{model_name.replace('/', '-')}-v1"
@@ -230,7 +238,9 @@ def embedding_model_version() -> str:
 
 def embedding_dimension() -> int:
     """Get embedding dimension for the current provider."""
-    provider = _get_env("EMBEDDING_PROVIDER", "hashing")
+    provider = _get_env("EMBEDDING_PROVIDER")
+    if not provider:
+        raise ValueError("EMBEDDING_PROVIDER is not configured")
     if provider == "sentence_transformers":
         from providers.embeddings.local import SentenceTransformerEmbeddingProvider
         # Create temporary instance to get dimension

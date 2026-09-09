@@ -11,6 +11,7 @@ import math
 import re
 
 from providers.base import EmbeddingProvider
+from shared.exceptions import ProviderError
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 _DIM = None  # set via configure()
@@ -48,6 +49,11 @@ class HashingEmbeddingProvider:
         return "hashing-384-v1"
 
     def embed(self, texts: list[str], *, model_version: str) -> list[list[float]]:
+        if model_version != self.model_version:
+            raise ProviderError(
+                f"Embedding model version mismatch: "
+                f"requested={model_version}, provider={self.model_version}"
+            )
         dim = _dim()
         vectors: list[list[float]] = []
         for text in texts:

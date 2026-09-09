@@ -28,6 +28,7 @@ class _noop:
     def __exit__(self, *a): return False
 
 
+@override_settings(STORAGE_BACKEND="local")
 class NoteSpaceFlowTests(TestCase):
     """Upload → OCR → request PDF → artifact → secure download."""
 
@@ -134,6 +135,7 @@ class NoteSpaceFlowTests(TestCase):
         self.assertIn(old.pk, {a.pk for a in artifacts})  # old retained (§27)
 
 
+@override_settings(STORAGE_BACKEND="local")
 class FaithfulEditRegenerationTests(TestCase):
     """§7/§48: edits create new revision; regenerated PDF reflects ONLY lines."""
 

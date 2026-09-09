@@ -185,6 +185,8 @@ def index_document(document: Document) -> dict:
         Question.objects.filter(source_chunk_id__in=superseded_ids, stale=False).update(stale=True)
 
     new_chunks = [c for c in desired if c["content_hash"] not in keep_hashes]
+    provider = get_embedding_provider()
+    model_version = embedding_model_version()
     created_rows: list[NoteChunk] = []
     with transaction.atomic():
         for c in new_chunks:
@@ -206,12 +208,18 @@ def index_document(document: Document) -> dict:
             )
             if obj_created:
                 created_rows.append(obj)
-            elif obj.stale:  # previously-staled hash re-appears → resurrect without re-embedding
-                obj.stale = False
-                obj.save(update_fields=("stale",))
-
-    provider = get_embedding_provider()
-    model_version = embedding_model_version()
+            elif obj.stale:
+                current_model = provider.name
+                current_version = model_version
+                if obj.embedding_model == current_model and obj.embedding_version == current_version:
+                    obj.stale = False
+                    obj.save(update_fields=("stale",))
+                else:
+                    obj.stale = False
+                    obj.embedding = None
+                    obj.embedding_model = None
+                    obj.embedding_version = None
+                    obj.save(update_fields=("stale", "embedding", "embedding_model", "embedding_version"))
 
     # Embed only new/changed chunks: freshly created rows + any active row
     # still missing a vector. De-duplicated by pk.

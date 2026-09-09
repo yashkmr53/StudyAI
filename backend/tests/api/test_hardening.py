@@ -101,16 +101,16 @@ class MagicByteTests(TestCase):
         ).json()
         self.upload_url = body["upload"]["url"]
 
+    @override_settings(STORAGE_BACKEND="local")
     def test_content_type_mismatch_rejected(self):
         response = self.alice.put(self.upload_url, data=b"not-an-image", content_type="image/png")
         self.assertEqual(response.status_code, 422)
 
+    @override_settings(STORAGE_BACKEND="local", UPLOAD_SNIFF_MAGIC_BYTES=True)
     def test_magic_byte_sniffing(self):
-        with override_settings(UPLOAD_SNIFF_MAGIC_BYTES=True):
-            # declared png but body lacks PNG magic → rejected
-            fake_jpeg = b"\xff\xd8\xff\xe0" + b"payload"
-            response = self.alice.put(self.upload_url, data=fake_jpeg, content_type="image/png")
-            self.assertEqual(response.status_code, 422)
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"payload"
+        response = self.alice.put(self.upload_url, data=fake_jpeg, content_type="image/png")
+        self.assertEqual(response.status_code, 422)
 
 
 class BudgetTests(TestCase):

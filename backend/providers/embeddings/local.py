@@ -18,6 +18,7 @@ from typing import Optional
 import numpy as np
 
 from providers.base import EmbeddingProvider
+from shared.exceptions import ProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +142,9 @@ class SentenceTransformerEmbeddingProvider:
             raise RuntimeError("SentenceTransformer model not loaded (sentence-transformers not installed?)")
         
         if model_version != self._model_version:
-            logger.warning(
-                "Model version mismatch: expected %s, got %s. "
-                "This may indicate a model change requiring re-embedding.",
-                self._model_version, model_version
+            raise ProviderError(
+                f"Embedding model version mismatch: "
+                f"requested={model_version}, provider={self._model_version}"
             )
         
         try:
@@ -189,6 +189,13 @@ class HashingEmbeddingProvider:
         if self.fail:
             raise RuntimeError(f"{self.name}: simulated provider failure")
         
+        if model_version != self.model_version:
+            from shared.exceptions import ProviderError
+            raise ProviderError(
+                f"Embedding model version mismatch: "
+                f"requested={model_version}, provider={self.model_version}"
+            )
+
         import hashlib
         embeddings = []
         for text in texts:
