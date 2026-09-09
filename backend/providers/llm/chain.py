@@ -32,6 +32,7 @@ _REDACTION_PATTERNS = [
 ]
 
 MAX_PROVIDER_INPUT_CHARS = getattr(settings, "MAX_PROVIDER_INPUT_CHARS", 8000)
+LLM_TIMEOUT_SECONDS = getattr(settings, "LLM_TIMEOUT_SECONDS", 120)
 
 
 def _sanitize_for_provider(text: str) -> tuple[str, int]:
@@ -92,6 +93,39 @@ class LLMChainProvider:
             raise ValueError("LLM chain requires at least one provider.")
         self.providers = providers
 
+    def _timeouted_generate(self, provider, prompt, schema, request_id):
+        """Run provider.generate_structured with a timeout."""
+        import threading
+
+        result_holder = [None]
+        exception_holder = [None]
+
+        def target():
+            try:
+                result_holder[0] = provider.generate_structured(
+                    prompt=prompt, schema=schema, request_id=request_id
+                )
+            except Exception as exc:
+                exception_holder[0] = exc
+
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+        thread.join(timeout=LLM_TIMEOUT_SECONDS)
+
+        if thread.is_alive():
+            # Timeout exceeded - provider is hanging
+            logger.warning(
+                "LLM provider %s timed out after %s seconds", provider.name, LLM_TIMEOUT_SECONDS
+            )
+            raise TimeoutError(
+                f"LLM provider {provider.name} timed out after {LLM_TIMEOUT_SECONDS} seconds"
+            )
+
+        if exception_holder[0] is not None:
+            raise exception_holder[0]
+
+        return result_holder[0]
+
     def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str) -> StructuredLLMResult:
         attempted: list[str] = []
         last_error: Exception | None = None
@@ -99,11 +133,11 @@ class LLMChainProvider:
             attempted.append(provider.name)
             started = time.monotonic()
             try:
-                # D4: Prepend prompt-injection directive to system prompt
-                system_prompt = prompt.system + "\n\n" + PROMPT_INJECTION_DIRECTIVE if prompt.system else PROMPT_INJECTION_DIRECTIVE
-                
                 # D5: Sanitize user prompt
                 sanitized_user, redaction_count = _sanitize_for_provider(prompt.user)
+                
+                # D4: Prepend prompt-injection directive to system prompt
+                system_prompt = prompt.system + "\n\n" + PROMPT_INJECTION_DIRECTIVE if prompt.system else PROMPT_INJECTION_DIRECTIVE
                 
                 sanitized_prompt = Prompt(
                     name=prompt.name,
@@ -112,7 +146,7 @@ class LLMChainProvider:
                     user=sanitized_user,
                 )
                 
-                result = provider.generate_structured(prompt=sanitized_prompt, schema=schema, request_id=request_id)
+                result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id)
                 latency_ms = int((time.monotonic() - started) * 1000)
                 # Mock providers don't return token counts; real providers will populate these
                 input_tokens = getattr(result, "input_tokens", 0)

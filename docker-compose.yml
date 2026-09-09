@@ -6,6 +6,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-studyai}
       POSTGRES_USER: ${POSTGRES_USER:-studyai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      # Initialize restricted RLS role
+      POSTGRES_INIT_SQL: |
+        CREATE ROLE studyai_app WITH LOGIN NOSUPERUSER;
+        GRANT studyai_app TO studyai;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO studyai_app;
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

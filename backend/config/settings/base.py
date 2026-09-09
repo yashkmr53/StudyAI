@@ -90,20 +90,19 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Database: PostgreSQL is the durable source of truth (architecture §2, §32).
-# NOTE: A restricted DB role (not a superuser) should be created and used in
-# production to enable PostgreSQL RLS policies. The "yash" user is a superuser
-# which PostgreSQL exempts from RLS. Set the 'role' connection option to a
-# restricted role name (e.g., "studyai_app") and create that role in the
-# production database with appropriate permissions (no SUPERUSER).
+# RLS requires a restricted non-superuser role. The "studyai_app" role is
+# created in docker-compose.yml with NOSUPERUSER; connecting as this role
+# enables PostgreSQL RLS policies. The "yash" user is a superuser which
+# PostgreSQL exempts from RLS, so it must not be used for app connections.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "studyai",
-        "USER": "yash",
+        "USER": "studyai_app",
         "HOST": "/tmp",
         "PORT": "5432",
         "OPTIONS": {
-            "role": "studyai_app",  # restricted non-superuser role for RLS
+            "role": "studyai_app",  # enforce RLS context within transactions
         },
     }
 }

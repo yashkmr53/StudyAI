@@ -1,9 +1,13 @@
-"""Durable job records (architecture §19).
+"""Durable job records (architecture §19, §28).
 
 Every asynchronous operation is represented by a Job row. PostgreSQL is
 the durable source of truth; Redis is only a broker. Jobs are claimed with
 a DB-level conditional update to prevent double-processing, and every job
 carries a unique idempotency key.
+
+Extended with execution checkpoints (§28/§52) so that enrichment graph
+retries can resume from the last completed node instead of restarting
+from the beginning, avoiding wasted LLM calls.
 """
 import uuid
 
@@ -66,4 +70,42 @@ class Job(models.Model):
         self.status = self.Status.FAILED_DEAD_LETTER
         self.last_error = error[:4000]
         self.finished_at = timezone.now()
-        self.save(update_fields=("status", "last_error", "finished_at"))
+        self.save(update_fields=("status", "last_error", "finished_at))
+
+
+class JobExecutionState(models.Model):
+    """Checkpoint persisted after each LangGraph node execution (§28/§52).
+
+    Allows enrichment job retries to resume from the last completed node
+    instead of restarting from the beginning, avoiding wasted LLM calls.
+    """
+    class CompletedNode(models.TextChoices):
+        RETRIEVE = "retrieve", "Retrieve"
+        DRAFT = "draft", "Draft"
+        GAP_DETECTION = "gap_detection", "Gap Detection"
+        GAP_FILL = "gap_fill", "Gap Fill"
+        CITATION_STITCH = "citation_stitch", "Citation Stitch"
+        EVIDENCE_VERIFICATION = "evidence_verification", "Evidence Verification"
+        FORMAT_OUTPUT = "format_output", "Format Output"
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="execution_checkpoints")
+    state_json = models.JSONField()  # serialized EnrichmentState at checkpoint
+    completed_node = models.CharField(
+        max_length=32,
+        choices=CompletedNode.choices,
+        default=CompletedNode.RETRIEVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=("job", "created_at")),
+        ]
+        ordering = ["-created_at"]
+
+    def get_state(self) -> dict:
+        return self.state_json
+
+    def set_state(self, state: dict) -> None:
+        self.state_json = state
+        self.save(update_fields=("state_json",))

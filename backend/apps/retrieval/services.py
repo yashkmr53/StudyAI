@@ -214,12 +214,17 @@ def index_document(document: Document) -> dict:
                 if obj.embedding_model == current_model and obj.embedding_version == current_version:
                     obj.stale = False
                     obj.save(update_fields=("stale",))
+                    # Resurrected chunk with existing embedding - track for embedding
+                    if obj.embedding is None:
+                        created_rows.append(obj)
                 else:
                     obj.stale = False
                     obj.embedding = None
                     obj.embedding_model = None
                     obj.embedding_version = None
                     obj.save(update_fields=("stale", "embedding", "embedding_model", "embedding_version"))
+                    # Resurrected chunk without embedding - track for re-embedding
+                    created_rows.append(obj)
 
     # Embed only new/changed chunks: freshly created rows + any active row
     # still missing a vector. De-duplicated by pk.
@@ -235,8 +240,28 @@ def index_document(document: Document) -> dict:
         seen.add(chunk.pk)
         embeddable.append(chunk)
 
-    vectors = provider.embed([c.content for c in embeddable], model_version=model_version) if embeddable else []
+    vectors = []
+    if embeddable:
+        try:
+            vectors = provider.embed([c.content for c in embeddable], model_version=model_version)
+        except Exception as exc:  # noqa: BLE001 — embedding failure; job will retry
+            logger.error(
+                "Embedding failed for document %s: %s",
+                document.pk,
+                exc,
+            )
+            # Transactions will roll back; job will retry and try again
+            vectors = [None] * len(embeddable)  # placeholder to avoid unbound variable error
     for chunk, vector in zip(embeddable, vectors):
+        if vector is None:
+            # Embedding failed for this chunk; skip saving embedding
+            # The job will retry and try to embed again
+            logger.warning(
+                "Embedding failed for chunk %s of document %s; will retry",
+                chunk.pk,
+                document.pk,
+            )
+            continue
         chunk.embedding = vector
         chunk.embedding_model = provider.name
         chunk.embedding_version = model_version

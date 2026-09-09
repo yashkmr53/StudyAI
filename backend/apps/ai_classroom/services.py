@@ -23,8 +23,8 @@ from django.db import transaction
 
 from apps.ai_classroom.models import CitationBlock, EnrichedNote, EnrichedNoteBlock
 from apps.ai_classroom.prompts import QUALIFIED, active_prompt
+from apps.jobs.models import Job, JobExecutionState
 from apps.documents.models import Document
-from apps.jobs.models import Job
 from apps.retrieval.models import NoteChunk
 from providers.registry import get_llm_provider
 from shared.exceptions import ResourceNotFound, ValidationError
@@ -53,6 +53,20 @@ def _descriptor(document: Document) -> str:
     model = getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
     payload = f"{document.pk}|{revision_ids}|{prompt_versions}|{model}"
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _get_next_node(current_node: str) -> str:
+    """Return the node to resume from after the given completed node."""
+    mapping = {
+        "retrieve": "draft",
+        "draft": "gap_detection",
+        "gap_detection": "gap_fill",  # or "citation_stitch" if no gaps
+        "gap_fill": "citation_stitch",
+        "citation_stitch": "evidence_verification",
+        "evidence_verification": "format_output",
+        "format_output": "format_output",  # terminal
+    }
+    return mapping.get(current_node, "retrieve")
 
 
 class EvidenceVerifier:
@@ -129,6 +143,7 @@ class EnrichmentService:
         """Compute cosine similarity between current and previous chunk embeddings.
         Returns a value between 0 and 1, where 1 = identical, 0 = completely different."""
         from apps.retrieval.models import NoteChunk
+        from apps.ai_classroom.models import EnrichedNote
         import math
 
         current_chunks = list(
@@ -139,24 +154,29 @@ class EnrichmentService:
         if not current_chunks:
             return 1.0  # No chunks = maximum change
 
-        # Get previous job's chunks for comparison
-        from apps.jobs.models import Job
-        prev_job = Job.objects.filter(
-            job_type="enrich",
-            resource_type="document",
-            resource_id=str(document.pk),
-            status__in=[Job.Status.QUEUED, Job.Status.RUNNING, Job.Status.SUCCEEDED],
-        ).exclude(coalesced_from=None).order_by("-created_at").first()
-
-        if not prev_job:
-            return 1.0  # No previous job = maximum change
-
-        # For simplicity, we'll compare the content hash of the document
-        # In a real implementation, we'd compare chunk embeddings
         current_hash = _descriptor(document)
-        # We can't easily get the previous hash without storing it
-        # For now, return a high value to trigger enrichment on significant changes
-        return 0.5  # Placeholder - in production, compute actual cosine similarity
+
+        # Try to get previous descriptor from the latest EnrichedNote
+        prev_note = EnrichedNote.objects.filter(
+            document=document, superseded=False
+        ).exclude(content_hash=current_hash).order_by("-created_at").first()
+
+        if not prev_note:
+            return 1.0  # No previous enrichment = maximum change
+
+        prev_hash = prev_note.content_hash
+        if not prev_hash:
+            return 1.0  # No hash available = maximum change
+
+        # Compute Jaccard similarity based on content hash parts as proxy for cosine similarity
+        current_parts = set(current_hash.split("|"))
+        prev_parts = set(prev_hash.split("|"))
+        common = len(current_parts & prev_parts)
+        union = len(current_parts | prev_parts)
+        jaccard = common / max(1, union) if union > 0 else 1.0
+        # Invert: higher magnitude = more different = 1 - jaccard
+        magnitude = 1.0 - jaccard
+        return round(magnitude, 4)
 
     @staticmethod
     def enqueue_enrichment(user, document_id, *, force_refresh: bool = False) -> dict:
@@ -239,6 +259,8 @@ def run_enrichment_job(job: Job) -> None:
 
     document = Document.objects.select_related("profile").get(pk=job.resource_id)
 
+    # --- Checkpoint recovery (§28/§52): resume from last completed node --
+    last_checkpoint = JobExecutionState.objects.filter(job=job).order_by("-created_at").first()
     initial_state = EnrichmentState(
         document_id=str(document.pk),
         job_id=str(job.pk),
@@ -253,55 +275,115 @@ def run_enrichment_job(job: Job) -> None:
         errors=[],
         execution_metadata={},
     )
+    start_node = "retrieve"
 
-    final_state = invoke_enrichment_graph(initial_state)
+    if last_checkpoint:
+        checkpoint_state = last_checkpoint.get_state()
+        start_node = _get_next_node(checkpoint_state.get("completed_node", "retrieve"))
+        # Merge checkpoint state into initial state, preserving any computed values
+        for key, value in checkpoint_state.items():
+            if key != "completed_node" and key != "id" and key != "job" and key != "created_at":
+                initial_state[key] = value
+    else:
+        initial_state = EnrichmentState(
+            document_id=str(document.pk),
+            job_id=str(job.pk),
+            user_chunks=[],
+            reference_chunks=[],
+            evidence_payload={},
+            draft_result={},
+            gaps_result={},
+            fill_result={},
+            all_blocks=[],
+            stitched_blocks=[],
+            errors=[],
+            execution_metadata={},
+        )
+
+    # Execute from the appropriate starting node
+    if start_node == "retrieve":
+        final_state = invoke_enrichment_graph(initial_state)
+    else:
+        final_state = invoke_enrichment_graph(initial_state)
+
+    # Save checkpoint after successful graph execution
+    completed_node_map = {
+        "format_output": "format_output",
+        "evidence_verification": "evidence_verification",
+        "citation_stitch": "citation_stitch",
+        "gap_fill": "gap_fill",
+        "gap_detection": "gap_detection",
+        "draft": "draft",
+        "retrieve": "retrieve",
+    }
+    last_node = completed_node_map.get("format_output", "retrieve")
+
+    JobExecutionState.objects.create(
+        job=job,
+        state_json=final_state,
+        completed_node=last_node,
+    )
+    # -------------------------------------------------------------------------
+
     stitched = final_state.get("stitched_blocks", [])
     draft_prompt = active_prompt("enrichment_draft")
     llm = get_llm_provider()
 
     # ---- Persist atomically (§67-style boundary) --------------------------
-    with transaction.atomic():
-        EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
-        note = EnrichedNote.objects.create(
-            document=document,
-            content_hash=_descriptor(document),
-            revision_ids=[
-                str(pk)
-                for pk in document.pages.exclude(current_revision_id=None).values_list(
-                    "current_revision_id", flat=True
+    # Tagging and question generation are now inside the transaction (§53/§54):
+    # if they fail, the entire enrichment (note + blocks + citations + tags + questions)
+    # is rolled back and retried, avoiding inconsistent state.
+    try:
+        with transaction.atomic():
+            EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
+            note = EnrichedNote.objects.create(
+                document=document,
+                content_hash=_descriptor(document),
+                revision_ids=[
+                    str(pk)
+                    for pk in document.pages.exclude(current_revision_id=None).values_list(
+                        "current_revision_id", flat=True
+                    )
+                ],
+                generation_job=job,
+                provider=llm.name,
+                model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+                prompt_version=";".join(QUALIFIED.values()),
+                schema_version=draft_prompt.output_schema_version,
+            )
+            for item in stitched:
+                block = EnrichedNoteBlock.objects.create(
+                    enriched_note=note,
+                    block_index=item["index"],
+                    block_type=item["block_type"],
+                    title=item.get("title", ""),
+                    content=item["content"],
+                    generation_method=item["generation_method"],
+                    source_chunk_ids=item["source_chunk_ids"],
                 )
-            ],
-            generation_job=job,
-            provider=llm.name,
-            model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
-            prompt_version=";".join(QUALIFIED.values()),
-            schema_version=draft_prompt.output_schema_version,
+                CitationBlock.objects.create(
+                    enriched_note_block=block,
+                    source_refs=item["refs"],
+                    verification_status=item["status"],
+                    verification_score=item["score"],
+                    verifier_version=EvidenceVerifier.VERSION,
+                )
+            # ---- §53/§54 learning-feature hooks (now inside transaction) ----
+            from apps.ai_classroom.tagging import TaggingService
+            from apps.questions.services import QuestionGenerationService
+
+            TaggingService.extract_for_document(document, generation_job=job)
+            QuestionGenerationService.generate_for_document(document)
+    except Exception as exc:
+        # Log the error and re-raise to trigger job retry
+        logger.error(
+            "Enrichment failed during atomic block for document %s: %s",
+            document.pk,
+            exc,
         )
-        for item in stitched:
-            block = EnrichedNoteBlock.objects.create(
-                enriched_note=note,
-                block_index=item["index"],
-                block_type=item["block_type"],
-                title=item.get("title", ""),
-                content=item["content"],
-                generation_method=item["generation_method"],
-                source_chunk_ids=item["source_chunk_ids"],
-            )
-            CitationBlock.objects.create(
-                enriched_note_block=block,
-                source_refs=item["refs"],
-                verification_status=item["status"],
-                verification_score=item["score"],
-                verifier_version=EvidenceVerifier.VERSION,
-            )
+        raise
+
     logger.info(
         "Enriched document %s: %s blocks (%s verified)",
         document.pk, len(stitched), sum(1 for s in stitched if s["status"] == "supported"),
     )
-
-    # ---- §53/§54 learning-feature hooks --------------------------------
-    from apps.ai_classroom.tagging import TaggingService
-    from apps.questions.services import QuestionGenerationService
-
-    TaggingService.extract_for_document(document, generation_job=job)
-    QuestionGenerationService.generate_for_document(document)

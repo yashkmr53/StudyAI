@@ -116,24 +116,25 @@ class IngestionService:
 
     @staticmethod
     def _create_revision_locked(page: DocumentPage, *, content_hash: str, ocr_status: str, edited_by=None, snapshot=None) -> DocumentPageRevision:
-        last_number = (
-            DocumentPageRevision.objects.filter(page=page)
-            .order_by("-revision_number")
-            .values_list("revision_number", flat=True)
-            .first()
-        )
-        revision = DocumentPageRevision.objects.create(
-            page=page,
-            revision_number=(last_number or 0) + 1,
-            content_hash=content_hash,
-            content_snapshot=snapshot if snapshot is not None else {},
-            edited_by=edited_by,
-            ocr_status=ocr_status,
-        )
-        page.current_revision_id = revision.pk
-        page.ocr_status = ocr_status
-        page.needs_review = ocr_status == DocumentPageRevision.OcrStatus.NEEDS_REVIEW
-        page.save(update_fields=("current_revision_id", "ocr_status", "needs_review"))
+        with transaction.atomic():
+            # Use select_for_update to prevent concurrent edits from assigning
+            # the same revision_number (optimistic locking / row-level lock).
+            # The lock is on the page's revisions table; Django's select_for_update
+            # acquires a PostgreSQL row lock until transaction commits.
+            last_revision = DocumentPageRevision.objects.filter(page=page).select_for_update().order_by("-revision_number").first()
+            last_number = last_revision.revision_number if last_revision else 0
+            revision = DocumentPageRevision.objects.create(
+                page=page,
+                revision_number=(last_number or 0) + 1,
+                content_hash=content_hash,
+                content_snapshot=snapshot if snapshot is not None else {},
+                edited_by=edited_by,
+                ocr_status=ocr_status,
+            )
+            page.current_revision_id = revision.pk
+            page.ocr_status = ocr_status
+            page.needs_review = ocr_status == DocumentPageRevision.OcrStatus.NEEDS_REVIEW
+            page.save(update_fields=("current_revision_id", "ocr_status", "needs_review"))
         return revision
 
     @classmethod
