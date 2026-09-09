@@ -1,4 +1,5 @@
 """Serializers for the AI Classroom generated layer (§9/§12 shapes)."""
+from typing import Optional
 from rest_framework import serializers
 
 from apps.ai_classroom.models import EnrichedNote
@@ -9,7 +10,6 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
     blocks = serializers.SerializerMethodField()
     job_status = serializers.SerializerMethodField()
 
-from typing import Optional
     class Meta:
         model = EnrichedNote
         fields = (
