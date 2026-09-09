@@ -7,6 +7,7 @@ per profile per UTC day; once a live LLM lands, ProviderCallLog rows
 become the spend proxy.
 """
 from datetime import timedelta
+from typing import Optional
 
 from django.conf import settings
 from django.db.models import Q
@@ -20,7 +21,6 @@ def _budget() -> Optional[int]:
     value = getattr(settings, "AI_DAILY_BUDGET_PER_PROFILE", None)
     return int(value) if value else None
 
-from typing import Optional
 
 def ai_generations_today(profile_id) -> int:
     since = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
