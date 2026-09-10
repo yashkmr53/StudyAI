@@ -166,6 +166,7 @@ def run_index_job(job: Job) -> None:
 
 def index_document(document: Document) -> dict:
     """Incremental diff-based indexing. Safe to run repeatedly."""
+    from shared.sanitization import sanitize_for_provider
     from providers.registry import get_embedding_provider, embedding_model_version
 
     desired = build_chunks(document)
@@ -242,16 +243,23 @@ def index_document(document: Document) -> dict:
 
     vectors = []
     if embeddable:
+        # Sanitize chunk content before embedding to prevent PII leakage
+        sanitized_contents = []
+        for c in embeddable:
+            sanitized_content, _ = sanitize_for_provider(c.content)
+            sanitized_contents.append(sanitized_content)
+        
         try:
-            vectors = provider.embed([c.content for c in embeddable], model_version=model_version)
+            vectors = provider.embed(sanitized_contents, model_version=model_version)
         except Exception as exc:  # noqa: BLE001 — embedding failure; job will retry
             logger.error(
                 "Embedding failed for document %s: %s",
                 document.pk,
                 exc,
             )
-            # Transactions will roll back; job will retry and try again
-            vectors = [None] * len(embeddable)  # placeholder to avoid unbound variable error
+            # Re-raise the exception so the job becomes retryable
+            # and chunks can be re-embedded on retry.
+            raise
     for chunk, vector in zip(embeddable, vectors):
         if vector is None:
             # Embedding failed for this chunk; skip saving embedding

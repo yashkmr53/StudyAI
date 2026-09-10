@@ -10,9 +10,9 @@ import re
 import time
 
 from django.conf import settings
-from django.db import transaction
 
 from providers.base import LLMProvider, Prompt, StructuredLLMResult
+from shared.sanitization import sanitize_for_provider
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +38,9 @@ LLM_TIMEOUT_SECONDS = getattr(settings, "LLM_TIMEOUT_SECONDS", 120)
 def _sanitize_for_provider(text: str) -> tuple[str, int]:
     """Apply data-minimization filter (D5).
     Returns (sanitized_text, redaction_count).
+    Uses shared sanitization utility for consistent redaction across all providers.
     """
-    redaction_count = 0
-    # Truncate to max chars
-    if len(text) > MAX_PROVIDER_INPUT_CHARS:
-        text = text[:MAX_PROVIDER_INPUT_CHARS]
-    # Apply redaction patterns
-    for pattern, replacement in _REDACTION_PATTERNS:
-        matches = pattern.findall(text)
-        if matches:
-            redaction_count += len(matches)
-            text = pattern.sub(replacement, text)
-    return text, redaction_count
+    return sanitize_for_provider(text, max_chars=MAX_PROVIDER_INPUT_CHARS)
 
 
 def record_provider_call(
