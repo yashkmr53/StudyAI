@@ -11,11 +11,13 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "studyai"),
-        "USER": os.environ.get("POSTGRES_USER"),
+        "USER": "studyai_app",
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "require")},
+        "OPTIONS": {
+            "sslmode": os.environ.get("POSTGRES_SSLMODE", "require"),
+        },
     }
 }
 
