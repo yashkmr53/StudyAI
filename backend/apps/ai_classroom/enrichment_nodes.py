@@ -29,7 +29,6 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
     # Use RetrievalService to fetch reference chunks by relevance to document content
     # instead of non-deterministic order_by("?") (§51, G10).
     # We embed the document's content to find the most relevant reference chunks.
-    from_provider = get_llm_provider()  # placeholder - not used, kept for import context
     try:
         # Try to use RetrievalService with document content as query
         # For reference chunks, we search within the same document's profile
