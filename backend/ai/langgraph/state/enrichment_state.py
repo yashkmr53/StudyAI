@@ -1,6 +1,5 @@
 """Typed state for the AI Enrichment LangGraph workflow."""
 from typing import TypedDict, Optional, Any, List, Dict
-from typing import Optional
 
 from ai.langgraph.state.base_state import BaseStudyAIState
 

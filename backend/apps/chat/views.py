@@ -28,7 +28,7 @@ class MessageInSerializer(serializers.Serializer):
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
-        fields = ("id", "role", "content", "citations", "model", "prompt_version", "created_at")
+        fields = ("id", "role", "content", "citations", "model", "prompt_version", "verification_status", "verification_score", "created_at")
 
 
 class ChatSessionViewSet(
