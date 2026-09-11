@@ -17,10 +17,21 @@ persist EnrichedNote/Blocks/CitationBlocks.
 """
 import hashlib
 import logging
+import re
+import time
 
 from django.conf import settings
 from django.db import transaction
 
+from apps.ai_classroom.enrichment_nodes import (
+    citation_stitch_node,
+    draft_node,
+    evidence_verification_node,
+    format_output_node,
+    gap_detection_node,
+    gap_fill_node,
+    retrieve_chunks_node,
+)
 from apps.ai_classroom.models import CitationBlock, EnrichedNote, EnrichedNoteBlock
 from apps.ai_classroom.prompts import QUALIFIED, active_prompt
 from apps.jobs.models import Job, JobExecutionState
@@ -32,6 +43,7 @@ from shared.exceptions import ResourceNotFound, ValidationError
 logger = logging.getLogger(__name__)
 
 from typing import Optional
+
 
 def _verifier_version() -> str:
     return getattr(settings, "VERIFIER_VERSION", "sim-v1")
@@ -140,40 +152,73 @@ class EnrichmentService:
 
     @staticmethod
     def _compute_change_magnitude(document: Document) -> float:
-        """Compute cosine similarity between current and previous chunk embeddings.
-        Returns a value between 0 and 1, where 1 = identical, 0 = completely different."""
+        """Compute content-sensitive change magnitude.
+
+        Compares current chunks with the previous enrichment's source chunks
+        using deterministic content-based similarity. Returns a value between 0 and 1,
+        where 1 = completely different, 0 = identical.
+
+        Approach:
+        - If previous enrichment exists, get the source chunk contents from it
+        - Compute Jaccard similarity on word tokens between current and previous chunks
+        - Return 1 - similarity as magnitude (higher = more different)
+
+        If no previous enrichment, magnitude is 1.0 (maximum change).
+        """
         from apps.retrieval.models import NoteChunk
         from apps.ai_classroom.models import EnrichedNote
-        import math
 
         current_chunks = list(
             NoteChunk.objects.filter(document=document, stale=False)
             .order_by("chunk_index")
-            .values_list("embedding", flat=True)
+            .values_list("content", flat=True)
         )
         if not current_chunks:
             return 1.0  # No chunks = maximum change
 
-        current_hash = _descriptor(document)
-
-        # Try to get previous descriptor from the latest EnrichedNote
+        # Try to get previous enrichment's source chunks
         prev_note = EnrichedNote.objects.filter(
             document=document, superseded=False
-        ).exclude(content_hash=current_hash).order_by("-created_at").first()
+        ).order_by("-created_at").first()
 
         if not prev_note:
             return 1.0  # No previous enrichment = maximum change
 
-        prev_hash = prev_note.content_hash
-        if not prev_hash:
-            return 1.0  # No hash available = maximum change
+        # Get source chunk contents from the previous enrichment
+        prev_contents: list[str] = []
+        # Gather source chunk contents from the previous enrichment's blocks
+        for block in prev_note.blocks.all():
+            for cid in block.source_chunk_ids:
+                chunk = NoteChunk.objects.filter(pk=cid, stale=False).first()
+                if chunk and chunk.content:
+                    prev_contents.append(chunk.content)
 
-        # Compute Jaccard similarity based on content hash parts as proxy for cosine similarity
-        current_parts = set(current_hash.split("|"))
-        prev_parts = set(prev_hash.split("|"))
-        common = len(current_parts & prev_parts)
-        union = len(current_parts | prev_parts)
-        jaccard = common / max(1, union) if union > 0 else 1.0
+        if not prev_contents:
+            return 1.0  # No previous content available = maximum change
+
+        # Compute Jaccard similarity on word tokens
+        def _tokenize(text: str) -> set[str]:
+            return {w for w in re.findall(r"[a-zA-Z0-9]{3,}", text.lower())}
+
+        current_tokens: set[str] = set()
+        for c in current_chunks:
+            if c:
+                current_tokens |= _tokenize(c)
+
+        prev_tokens: set[str] = set()
+        for c in prev_contents:
+            if c:
+                prev_tokens |= _tokenize(c)
+
+        if not current_tokens and not prev_tokens:
+            return 0.0  # Both empty = no change detectable
+
+        if not current_tokens or not prev_tokens:
+            return 1.0  # One empty, other not = maximum change
+
+        intersection = len(current_tokens & prev_tokens)
+        union = len(current_tokens | prev_tokens)
+        jaccard = intersection / max(1, union)
         # Invert: higher magnitude = more different = 1 - jaccard
         magnitude = 1.0 - jaccard
         return round(magnitude, 4)
@@ -253,8 +298,25 @@ class EnrichmentService:
         return EnrichedNote.objects.filter(document=document, superseded=False).order_by("-created_at").first()
 
 
+def _execute_node(node_fn, state: dict, node_name: str, job: Job) -> dict:
+    """Execute a single enrichment node and save a checkpoint after success."""
+    started = time.monotonic()
+    result = node_fn(state)
+    latency_ms = int((time.monotonic() - started) * 1000)
+    logger.debug("enrichment node '%s' completed in %dms", node_name, latency_ms)
+
+    new_state = {**state, **result}
+
+    JobExecutionState.objects.create(
+        job=job,
+        state_json=new_state,
+        completed_node=node_name,
+    )
+
+    return new_state
+
+
 def run_enrichment_job(job: Job) -> None:
-    from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
     from ai.langgraph.state.enrichment_state import EnrichmentState
 
     document = Document.objects.select_related("profile").get(pk=job.resource_id)
@@ -278,54 +340,92 @@ def run_enrichment_job(job: Job) -> None:
     start_node = "retrieve"
 
     if last_checkpoint:
+        completed_node = last_checkpoint.completed_node
+        start_node = _get_next_node(completed_node)
         checkpoint_state = last_checkpoint.get_state()
-        start_node = _get_next_node(checkpoint_state.get("completed_node", "retrieve"))
-        # Merge checkpoint state into initial state, preserving any computed values
         for key, value in checkpoint_state.items():
             if key != "completed_node" and key != "id" and key != "job" and key != "created_at":
                 initial_state[key] = value
-    else:
-        initial_state = EnrichmentState(
-            document_id=str(document.pk),
-            job_id=str(job.pk),
-            user_chunks=[],
-            reference_chunks=[],
-            evidence_payload={},
-            draft_result={},
-            gaps_result={},
-            fill_result={},
-            all_blocks=[],
-            stitched_blocks=[],
-            errors=[],
-            execution_metadata={},
-        )
 
-    # Execute from the appropriate starting node
+    # Execute nodes from the appropriate starting point, saving checkpoints
+    # after each successful node so that retries can resume from the next node
+    # instead of restarting the entire graph, avoiding wasted LLM calls.
+
     if start_node == "retrieve":
-        final_state = invoke_enrichment_graph(initial_state)
-    else:
-        final_state = invoke_enrichment_graph(initial_state)
+        # Fresh start: execute entire pipeline from retrieve
+        # Execute retrieve node
+        initial_state = _execute_node(retrieve_chunks_node, initial_state, "retrieve", job)
 
-    # Save checkpoint after successful graph execution
-    completed_node_map = {
-        "format_output": "format_output",
-        "evidence_verification": "evidence_verification",
-        "citation_stitch": "citation_stitch",
-        "gap_fill": "gap_fill",
-        "gap_detection": "gap_detection",
-        "draft": "draft",
-        "retrieve": "retrieve",
-    }
-    last_node = completed_node_map.get("format_output", "retrieve")
+        # Execute draft node
+        initial_state = _execute_node(draft_node, initial_state, "draft", job)
 
-    JobExecutionState.objects.create(
-        job=job,
-        state_json=final_state,
-        completed_node=last_node,
-    )
+        # Execute gap_detection node
+        initial_state = _execute_node(gap_detection_node, initial_state, "gap_detection", job)
+
+        # Conditional: gap_fill or citation_stitch based on gaps
+        gaps = initial_state.get("gaps_result", {}).get("gaps", [])
+        if gaps:
+            # Execute gap_fill node
+            initial_state = _execute_node(gap_fill_node, initial_state, "gap_fill", job)
+        # else: skip gap_fill, go directly to citation_stitch
+
+        # Execute citation_stitch node
+        initial_state = _execute_node(citation_stitch_node, initial_state, "citation_stitch", job)
+
+        # Execute evidence_verification node
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    elif start_node == "draft":
+        # Resuming from draft checkpoint: skip retrieve, execute from draft
+        initial_state = _execute_node(draft_node, initial_state, "draft", job)
+        initial_state = _execute_node(gap_detection_node, initial_state, "gap_detection", job)
+
+        gaps = initial_state.get("gaps_result", {}).get("gaps", [])
+        if gaps:
+            initial_state = _execute_node(gap_fill_node, initial_state, "gap_fill", job)
+        else:
+            pass  # skip gap_fill
+
+        initial_state = _execute_node(citation_stitch_node, initial_state, "citation_stitch", job)
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    elif start_node == "gap_detection":
+        # Resuming from gap_detection checkpoint: skip retrieve and draft
+        initial_state = _execute_node(gap_detection_node, initial_state, "gap_detection", job)
+
+        gaps = initial_state.get("gaps_result", {}).get("gaps", [])
+        if gaps:
+            initial_state = _execute_node(gap_fill_node, initial_state, "gap_fill", job)
+        else:
+            pass  # skip gap_fill
+
+        initial_state = _execute_node(citation_stitch_node, initial_state, "citation_stitch", job)
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    elif start_node == "gap_fill":
+        # Resuming from gap_detection checkpoint: gap_fill not yet executed
+        gaps = initial_state.get("gaps_result", {}).get("gaps", [])
+        if gaps:
+            initial_state = _execute_node(gap_fill_node, initial_state, "gap_fill", job)
+        # else: no gaps, skip gap_fill (matches fresh-start path)
+
+        initial_state = _execute_node(citation_stitch_node, initial_state, "citation_stitch", job)
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    elif start_node == "citation_stitch":
+        # Resuming from citation_stitch checkpoint
+        initial_state = _execute_node(citation_stitch_node, initial_state, "citation_stitch", job)
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    elif start_node == "evidence_verification":
+        # Resuming from evidence_verification checkpoint
+        initial_state = _execute_node(evidence_verification_node, initial_state, "evidence_verification", job)
+
+    # Execute format_output node (terminal) - always the last step
+    initial_state = _execute_node(format_output_node, initial_state, "format_output", job)
     # -------------------------------------------------------------------------
 
-    stitched = final_state.get("stitched_blocks", [])
+    stitched = initial_state.get("stitched_blocks", [])
     draft_prompt = active_prompt("enrichment_draft")
     llm = get_llm_provider()
 

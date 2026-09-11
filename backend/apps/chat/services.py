@@ -23,7 +23,6 @@ from apps.chat.models import ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
 
-from typing import Optional
 CHAT_PROMPT_VERSION = "chat:v1"
 AGENT_PROMPT_VERSION = getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1")
 
@@ -57,7 +56,6 @@ def _tokenize(text: str) -> Iterator[str]:
 
 class ChatService:
     @staticmethod
-    @transaction.atomic
     def ask(session: ChatSession, content: str, *, use_agent: bool = False) -> ChatMessage:
         content = (content or "").strip()
         if not content:
@@ -78,13 +76,15 @@ class ChatService:
         )
         previous_messages = list(reversed(previous_messages))
 
-        # Create user message
-        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
+        # Persist user message + auto-title BEFORE invoking the graph so a
+        # downstream LLM failure does not roll back the user's message
+        # (mirrors the streaming path in ChatService.stream).
+        with transaction.atomic():
+            ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
 
-        # Generate title from first message if this is a new thread
-        if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
-            session.title = ChatService._generate_title(content)
-            session.save(update_fields=["title"])
+            if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
+                session.title = ChatService._generate_title(content)
+                session.save(update_fields=["title"])
 
         # Agent mode: use StudyAIAgent for multi-step orchestration
         if use_agent and getattr(settings, "AGENT_ENABLED", True):

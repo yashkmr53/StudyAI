@@ -135,11 +135,12 @@ def retrieve_node(state: ChatState) -> dict:
     subject = session.subject
 
     start = time.monotonic()
+    top_k = getattr(settings, "CHAT_RETRIEVAL_TOP_K", 4)
     evidence = RetrievalService.search(
         user,
         query,
         subject=subject,
-        top_k=getattr(settings, "CHAT_RETRIEVAL_TOP_K", 4),
+        top_k=top_k,
         include_reference=True,
     )
     latency_ms = int((time.monotonic() - start) * 1000)
@@ -148,7 +149,7 @@ def retrieve_node(state: ChatState) -> dict:
         query=query,
         profile_id=str(session.profile_id),
         subject_id=str(subject.pk) if subject else None,
-        k=4,
+        k=top_k,
         results_count=len(evidence),
         latency_ms=latency_ms,
     )
@@ -361,17 +362,6 @@ def answer_generation_node(state: ChatState) -> dict:
         "answer": answer,
         "citations": citations,
         "cited_contents": cited_contents,
-    }
-
-
-@traced_node("studyai.chat.verify", feature="chat")
-def citation_verification_node(state: ChatState) -> dict:
-    answer = state.get("answer", "")
-    cited_contents = state.get("cited_contents", [])
-    status, score = EvidenceVerifier._classify(answer, cited_contents)
-    return {
-        "verification_status": status,
-        "verification_score": score,
     }
 
 

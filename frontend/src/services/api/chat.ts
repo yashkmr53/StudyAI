@@ -31,13 +31,13 @@ function normalizeCitations(raw: unknown): ChatCitation[] {
           source_type: typeof obj.source_type === "string" ? obj.source_type : "database",
           chunk_id: typeof obj.chunk_id === "string" ? obj.chunk_id : undefined,
           document_id: typeof obj.document_id === "string" ? obj.document_id : undefined,
-          document_title: typeof obj.document_title === "string" ? obj.document_title : obj.document_title ?? null,
-          subject_name: typeof obj.subject_name === "string" ? obj.subject_name : obj.subject_name ?? null,
+          document_title: typeof obj.document_title === "string" ? obj.document_title : null,
+          subject_name: typeof obj.subject_name === "string" ? obj.subject_name : null,
           page_start: typeof obj.page_start === "number" ? obj.page_start : undefined,
           page_end: typeof obj.page_end === "number" ? obj.page_end : undefined,
           snippet: typeof obj.snippet === "string" ? obj.snippet : undefined,
           rrf_score: typeof obj.rrf_score === "number" ? obj.rrf_score : undefined,
-          url: typeof obj.url === "string" ? obj.url : obj.url ?? null,
+          url: typeof obj.url === "string" ? obj.url : null,
         } as ChatCitation;
       }
       if (typeof r === "number") return { page_start: r } as ChatCitation;

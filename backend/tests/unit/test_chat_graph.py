@@ -12,7 +12,6 @@ from apps.chat.langgraph_nodes import (
     retrieve_node,
     evidence_selection_node,
     answer_generation_node,
-    citation_verification_node,
     format_response_node,
 )
 from providers.llm.mock import MockLLMProvider
@@ -328,14 +327,16 @@ class TestChatGraphNodes(TestCase):
             self.assertEqual(len(result["citations"]), 1)
             self.assertEqual(result["citations"][0]["chunk_id"], "c1")
 
-    def test_citation_verification_node(self):
+    def test_verification_via_graph_path(self):
+        """The graph uses _run_verification (invoke_verification_graph), not
+        the deleted citation_verification_node.  Verify the real path."""
+        from ai.langgraph.graphs.chat_graph import _run_verification
+
         state = _blank_state(
-            user_request="test",
             answer="Dijkstra computes shortest paths",
             cited_contents=["Dijkstra computes shortest paths in weighted graphs"],
         )
-
-        result = citation_verification_node(state)
+        result = _run_verification(state)
         self.assertIn("verification_status", result)
         self.assertIn(result["verification_status"], ["supported", "partially_supported", "unsupported"])
 
