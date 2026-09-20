@@ -1,0 +1,26 @@
+{
+  "dataset_version": "v1",
+  "created": "2026-09-11",
+  "num_cases": 15,
+  "categories": {
+    "simple_factual": 2,
+    "multi_concept": 3,
+    "implicit_relationship": 2,
+    "missing_info": 3,
+    "ambiguous": 2,
+    "long_multi_chunk": 2,
+    "multi_topic": 2,
+    "distractor_prone": 1
+  },
+  "subjects": {
+    "Computer Science": 9,
+    "Biology": 2,
+    "Physics": 2,
+    "Chemistry": 1,
+    "Mathematics": 1,
+    "Economics": 1
+  },
+  "total_expected_gaps": 49,
+  "total_expected_questions": 42,
+  "description": "Golden evaluation dataset v1 for StudyAI enrichment baseline. Covers 8 categories across 6 subjects with realistic educational content."
+}

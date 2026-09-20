@@ -69,7 +69,18 @@ def generate_questions_node(state: QuestionGenerationState, config=None) -> dict
         started = time.monotonic()
         result = llm.generate_structured(
             prompt=prompt,
+            schema={
+                "type": "object",
+                "required": ["prompt", "options", "answer_index", "difficulty"],
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "string"}},
+                    "answer_index": {"type": "integer"},
+                    "difficulty": {"type": "string"},
+                },
+            },
             request_id=f"qgen:{chunk['chunk_id']}",
+            disable_fallback=True,
         )
         latency_ms = int((time.monotonic() - started) * 1000)
 

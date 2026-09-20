@@ -16,3 +16,5 @@ class EnrichmentState(BaseStudyAIState):
     fill_result: Dict[str, Any]
     all_blocks: List[Dict[str, Any]]
     stitched_blocks: List[Dict[str, Any]]
+    llm_provider: str
+    llm_model: str

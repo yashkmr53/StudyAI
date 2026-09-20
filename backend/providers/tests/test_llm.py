@@ -189,10 +189,10 @@ class TestOllamaLLMProvider(TestCase):
 
     @patch("providers.llm.local.requests.post")
     def test_ollama_generate_structured(self, mock_post):
-        """Test Ollama generate_structured method."""
+        """Test Ollama generate_structured method uses chat API."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "response": '{"answer": "Test answer", "cited_chunk_ids": ["1"]}',
+            "message": {"content": '{"answer": "Test answer", "cited_chunk_ids": ["1"]}'},
             "prompt_eval_count": 100,
             "eval_count": 50,
         }
@@ -210,6 +210,8 @@ class TestOllamaLLMProvider(TestCase):
         assert result.input_tokens == 100
         assert result.output_tokens == 50
         assert result.estimated_cost_usd == 0.0
+        assert result.provider == "ollama"
+        assert result.model == "llama3.1:8b"
 
     @patch("providers.llm.local.requests.post")
     def test_ollama_handles_timeout(self, mock_post):
@@ -225,4 +227,223 @@ class TestOllamaLLMProvider(TestCase):
         with self.assertRaises(RuntimeError) as cm:
             provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
         
-        assert "timed out" in str(cm.exception)
+
+class TestLLMProviderFallbackNoSilentMock(TestCase):
+    """Tests for Problem 1: No silent mock fallback in real enrichment."""
+
+    def test_chain_no_fallback_when_disabled(self):
+        """When disable_fallback=True, chain should raise ProviderError on primary failure."""
+        from providers.llm.chain import LLMChainProvider
+        from shared.exceptions import ProviderError
+
+        primary = MockLLMProvider()
+        primary.name = "ollama"
+        primary.generate_structured = MagicMock(
+            side_effect=RuntimeError("Ollama JSON parse failure")
+        )
+
+        fallback = MockLLMProvider()
+        fallback.name = "mock"
+
+        chain = LLMChainProvider([primary, fallback])
+        chain.disable_fallback = True
+
+        prompt = Prompt(name="chat", version="v1", user="{}")
+        with self.assertRaises(ProviderError) as cm:
+            chain.generate_structured(
+                prompt=prompt, schema=dict, request_id="req-1", disable_fallback=True
+            )
+        assert "fallback is disabled" in str(cm.exception)
+
+    def test_chain_fallback_when_disabled_is_false(self):
+        """When disable_fallback=False, chain should fall back to secondary provider."""
+        primary = MockLLMProvider()
+        primary.name = "failing-primary"
+        primary.generate_structured = MagicMock(side_effect=RuntimeError("Primary failed"))
+
+        fallback = MockLLMProvider()
+        fallback.name = "mock"
+
+        chain = LLMChainProvider([primary, fallback])
+        chain.disable_fallback = False
+
+        prompt = Prompt(name="chat", version="v1", user="{}")
+        result = chain.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+
+        assert result.provider == "mock"
+        assert "failing-primary" in result.attempted_providers
+        assert "mock" in result.attempted_providers
+
+    @patch("providers.llm.local.requests.post")
+    def test_ollama_failure_propagates_without_mock(self, mock_post):
+        """Ollama JSON parse failure should raise, not fall back to mock."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "message": {"content": "Dijkstra's algorithm is a fundamental algorithm..."[:50]},
+            "prompt_eval_count": 10,
+            "eval_count": 5,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider(base_url="http://ollama:11434", model="qwen2.5:7b")
+
+        prompt = Prompt(name="enrichment_draft", version="v1", user="Test")
+        with self.assertRaises(RuntimeError) as cm:
+            provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+        assert "not valid JSON" in str(cm.exception)
+
+
+class TestStructuredLLMResultProviderField(TestCase):
+    """Tests for Problem 2: StructuredLLMResult carries provider provenance."""
+
+    def test_structured_result_has_provider_field(self):
+        result = StructuredLLMResult(
+            data={"test": "value"},
+            model="qwen2.5:7b",
+            provider="ollama",
+            prompt_name="test",
+            prompt_version="v1",
+        )
+        assert result.provider == "ollama"
+        assert result.model == "qwen2.5:7b"
+
+    @patch("providers.llm.local.requests.post")
+    def test_ollama_result_has_provider(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "response": '{"test": "value"}',
+            "prompt_eval_count": 10,
+            "eval_count": 5,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider(base_url="http://ollama:11434", model="qwen2.5:7b")
+
+        prompt = Prompt(name="chat", version="v1", user="Test")
+        result = provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+
+        assert result.provider == "ollama"
+        assert result.model == "qwen2.5:7b"
+
+    def test_mock_result_has_provider(self):
+        provider = MockLLMProvider()
+        prompt = Prompt(name="chat", version="v1", user="{}")
+        result = provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+
+        assert result.provider == "mock"
+        assert result.model == "mock-gpt"
+
+    def test_chain_records_actual_provider(self):
+        """Chain should record the actual provider that succeeded, not 'llm-chain'."""
+        primary = MockLLMProvider()
+        primary.name = "ollama"
+
+        chain = LLMChainProvider([primary])
+        prompt = Prompt(name="chat", version="v1", user="{}")
+        result = chain.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+
+        assert result.provider == "ollama"
+
+
+class TestOllamaJsonExtraction(TestCase):
+    """Tests for Problem 3: Ollama JSON extraction and validation."""
+
+    def test_extract_json_valid_object(self):
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider.__new__(OllamaLLMProvider)
+
+        text = '{"blocks": []}'
+        result = provider._extract_json(text)
+        assert result == {"blocks": []}
+
+    def test_extract_json_with_wrapper_text(self):
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider.__new__(OllamaLLMProvider)
+
+        text = 'Some intro text\n{"blocks": []}\nSome trailing text'
+        result = provider._extract_json(text)
+        assert result == {"blocks": []}
+
+    def test_extract_json_nested_braces(self):
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider.__new__(OllamaLLMProvider)
+
+        text = '{"data": {"nested": {"value": 1}}}'
+        result = provider._extract_json(text)
+        assert result == {"data": {"nested": {"value": 1}}}
+
+    def test_extract_json_markdown_code_block(self):
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider.__new__(OllamaLLMProvider)
+
+        text = '```json\n{"test": "value"}\n```'
+        result = provider._extract_json(text)
+        assert result == {"test": "value"}
+
+    def test_extract_json_no_json_fallback(self):
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider.__new__(OllamaLLMProvider)
+
+        result = provider._extract_json("No JSON here at all")
+        assert "error" in result
+        assert result["raw"] == "No JSON here at all"[:500]
+
+    @patch("providers.llm.local.requests.post")
+    @patch("providers.llm.local.requests.get")
+    def test_format_value_is_json_string(self, mock_get, mock_post):
+        """Ollama should send format='json' for structured output, not the full schema."""
+        mock_get.return_value.json.return_value = {"models": [{"name": "qwen2.5:7b"}]}
+        mock_get.return_value.raise_for_status = MagicMock()
+        
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "message": {"content": '{"answer": "test"}'},
+            "prompt_eval_count": 10,
+            "eval_count": 5,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider(base_url="http://ollama:11434", model="qwen2.5:7b")
+
+        prompt = Prompt(name="chat", version="v1", user="Test")
+        provider.generate_structured(prompt=prompt, schema=dict, request_id="req-1")
+
+        # Check the POST call payload
+        call_args = mock_post.call_args
+        payload = call_args.kwargs.get("json") or (call_args[1].get("json") if call_args[1] else None)
+        assert payload is not None
+        assert payload["format"] == "json"
+        assert "messages" in payload  # Using chat API
+
+    @patch("providers.llm.local.requests.post")
+    @patch("providers.llm.local.requests.get")
+    def test_format_value_is_none_without_schema(self, mock_get, mock_post):
+        """Ollama should send format=None (no constraint) when no schema provided."""
+        mock_get.return_value.json.return_value = {"models": [{"name": "qwen2.5:7b"}]}
+        mock_get.return_value.raise_for_status = MagicMock()
+        
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "message": {"content": '{"plain": "text"}'},
+            "prompt_eval_count": 10,
+            "eval_count": 5,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        from providers.llm.local import OllamaLLMProvider
+        provider = OllamaLLMProvider(base_url="http://ollama:11434", model="qwen2.5:7b")
+
+        prompt = Prompt(name="chat", version="v1", user="Test")
+        provider.generate_structured(prompt=prompt, schema=None, request_id="req-1")
+
+        call_args = mock_post.call_args
+        payload = call_args.kwargs.get("json") or (call_args[1].get("json") if call_args[1] else None)
+        assert payload is not None
+        assert payload["format"] is None

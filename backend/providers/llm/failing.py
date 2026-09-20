@@ -6,5 +6,5 @@ class FailingLLMProvider:
     name = "failing"
     model_name = "failing-model"
 
-    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str) -> StructuredLLMResult:
+    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str, disable_fallback: bool = False) -> StructuredLLMResult:
         raise RuntimeError(f"{self.name}: simulated provider failure")

@@ -110,7 +110,8 @@ services:
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_SECURE: "false"
       OCR_PROVIDER_CHAIN: ${OCR_PROVIDER_CHAIN:-tesseract,mock}
-      LLM_PROVIDER_CHAIN: ${LLM_PROVIDER_CHAIN:-ollama,mock}
+      LLM_PROVIDER_CHAIN: ${LLM_PROVIDER_CHAIN:-ollama}
+      LLM_DISABLE_FALLBACK: ${LLM_DISABLE_FALLBACK:-1}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
       EMAIL_BACKEND: ${EMAIL_BACKEND:-mailpit}

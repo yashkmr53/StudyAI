@@ -1,0 +1,535 @@
+{
+  "dataset_version": "v1",
+  "created": "2026-09-11",
+  "description": "Golden evaluation dataset for StudyAI enrichment pipeline baseline. 15 cases covering 8 categories.",
+  "reference_book_mapping": {
+    "eval_001": {
+      "ref_dijkstra_complexity": "Dijkstra's algorithm time complexity is O((V + E) log V) with a binary heap.",
+      "ref_dijkstra_proof": "Proof of correctness uses the greedy choice property: when a node is extracted from the queue, its distance is final."
+    },
+    "eval_002": {
+      "ref_hash_design": "Good hash functions distribute keys uniformly.",
+      "ref_probe_sequences": "Common probe sequences: linear (h(k)+i), quadratic (h(k)+i²), double hashing (h1(k)+i*h2(k)).",
+      "ref_amortized": "Amortized analysis shows insert is O(1) despite occasional O(n) rehashing."
+    },
+    "eval_003": {
+      "ref_pol_proofreading": "DNA polymerase has 3'→5' exonuclease proofreading activity that removes mismatched bases.",
+      "ref_leading_lagging": "On the leading strand, synthesis is continuous; on the lagging strand, Okazaki fragments are synthesized discontinuously.",
+      "ref_primer_removal": "RNA primers are removed by RNase H or DNA pol I (in bacteria) and replaced with DNA. DNA ligase joins fragments."
+    },
+    "eval_004": {
+      "ref_newton_vectors": "Force and acceleration are vectors; F = ma means net force vector equals mass times acceleration vector.",
+      "ref_net_force": "Net force is the vector sum of all individual forces.",
+      "ref_inertial_frames": "The law holds only in inertial reference frames.",
+      "ref_momentum": "More generally, F = dp/dt where p = mv is momentum."
+    },
+    "eval_005": {
+      "ref_homo_hetero": "Homogeneous catalysts are in the same phase as reactants; heterogeneous are in a different phase.",
+      "ref_poisoning": "Catalyst poisoning occurs when impurities bind irreversibly to active sites.",
+      "ref_enzymes": "Enzymes are protein catalysts with specific active sites.",
+      "ref_equilibrium": "Catalysts do not affect the equilibrium constant or position — they accelerate both forward and reverse reactions equally."
+    },
+    "eval_006": {
+      "ref_avl_rotations": "AVL rotations: LL (right rotate), RR (left rotate), LR (left-right), RL (right-left).",
+      "ref_rb_insert": "RB insertion cases: uncle red → recolor; uncle black + triangle → rotate parent; uncle black + line → rotate grandparent.",
+      "ref_rb_delete": "RB deletion maintains properties through recoloring and rotations.",
+      "ref_traversals": "Inorder traversal yields keys in sorted order. Preorder and postorder for other traversals.",
+      "ref_btree": "B-trees are multiway trees for disk storage with high branching factor."
+    },
+    "eval_007": {
+      "ref_dp_complexity": "Time complexity: O(number of subproblems × time per subproblem).",
+      "ref_reconstruct": "Reconstructing solutions requires storing choices or backtracking through table.",
+      "ref_bitmask": "Bitmask DP uses bitmasks to represent subsets (e.g., TSP O(n²2ⁿ)).",
+      "ref_dp_trees": "DP on trees processes children bottom-up."
+    },
+    "eval_008": {
+      "ref_diff_rules": "Differentiation rules: power rule (xⁿ)' = nxⁿ⁻¹, product rule (fg)' = f'g + fg'.",
+      "ref_chain_rule": "Chain rule (f∘g)' = f'(g(x))·g'(x).",
+      "ref_higher_order": "Higher-order derivatives: f'', f''', f⁽ⁿ⁾.",
+      "ref_optimization": "Applications: finding extrema (f'=0, f'' test), related rates, curve sketching."
+    },
+    "eval_009": {
+      "ref_elasticity": "Price elasticity of demand = %ΔQd / %ΔP. Elastic (|ε|>1), inelastic (|ε|<1), unit elastic (|ε|=1).",
+      "ref_shifts": "Shifts in demand: income, preferences, related goods prices. Shifts in supply: input costs, technology.",
+      "ref_surplus": "Consumer surplus = area below demand curve above price. Producer surplus = area above supply curve below price.",
+      "ref_efficiency": "First welfare theorem: competitive equilibrium is Pareto efficient."
+    },
+    "eval_010": {
+      "ref_counting_bloom": "Counting Bloom filters use counters instead of bits to support deletion.",
+      "ref_bloom_variants": "Scalable Bloom filters grow dynamically. Cuckoo filters use fingerprints and cuckoo hashing.",
+      "ref_bloom_apps": "Applications: avoiding disk reads in databases (Bigtable, Cassandra), cache filtering."
+    },
+    "eval_011": {
+      "ref_glycolysis_reg": "Glycolysis regulated by phosphofructokinase-1 (PFK-1), inhibited by ATP/citrate, activated by AMP.",
+      "ref_atp_yield": "Each NADH yields ~2.5 ATP, FADH₂ yields ~1.5 ATP via ETC.",
+      "ref_fermentation": "Without oxygen, fermentation regenerates NAD⁺ (lactic acid or ethanol).",
+      "ref_ros": "Reactive oxygen species (ROS) from electron leak cause oxidative damage."
+    },
+    "eval_012": {
+      "ref_pivot_strategies": "Pivot strategies: first, last, median-of-three, random.",
+      "ref_partition": "Lomuto partition: simpler, more swaps; Hoare partition: fewer swaps, two pointers.",
+      "ref_worst_case": "Worst case: already sorted with first/last pivot.",
+      "ref_randomized": "Randomized QuickSort picks random pivot → expected O(n log n).",
+      "ref_space": "Space: O(log n) average (call stack), O(n) worst case.",
+      "ref_introsort": "Introsort: switches to HeapSort when recursion depth exceeds 2 log n."
+    },
+    "eval_013": {
+      "ref_statistical_entropy": "Statistical entropy: S = k_B ln Ω where Ω = number of microstates.",
+      "ref_info_entropy": "Information entropy: H = -Σ p log p (Shannon).",
+      "ref_reversible": "Reversible process: ΔS = 0, system+surroundings unchanged. Irreversible: ΔS > 0.",
+      "ref_gibbs": "Gibbs free energy: G = H - TS, ΔG < 0 for spontaneous at constant T,P."
+    },
+    "eval_014": {
+      "ref_astar": "A* uses heuristic h(n) for guided search; admissible if h(n) ≤ actual cost.",
+      "ref_topo": "Topological sort: Kahn's algorithm (BFS with indegree) or DFS post-order.",
+      "ref_scc": "Kosaraju's algorithm (two DFS passes) and Tarjan's algorithm (single DFS) find SCCs.",
+      "ref_maxflow": "Ford-Fulkerson with Edmonds-Karp (BFS) finds max flow in O(VE²).",
+      "ref_representations": "Adjacency list O(V+E) space, adjacency matrix O(V²)."
+    },
+    "eval_015": {
+      "ref_preemption": "Preemptive vs cooperative multitasking.",
+      "ref_slab": "Slab allocator caches kernel objects for fast allocation.",
+      "ref_io_sched": "I/O schedulers: noop, deadline, CFQ, BFQ.",
+      "ref_capabilities": "Capabilities are unforgeable tokens granting specific permissions; ACLs are lists per object.",
+      "ref_containers": "Namespaces isolate resources (PID, NET, MNT, UTS, IPC, USER); cgroups limit resource usage."
+    }
+  },
+  "cases": [
+    {
+      "case_id": "eval_001",
+      "category": "simple_factual",
+      "subject": "Computer Science",
+      "input_note": "Dijkstra's algorithm finds the shortest path from a source node to all other nodes in a weighted graph with non-negative edge weights. It uses a priority queue to greedily select the unvisited node with the smallest tentative distance.",
+      "expected_key_concepts": ["Dijkstra's algorithm", "shortest path", "weighted graph", "priority queue", "non-negative edge weights"],
+      "expected_relevant_facts": [
+        "Dijkstra finds shortest paths from a single source",
+        "Requires non-negative edge weights",
+        "Uses a priority queue for greedy selection",
+        "Computes tentative distances"
+      ],
+      "expected_retrieval_targets": ["ref_dijkstra_complexity", "ref_dijkstra_proof"],
+      "expected_gaps": [
+        {"topic": "time complexity", "reference_chunk_id": "ref_dijkstra_complexity"},
+        {"topic": "proof of correctness", "reference_chunk_id": "ref_dijkstra_proof"}
+      ],
+      "expected_citation_sources": ["ref_dijkstra_complexity", "ref_dijkstra_proof"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["algorithm purpose", "preconditions", "data structure"],
+        "difficulty_range": ["easy", "medium"]
+      },
+      "known_distractors": ["Bellman-Ford algorithm", "A* search", "negative edge weights"],
+      "reference_book_content": "Dijkstra's algorithm time complexity is O((V + E) log V) with a binary heap. The algorithm maintains a set of visited nodes and a priority queue of unvisited nodes keyed by tentative distance. Proof of correctness uses the greedy choice property: when a node is extracted from the queue, its distance is final. Bellman-Ford handles negative weights but is slower at O(VE). A* adds a heuristic for faster single-target search."
+    },
+    {
+      "case_id": "eval_002",
+      "category": "multi_concept",
+      "subject": "Computer Science",
+      "input_note": "A hash table maps keys to values using a hash function. Collisions occur when different keys hash to the same index. Chaining resolves collisions by storing a linked list at each index. Open addressing resolves collisions by probing for the next available slot. Load factor α = n/m affects performance; rehashing when α > 0.75 keeps operations O(1) average.",
+      "expected_key_concepts": ["hash table", "hash function", "collision", "chaining", "open addressing", "load factor", "rehashing"],
+      "expected_relevant_facts": [
+        "Hash tables map keys to values via hash function",
+        "Collisions happen when keys map to same index",
+        "Chaining uses linked lists at each bucket",
+        "Open addressing probes for next slot",
+        "Load factor α = n/m",
+        "Rehash at α > 0.75 maintains O(1) average"
+      ],
+      "expected_retrieval_targets": ["ref_hash_design", "ref_probe_sequences", "ref_amortized"],
+      "expected_gaps": [
+        {"topic": "hash function design", "reference_chunk_id": "ref_hash_design"},
+        {"topic": "probe sequences", "reference_chunk_id": "ref_probe_sequences"},
+        {"topic": "amortized analysis", "reference_chunk_id": "ref_amortized"}
+      ],
+      "expected_citation_sources": ["ref_hash_design", "ref_probe_sequences", "ref_amortized"],
+      "expected_question_characteristics": {
+        "min_questions": 3,
+        "topics": ["collision resolution", "load factor", "rehashing", "complexity"],
+        "difficulty_range": ["easy", "medium", "hard"]
+      },
+      "known_distractors": ["binary search tree", "B-tree", "consistent hashing"],
+      "reference_book_content": "Good hash functions distribute keys uniformly. Common probe sequences: linear (h(k)+i), quadratic (h(k)+i²), double hashing (h1(k)+i*h2(k)). Amortized analysis shows insert is O(1) despite occasional O(n) rehashing. Universal hashing provides probabilistic guarantees. Cuckoo hashing uses two tables for worst-case O(1) lookup. Consistent hashing minimizes reshuffling when table size changes."
+    },
+    {
+      "case_id": "eval_003",
+      "category": "implicit_relationship",
+      "subject": "Biology",
+      "input_note": "DNA polymerase synthesizes new DNA strands by adding nucleotides complementary to the template strand. It requires a primer with a free 3'-OH group to begin synthesis. The enzyme reads the template 3'→5' and synthesizes 5'→3'.",
+      "expected_key_concepts": ["DNA polymerase", "template strand", "primer", "3'-OH", "5'→3' synthesis", "complementary base pairing"],
+      "expected_relevant_facts": [
+        "DNA polymerase adds nucleotides to 3' end",
+        "Requires primer with free 3'-OH",
+        "Reads template 3'→5', synthesizes 5'→3'",
+        "Uses complementary base pairing (A-T, G-C)"
+      ],
+      "expected_retrieval_targets": ["ref_pol_proofreading", "ref_leading_lagging", "ref_primer_removal"],
+      "expected_gaps": [
+        {"topic": "proofreading activity", "reference_chunk_id": "ref_pol_proofreading"},
+        {"topic": "leading vs lagging strand", "reference_chunk_id": "ref_leading_lagging"},
+        {"topic": "primer removal", "reference_chunk_id": "ref_primer_removal"}
+      ],
+      "expected_citation_sources": ["ref_pol_proofreading", "ref_leading_lagging", "ref_primer_removal"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["primer requirement", "directionality", "complementary pairing"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["RNA polymerase", "reverse transcriptase", "helicase"],
+      "reference_book_content": "DNA polymerase has 3'→5' exonuclease proofreading activity that removes mismatched bases. On the leading strand, synthesis is continuous; on the lagging strand, Okazaki fragments are synthesized discontinuously. RNA primers are removed by RNase H or DNA pol I (in bacteria) and replaced with DNA. DNA ligase joins fragments. Telomerase adds repeats at chromosome ends."
+    },
+    {
+      "case_id": "eval_004",
+      "category": "missing_info",
+      "subject": "Physics",
+      "input_note": "Newton's second law states F = ma. Force equals mass times acceleration. This explains how objects accelerate when forces are applied.",
+      "expected_key_concepts": ["Newton's second law", "force", "mass", "acceleration", "F=ma"],
+      "expected_relevant_facts": [
+        "F = ma",
+        "Force causes acceleration",
+        "Acceleration proportional to force",
+        "Acceleration inversely proportional to mass"
+      ],
+      "expected_retrieval_targets": ["ref_newton_vectors", "ref_net_force", "ref_inertial_frames", "ref_momentum"],
+      "expected_gaps": [
+        {"topic": "vector nature of force and acceleration", "reference_chunk_id": "ref_newton_vectors"},
+        {"topic": "net force vs individual forces", "reference_chunk_id": "ref_net_force"},
+        {"topic": "inertial reference frames", "reference_chunk_id": "ref_inertial_frames"},
+        {"topic": "relation to momentum (F = dp/dt)", "reference_chunk_id": "ref_momentum"}
+      ],
+      "expected_citation_sources": ["ref_newton_vectors", "ref_net_force", "ref_inertial_frames", "ref_momentum"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["F=ma calculation", "vector nature", "net force"],
+        "difficulty_range": ["easy", "medium"]
+      },
+      "known_distractors": ["Newton's first law", "Newton's third law", "work-energy theorem"],
+      "reference_book_content": "Force and acceleration are vectors; F = ma means net force vector equals mass times acceleration vector. Net force is the vector sum of all individual forces. The law holds only in inertial reference frames. More generally, F = dp/dt where p = mv is momentum. For constant mass, dp/dt = m(dv/dt) = ma. Impulse J = ∫F dt = Δp."
+    },
+    {
+      "case_id": "eval_005",
+      "category": "ambiguous",
+      "subject": "Chemistry",
+      "input_note": "Catalysts speed up reactions by lowering activation energy. They provide an alternative reaction pathway. Catalysts are not consumed in the reaction.",
+      "expected_key_concepts": ["catalyst", "activation energy", "reaction pathway", "not consumed"],
+      "expected_relevant_facts": [
+        "Catalysts lower activation energy",
+        "Provide alternative pathway",
+        "Not consumed in reaction"
+      ],
+      "expected_retrieval_targets": ["ref_homo_hetero", "ref_poisoning", "ref_enzymes", "ref_equilibrium"],
+      "expected_gaps": [
+        {"topic": "homogeneous vs heterogeneous catalysis", "reference_chunk_id": "ref_homo_hetero"},
+        {"topic": "catalyst poisoning", "reference_chunk_id": "ref_poisoning"},
+        {"topic": "enzymes as biological catalysts", "reference_chunk_id": "ref_enzymes"},
+        {"topic": "effect on equilibrium", "reference_chunk_id": "ref_equilibrium"}
+      ],
+      "expected_citation_sources": ["ref_homo_hetero", "ref_poisoning", "ref_enzymes", "ref_equilibrium"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["activation energy", "not consumed", "equilibrium"],
+        "difficulty_range": ["easy", "medium"]
+      },
+      "known_distractors": ["reaction intermediates", "transition states", "reaction order"],
+      "reference_book_content": "Homogeneous catalysts are in the same phase as reactants; heterogeneous are in a different phase (e.g., solid catalyst, gaseous reactants). Catalysts do not affect the equilibrium constant or position — they accelerate both forward and reverse reactions equally. Enzymes are protein catalysts with specific active sites. Catalyst poisoning occurs when impurities bind irreversibly to active sites. Turnover frequency measures catalytic activity."
+    },
+    {
+      "case_id": "eval_006",
+      "category": "long_multi_chunk",
+      "subject": "Computer Science",
+      "input_note": "Binary search trees (BST) maintain the property that for any node, all keys in the left subtree are less than the node's key, and all keys in the right subtree are greater. Inorder traversal yields keys in sorted order. Search, insert, and delete take O(h) time where h is tree height. In the worst case (degenerate tree), h = n giving O(n). Balanced BSTs like AVL trees and Red-Black trees maintain h = O(log n) through rotations. AVL trees track balance factors (-1, 0, +1) and perform single or double rotations after insertions/deletions that violate balance. Red-Black trees use node colors (red/black) and five properties to guarantee h ≤ 2 log(n+1). Both achieve O(log n) worst-case for all operations.",
+      "expected_key_concepts": ["binary search tree", "BST property", "inorder traversal", "tree height", "AVL tree", "Red-Black tree", "rotations", "balance factor"],
+      "expected_relevant_facts": [
+        "BST property: left < node < right",
+        "Inorder traversal gives sorted order",
+        "Operations O(h) where h = height",
+        "Worst case degenerate: O(n)",
+        "AVL uses balance factors and rotations",
+        "Red-Black uses colors and 5 properties",
+        "Both guarantee O(log n) worst-case"
+      ],
+      "expected_retrieval_targets": ["ref_avl_rotations", "ref_rb_insert", "ref_rb_delete", "ref_traversals", "ref_btree"],
+      "expected_gaps": [
+        {"topic": "AVL rotation cases", "reference_chunk_id": "ref_avl_rotations"},
+        {"topic": "Red-Black insertion cases", "reference_chunk_id": "ref_rb_insert"},
+        {"topic": "Red-Black deletion cases", "reference_chunk_id": "ref_rb_delete"},
+        {"topic": "tree traversal algorithms", "reference_chunk_id": "ref_traversals"},
+        {"topic": "B-tree comparison", "reference_chunk_id": "ref_btree"}
+      ],
+      "expected_citation_sources": ["ref_avl_rotations", "ref_rb_insert", "ref_rb_delete", "ref_traversals", "ref_btree"],
+      "expected_question_characteristics": {
+        "min_questions": 4,
+        "topics": ["BST property", "AVL rotations", "Red-Black properties", "complexity", "traversals"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["B-tree", "trie", "heap", "splay tree"],
+      "reference_book_content": "AVL rotations: LL (right rotate), RR (left rotate), LR (left-right), RL (right-left). Red-Black properties: (1) nodes red/black, (2) root black, (3) leaves (NIL) black, (4) red node children black, (5) all paths from node to descendant leaves have same black-height. RB insertion cases: uncle red → recolor; uncle black + triangle → rotate parent; uncle black + line → rotate grandparent. B-trees are multiway trees for disk storage with high branching factor. Splay trees are self-adjusting with amortized O(log n)."
+    },
+    {
+      "case_id": "eval_007",
+      "category": "multi_topic",
+      "subject": "Computer Science",
+      "input_note": "Dynamic programming solves problems by breaking them into overlapping subproblems and storing solutions to avoid recomputation. Two key properties: optimal substructure (optimal solution contains optimal subsolutions) and overlapping subproblems (same subproblems solved repeatedly). Memoization (top-down) caches recursive calls. Tabulation (bottom-up) fills a table iteratively. Classic examples: Fibonacci, Longest Common Subsequence, Knapsack, Edit Distance.",
+      "expected_key_concepts": ["dynamic programming", "optimal substructure", "overlapping subproblems", "memoization", "tabulation", "Fibonacci", "LCS", "Knapsack", "Edit Distance"],
+      "expected_relevant_facts": [
+        "DP breaks problems into overlapping subproblems",
+        "Optimal substructure required",
+        "Overlapping subproblems required",
+        "Memoization = top-down with caching",
+        "Tabulation = bottom-up table filling",
+        "Classic problems: Fibonacci, LCS, Knapsack, Edit Distance"
+      ],
+      "expected_retrieval_targets": ["ref_dp_complexity", "ref_reconstruct", "ref_bitmask", "ref_dp_trees"],
+      "expected_gaps": [
+        {"topic": "time/space complexity analysis", "reference_chunk_id": "ref_dp_complexity"},
+        {"topic": "reconstructing solutions", "reference_chunk_id": "ref_reconstruct"},
+        {"topic": "bitmask DP", "reference_chunk_id": "ref_bitmask"},
+        {"topic": "DP on trees", "reference_chunk_id": "ref_dp_trees"}
+      ],
+      "expected_citation_sources": ["ref_dp_complexity", "ref_reconstruct", "ref_bitmask", "ref_dp_trees"],
+      "expected_question_characteristics": {
+        "min_questions": 3,
+        "topics": ["optimal substructure", "memoization vs tabulation", "LCS", "Knapsack"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["greedy algorithms", "divide and conquer", "backtracking"],
+      "reference_book_content": "Time complexity: O(number of subproblems × time per subproblem). Space can often be reduced (e.g., Fibonacci O(1) space, LCS O(min(m,n)) space). Reconstructing solutions requires storing choices or backtracking through table. Bitmask DP uses bitmasks to represent subsets (e.g., TSP O(n²2ⁿ)). DP on trees processes children bottom-up. Divide and conquer has non-overlapping subproblems. Greedy makes locally optimal choices without guaranteeing global optimum."
+    },
+    {
+      "case_id": "eval_008",
+      "category": "distractor_prone",
+      "subject": "Mathematics",
+      "input_note": "The derivative of a function f at point x is the limit of the difference quotient: f'(x) = lim(h→0) (f(x+h) - f(x))/h. It represents the instantaneous rate of change and the slope of the tangent line.",
+      "expected_key_concepts": ["derivative", "limit", "difference quotient", "instantaneous rate of change", "tangent line", "slope"],
+      "expected_relevant_facts": [
+        "Derivative definition: limit of difference quotient",
+        "Represents instantaneous rate of change",
+        "Equals slope of tangent line",
+        "f'(x) = lim(h→0) (f(x+h)-f(x))/h"
+      ],
+      "expected_retrieval_targets": ["ref_diff_rules", "ref_chain_rule", "ref_higher_order", "ref_optimization"],
+      "expected_gaps": [
+        {"topic": "differentiation rules", "reference_chunk_id": "ref_diff_rules"},
+        {"topic": "chain rule", "reference_chunk_id": "ref_chain_rule"},
+        {"topic": "higher-order derivatives", "reference_chunk_id": "ref_higher_order"},
+        {"topic": "applications: optimization", "reference_chunk_id": "ref_optimization"}
+      ],
+      "expected_citation_sources": ["ref_diff_rules", "ref_chain_rule", "ref_higher_order", "ref_optimization"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["derivative definition", "tangent line", "rate of change"],
+        "difficulty_range": ["easy", "medium"]
+      },
+      "known_distractors": ["integral", "fundamental theorem of calculus", "Riemann sum", "limit definition of e", "continuity", "differentiability"],
+      "reference_book_content": "Differentiation rules: power rule (xⁿ)' = nxⁿ⁻¹, product rule (fg)' = f'g + fg', quotient rule (f/g)' = (f'g - fg')/g², chain rule (f∘g)' = f'(g(x))·g'(x). Higher-order derivatives: f'', f''', f⁽ⁿ⁾. Applications: finding extrema (f'=0, f'' test), related rates, curve sketching. Mean Value Theorem: if f continuous on [a,b] and differentiable on (a,b), ∃c∈(a,b) with f'(c) = (f(b)-f(a))/(b-a). Integration is the inverse operation."
+    },
+    {
+      "case_id": "eval_009",
+      "category": "simple_factual",
+      "subject": "Economics",
+      "input_note": "Supply and demand determine market equilibrium price. When supply exceeds demand, prices fall. When demand exceeds supply, prices rise. At equilibrium, quantity supplied equals quantity demanded.",
+      "expected_key_concepts": ["supply", "demand", "market equilibrium", "price", "quantity supplied", "quantity demanded"],
+      "expected_relevant_facts": [
+        "Supply and demand determine equilibrium price",
+        "Excess supply → price falls",
+        "Excess demand → price rises",
+        "Equilibrium: Qs = Qd"
+      ],
+      "expected_retrieval_targets": ["ref_elasticity", "ref_shifts", "ref_surplus", "ref_efficiency"],
+      "expected_gaps": [
+        {"topic": "price elasticity", "reference_chunk_id": "ref_elasticity"},
+        {"topic": "shifts vs movements along curves", "reference_chunk_id": "ref_shifts"},
+        {"topic": "consumer/producer surplus", "reference_chunk_id": "ref_surplus"},
+        {"topic": "market efficiency", "reference_chunk_id": "ref_efficiency"}
+      ],
+      "expected_citation_sources": ["ref_elasticity", "ref_shifts", "ref_surplus", "ref_efficiency"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["equilibrium", "price changes", "shifts"],
+        "difficulty_range": ["easy", "medium"]
+      },
+      "known_distractors": ["GDP", "inflation", "monetary policy", "fiscal policy"],
+      "reference_book_content": "Price elasticity of demand = %ΔQd / %ΔP. Elastic (|ε|>1), inelastic (|ε|<1), unit elastic (|ε|=1). Shifts in demand: income, preferences, related goods prices. Shifts in supply: input costs, technology, number of sellers. Consumer surplus = area below demand curve above price. Producer surplus = area above supply curve below price. Deadweight loss from taxes/price controls. First welfare theorem: competitive equilibrium is Pareto efficient."
+    },
+    {
+      "case_id": "eval_010",
+      "category": "multi_concept",
+      "subject": "Computer Science",
+      "input_note": "A Bloom filter is a probabilistic data structure for set membership tests. It uses k hash functions and a bit array of size m. To add an element, set bits at k hash positions. To test membership, check if all k bits are set. False positives possible (element not in set but all bits set), false negatives impossible. False positive rate ≈ (1 - e^(-kn/m))^k. Optimal k = (m/n) ln 2.",
+      "expected_key_concepts": ["Bloom filter", "probabilistic", "set membership", "hash functions", "bit array", "false positive", "false negative", "optimal k"],
+      "expected_relevant_facts": [
+        "Bloom filter tests set membership probabilistically",
+        "Uses k hash functions and m-bit array",
+        "Add: set k bits; Test: check all k bits",
+        "False positives possible, false negatives impossible",
+        "FPR ≈ (1 - e^(-kn/m))^k",
+        "Optimal k = (m/n) ln 2"
+      ],
+      "expected_retrieval_targets": ["ref_counting_bloom", "ref_bloom_variants", "ref_bloom_apps"],
+      "expected_gaps": [
+        {"topic": "counting Bloom filter", "reference_chunk_id": "ref_counting_bloom"},
+        {"topic": "Bloom filter variants", "reference_chunk_id": "ref_bloom_variants"},
+        {"topic": "applications: databases, caches", "reference_chunk_id": "ref_bloom_apps"}
+      ],
+      "expected_citation_sources": ["ref_counting_bloom", "ref_bloom_variants", "ref_bloom_apps"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["false positives", "hash functions", "optimal k", "applications"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["hash table", "cuckoo filter", "quotient filter", "HyperLogLog"],
+      "reference_book_content": "Counting Bloom filters use counters instead of bits to support deletion. Scalable Bloom filters grow dynamically. Cuckoo filters use fingerprints and cuckoo hashing for better space efficiency and deletion support. Quotient filters store quotients of hashes for cache efficiency. Applications: avoiding disk reads in databases (Bigtable, Cassandra), cache filtering, network routing, spell checkers. HyperLogLog estimates cardinality, not membership."
+    },
+    {
+      "case_id": "eval_011",
+      "category": "implicit_relationship",
+      "subject": "Biology",
+      "input_note": "During cellular respiration, glucose is oxidized to produce ATP. Glycolysis breaks glucose into pyruvate in the cytoplasm, producing 2 ATP and 2 NADH. Pyruvate enters mitochondria for the citric acid cycle, producing more NADH and FADH₂. The electron transport chain uses these to create a proton gradient driving ATP synthase.",
+      "expected_key_concepts": ["cellular respiration", "glycolysis", "pyruvate", "citric acid cycle", "NADH", "FADH2", "electron transport chain", "proton gradient", "ATP synthase"],
+      "expected_relevant_facts": [
+        "Glycolysis: glucose → pyruvate (cytoplasm), 2 ATP + 2 NADH",
+        "Citric acid cycle: pyruvate → CO₂ + NADH + FADH₂ (mitochondria)",
+        "ETC uses NADH/FADH₂ to create proton gradient",
+        "ATP synthase uses gradient to make ATP",
+        "Total ~30-32 ATP per glucose"
+      ],
+      "expected_retrieval_targets": ["ref_glycolysis_reg", "ref_atp_yield", "ref_fermentation", "ref_ros"],
+      "expected_gaps": [
+        {"topic": "glycolysis regulation", "reference_chunk_id": "ref_glycolysis_reg"},
+        {"topic": "ATP yield per NADH/FADH₂", "reference_chunk_id": "ref_atp_yield"},
+        {"topic": "fermentation alternative", "reference_chunk_id": "ref_fermentation"},
+        {"topic": "reactive oxygen species", "reference_chunk_id": "ref_ros"}
+      ],
+      "expected_citation_sources": ["ref_glycolysis_reg", "ref_atp_yield", "ref_fermentation", "ref_ros"],
+      "expected_question_characteristics": {
+        "min_questions": 3,
+        "topics": ["glycolysis", "citric acid cycle", "ETC", "ATP yield"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["photosynthesis", "Calvin cycle", "light reactions", "chloroplast"],
+      "reference_book_content": "Glycolysis regulated by phosphofructokinase-1 (PFK-1), inhibited by ATP/citrate, activated by AMP. Each NADH yields ~2.5 ATP, FADH₂ yields ~1.5 ATP via ETC. Without oxygen, fermentation regenerates NAD⁺ (lactic acid or ethanol). ETC complexes I-IV pump protons; complex V (ATP synthase) uses flow back. Reactive oxygen species (ROS) from electron leak cause oxidative damage. Uncoupling proteins dissipate gradient as heat."
+    },
+    {
+      "case_id": "eval_012",
+      "category": "missing_info",
+      "subject": "Computer Science",
+      "input_note": "QuickSort is a divide-and-conquer sorting algorithm. It picks a pivot, partitions the array around the pivot, and recursively sorts the subarrays. Average case O(n log n), worst case O(n²).",
+      "expected_key_concepts": ["QuickSort", "divide and conquer", "pivot", "partition", "average case", "worst case"],
+      "expected_relevant_facts": [
+        "QuickSort uses divide and conquer",
+        "Picks pivot, partitions array",
+        "Recursively sorts subarrays",
+        "Average O(n log n), worst O(n²)"
+      ],
+      "expected_retrieval_targets": ["ref_pivot_strategies", "ref_partition", "ref_worst_case", "ref_randomized", "ref_space", "ref_introsort"],
+      "expected_gaps": [
+        {"topic": "pivot selection strategies", "reference_chunk_id": "ref_pivot_strategies"},
+        {"topic": "partition algorithm (Lomuto/Hoare)", "reference_chunk_id": "ref_partition"},
+        {"topic": "worst case triggers", "reference_chunk_id": "ref_worst_case"},
+        {"topic": "randomized QuickSort", "reference_chunk_id": "ref_randomized"},
+        {"topic": "space complexity", "reference_chunk_id": "ref_space"},
+        {"topic": "introsort hybrid", "reference_chunk_id": "ref_introsort"}
+      ],
+      "expected_citation_sources": ["ref_pivot_strategies", "ref_partition", "ref_worst_case", "ref_randomized", "ref_space", "ref_introsort"],
+      "expected_question_characteristics": {
+        "min_questions": 3,
+        "topics": ["partition", "pivot selection", "complexity", "worst case"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["MergeSort", "HeapSort", "BubbleSort", "partition in QuickSelect"],
+      "reference_book_content": "Pivot strategies: first, last, median-of-three, random. Lomuto partition: simpler, more swaps; Hoare partition: fewer swaps, two pointers. Worst case: already sorted with first/last pivot. Randomized QuickSort picks random pivot → expected O(n log n). Space: O(log n) average (call stack), O(n) worst case. Introsort: switches to HeapSort when recursion depth exceeds 2 log n, guaranteeing O(n log n) worst case. Three-way partition handles duplicates efficiently (Dutch national flag)."
+    },
+    {
+      "case_id": "eval_013",
+      "category": "ambiguous",
+      "subject": "Physics",
+      "input_note": "Entropy measures disorder in a system. The second law of thermodynamics states that entropy of an isolated system never decreases. ΔS ≥ 0 for any spontaneous process.",
+      "expected_key_concepts": ["entropy", "disorder", "second law of thermodynamics", "isolated system", "spontaneous process"],
+      "expected_relevant_facts": [
+        "Entropy measures disorder",
+        "Second law: entropy of isolated system never decreases",
+        "ΔS ≥ 0 for spontaneous processes"
+      ],
+      "expected_retrieval_targets": ["ref_statistical_entropy", "ref_info_entropy", "ref_reversible", "ref_gibbs"],
+      "expected_gaps": [
+        {"topic": "statistical definition (microstates)", "reference_chunk_id": "ref_statistical_entropy"},
+        {"topic": "entropy and information theory", "reference_chunk_id": "ref_info_entropy"},
+        {"topic": "reversible vs irreversible processes", "reference_chunk_id": "ref_reversible"},
+        {"topic": "Gibbs free energy", "reference_chunk_id": "ref_gibbs"}
+      ],
+      "expected_citation_sources": ["ref_statistical_entropy", "ref_info_entropy", "ref_reversible", "ref_gibbs"],
+      "expected_question_characteristics": {
+        "min_questions": 2,
+        "topics": ["second law", "disorder", "spontaneous"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["enthalpy", "heat capacity", "Carnot cycle", "first law"],
+      "reference_book_content": "Statistical entropy: S = k_B ln Ω where Ω = number of microstates. Information entropy: H = -Σ p log p (Shannon). Reversible process: ΔS = 0, system+surroundings unchanged. Irreversible: ΔS > 0. Gibbs free energy: G = H - TS, ΔG < 0 for spontaneous at constant T,P. Clausius inequality: ∮ δQ/T ≤ 0. Carnot efficiency: 1 - T_c/T_h. Third law: S → 0 as T → 0 for perfect crystal."
+    },
+    {
+      "case_id": "eval_014",
+      "category": "long_multi_chunk",
+      "subject": "Computer Science",
+      "input_note": "Graph algorithms solve problems on networks of vertices and edges. Breadth-first search (BFS) explores level by level using a queue, finding shortest paths in unweighted graphs. Depth-first search (DFS) explores as far as possible using a stack/recursion, useful for topological sort and cycle detection. Dijkstra's algorithm finds shortest paths in weighted graphs with non-negative edges using a priority queue. Bellman-Ford handles negative weights but detects negative cycles. Floyd-Warshall computes all-pairs shortest paths in O(V³). Minimum spanning tree algorithms: Prim's (like Dijkstra) and Kruskal's (sort edges, union-find).",
+      "expected_key_concepts": ["graph", "BFS", "DFS", "queue", "stack", "Dijkstra", "Bellman-Ford", "Floyd-Warshall", "MST", "Prim", "Kruskal", "union-find", "topological sort", "cycle detection"],
+      "expected_relevant_facts": [
+        "BFS: queue, level-order, shortest paths unweighted",
+        "DFS: stack/recursion, topological sort, cycle detection",
+        "Dijkstra: priority queue, non-negative weights",
+        "Bellman-Ford: negative weights, detects negative cycles",
+        "Floyd-Warshall: all-pairs, O(V³)",
+        "Prim's MST: like Dijkstra, grows tree",
+        "Kruskal's MST: sort edges, union-find"
+      ],
+      "expected_retrieval_targets": ["ref_astar", "ref_topo", "ref_scc", "ref_maxflow", "ref_representations"],
+      "expected_gaps": [
+        {"topic": "A* search", "reference_chunk_id": "ref_astar"},
+        {"topic": "topological sort algorithms", "reference_chunk_id": "ref_topo"},
+        {"topic": "strongly connected components", "reference_chunk_id": "ref_scc"},
+        {"topic": "max flow / min cut", "reference_chunk_id": "ref_maxflow"},
+        {"topic": "graph representations", "reference_chunk_id": "ref_representations"}
+      ],
+      "expected_citation_sources": ["ref_astar", "ref_topo", "ref_scc", "ref_maxflow", "ref_representations"],
+      "expected_question_characteristics": {
+        "min_questions": 4,
+        "topics": ["BFS vs DFS", "Dijkstra", "MST algorithms", "negative weights", "all-pairs"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["binary tree traversal", "heap operations", "disjoint set union", "dynamic programming on graphs"],
+      "reference_book_content": "A* uses heuristic h(n) for guided search; admissible if h(n) ≤ actual cost. Topological sort: Kahn's algorithm (BFS with indegree) or DFS post-order. Kosaraju's algorithm (two DFS passes) and Tarjan's algorithm (single DFS) find SCCs. Ford-Fulkerson with Edmonds-Karp (BFS) finds max flow in O(VE²). Push-relabel is faster. Adjacency list O(V+E) space, adjacency matrix O(V²). Incidence matrix for edge-centric algorithms. Graph coloring, Hamiltonian path are NP-complete."
+    },
+    {
+      "case_id": "eval_015",
+      "category": "multi_topic",
+      "subject": "Computer Science",
+      "input_note": "Operating system kernels manage hardware resources. Monolithic kernels run all services in kernel space (Linux). Microkernels run minimal services (IPC, scheduling, memory) in kernel space, others as user-space servers (MINIX, seL4). Hybrid kernels combine approaches (Windows NT, XNU). System calls transition user→kernel mode. Context switching saves/restores CPU state. Scheduling algorithms: round-robin, priority, CFS (Completely Fair Scheduler). Virtual memory uses page tables mapping virtual→physical addresses. Page faults trigger disk I/O. File systems: ext4 (journaling), ZFS (copy-on-write), FAT32 (legacy).",
+      "expected_key_concepts": ["kernel", "monolithic", "microkernel", "hybrid", "system call", "context switch", "scheduling", "CFS", "virtual memory", "page table", "page fault", "file system", "ext4", "ZFS", "FAT32"],
+      "expected_relevant_facts": [
+        "Monolithic: all services in kernel space (Linux)",
+        "Microkernel: minimal kernel, user-space servers (MINIX, seL4)",
+        "Hybrid: combines both (Windows NT, XNU)",
+        "System calls: user→kernel mode transition",
+        "Context switch: save/restore CPU state",
+        "CFS: Completely Fair Scheduler",
+        "Virtual memory: page tables map virtual→physical",
+        "Page faults: trigger disk I/O",
+        "ext4: journaling, ZFS: copy-on-write, FAT32: legacy"
+      ],
+      "expected_retrieval_targets": ["ref_preemption", "ref_slab", "ref_io_sched", "ref_capabilities", "ref_containers"],
+      "expected_gaps": [
+        {"topic": "kernel preemption", "reference_chunk_id": "ref_preemption"},
+        {"topic": "memory management: slab allocator", "reference_chunk_id": "ref_slab"},
+        {"topic": "I/O scheduling", "reference_chunk_id": "ref_io_sched"},
+        {"topic": "capabilities vs ACLs", "reference_chunk_id": "ref_capabilities"},
+        {"topic": "container namespaces/cgroups", "reference_chunk_id": "ref_containers"}
+      ],
+      "expected_citation_sources": ["ref_preemption", "ref_slab", "ref_io_sched", "ref_capabilities", "ref_containers"],
+      "expected_question_characteristics": {
+        "min_questions": 4,
+        "topics": ["kernel types", "system calls", "scheduling", "virtual memory", "file systems"],
+        "difficulty_range": ["medium", "hard"]
+      },
+      "known_distractors": ["user-space libraries", "shell commands", "compiler optimizations", "network protocols"],
+      "reference_book_content": "Preemptive vs cooperative multitasking. Slab allocator caches kernel objects for fast allocation. I/O schedulers: noop, deadline, CFQ, BFQ. Capabilities are unforgeable tokens granting specific permissions; ACLs are lists per object. Namespaces isolate resources (PID, NET, MNT, UTS, IPC, USER); cgroups limit resource usage (CPU, memory, I/O). seccomp filters syscalls. KPTI mitigates Meltdown. eBPF runs sandboxed bytecode in kernel."
+    }
+  ]
+}

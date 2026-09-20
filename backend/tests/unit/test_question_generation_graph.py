@@ -21,7 +21,7 @@ class MockLLMProvider:
     model_name = "mock-gpt"
     name = "mock"
 
-    def generate_structured(self, *, prompt=None, schema=None, request_id=None):
+    def generate_structured(self, *, prompt=None, schema=None, request_id=None, disable_fallback=False):
         return type("R", (), {
             "data": {
                 "prompt": "What does Dijkstra compute?",
@@ -30,6 +30,7 @@ class MockLLMProvider:
                 "difficulty": "medium",
             },
             "model": "mock-gpt",
+            "provider": "mock",
             "prompt_name": getattr(prompt, 'name', 'question_generation'),
             "prompt_version": getattr(prompt, 'version', 'v1'),
             "input_tokens": 15,

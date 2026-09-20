@@ -20,7 +20,7 @@ class MockLLMProvider:
     model_name = "mock-gpt"
     name = "mock"
 
-    def generate_structured(self, *, prompt=None, schema=None, request_id=None):
+    def generate_structured(self, *, prompt=None, schema=None, request_id=None, disable_fallback=False):
         prompt_name = getattr(prompt, 'name', '')
         if prompt_name == "enrichment_draft":
             return type("R", (), {
@@ -31,6 +31,7 @@ class MockLLMProvider:
                     ]
                 },
                 "model": "mock-gpt",
+                "provider": "mock",
                 "prompt_name": "enrichment_draft",
                 "prompt_version": "v1",
                 "input_tokens": 10,
@@ -45,6 +46,7 @@ class MockLLMProvider:
                     ]
                 },
                 "model": "mock-gpt",
+                "provider": "mock",
                 "prompt_name": "gap_detection",
                 "prompt_version": "v1",
                 "input_tokens": 10,
@@ -60,13 +62,14 @@ class MockLLMProvider:
                     ]
                 },
                 "model": "mock-gpt",
+                "provider": "mock",
                 "prompt_name": "gap_filling",
                 "prompt_version": "v1",
                 "input_tokens": 10,
                 "output_tokens": 20,
                 "total_tokens": 30,
             })()
-        return type("R", (), {"data": {}, "model": "mock-gpt", "prompt_name": "", "prompt_version": "v1",
+        return type("R", (), {"data": {}, "model": "mock-gpt", "provider": "mock", "prompt_name": "", "prompt_version": "v1",
                                "input_tokens": 0, "output_tokens": 0, "total_tokens": 0})()
 
 

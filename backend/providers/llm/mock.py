@@ -137,7 +137,7 @@ class MockLLMProvider:
     model_name = 'mock-gpt'
     name = "mock"
 
-    def generate_structured(self, *, prompt: Prompt, schema: type = None, request_id: str) -> StructuredLLMResult:
+    def generate_structured(self, *, prompt: Prompt, schema: Union[type, dict] = None, request_id: str, disable_fallback: bool = False) -> StructuredLLMResult:
         evidence = _evidence_from(prompt)
 
         if prompt.name == "enrichment_draft":
@@ -150,6 +150,8 @@ class MockLLMProvider:
             data = self._question(evidence)
         elif prompt.name == "chat":
             data = self._chat(evidence, _question_from(prompt))
+        elif prompt.name == "gap_candidate_validation":
+            data = self._validate_candidate(prompt)
         else:
             # Default handler for unknown prompts (tests, etc.)
             data = {"result": f"Mock response for {prompt.name}", "status": "ok"}
@@ -157,6 +159,7 @@ class MockLLMProvider:
         return StructuredLLMResult(
             data=data,
             model=getattr(self, "model_name", "mock-gpt"),
+            provider=self.name,
             prompt_name=prompt.name,
             prompt_version=prompt.version,
         )
@@ -198,7 +201,13 @@ class MockLLMProvider:
                 if topic in seen:
                     continue
                 seen.add(topic)
-                gaps.append({"topic": topic, "reference_chunk_id": chunk["chunk_id"]})
+                gaps.append({
+                    "topic": topic,
+                    "why_missing": f"This concept appears in the reference material but is not covered in the user's note.",
+                    "missing_from_note": f"The note does not mention {topic}.",
+                    "evidence_in_reference": chunk["content"][:200],
+                    "source_chunk_ids": [chunk["chunk_id"]],
+                })
                 break  # one gap per reference chunk keeps output bounded
         return {"gaps": gaps}
 
@@ -207,12 +216,13 @@ class MockLLMProvider:
         ref_by_id = {c["chunk_id"]: c for c in evidence.get("reference_chunks", [])}
         blocks = []
         for gap in evidence.get("gaps", []):
-            chunk = ref_by_id.get(gap["reference_chunk_id"])
+            chunk_id = gap["source_chunk_ids"][0] if gap.get("source_chunk_ids") else None
+            chunk = ref_by_id.get(chunk_id) if chunk_id else None
             if not chunk:
                 continue
             blocks.append({
                 "block_type": "gap_fill",
-                "title": f"Further reading: {gap['topic']}",
+                "title": f"Gap fill: {gap['topic']}",
                 "content": f"On '{gap['topic']}', your reference material states: {chunk['content'][:200]}",
                 "generation_method": "llm",
                 "source_chunk_ids": [chunk["chunk_id"]],
@@ -290,6 +300,15 @@ class MockLLMProvider:
             "cited_ids": citation_ids,
             "cited_chunk_ids": citation_ids,
             "confidence": 0.75,
+        }
+
+    @staticmethod
+    def _validate_candidate(prompt: Prompt) -> dict:
+        return {
+            "classification": "MISSING",
+            "reason": "Mock validation indicates concept is missing from note.",
+            "missing_from_note": "Concept is not covered in student note.",
+            "evidence_in_reference": "Concept found in reference material."
         }
 
     # keep backward-compat alias

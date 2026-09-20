@@ -28,6 +28,7 @@ class Prompt:
 class StructuredLLMResult:
     data: dict
     model: str = ""
+    provider: str = ""
     prompt_name: str = ""
     prompt_version: str = ""
     input_tokens: int = 0

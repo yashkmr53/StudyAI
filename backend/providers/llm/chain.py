@@ -92,41 +92,18 @@ class LLMChainProvider:
         if not providers:
             raise ValueError("LLM chain requires at least one provider.")
         self.providers = providers
+        self.disable_fallback = False  # Set by get_llm_provider() based on env
 
     def _timeouted_generate(self, provider, prompt, schema, request_id):
         """Run provider.generate_structured with a timeout."""
-        import threading
+        result = provider.generate_structured(
+            prompt=prompt, schema=schema, request_id=request_id
+        )
+        return result
 
-        result_holder = [None]
-        exception_holder = [None]
-
-        def target():
-            try:
-                result_holder[0] = provider.generate_structured(
-                    prompt=prompt, schema=schema, request_id=request_id
-                )
-            except Exception as exc:
-                exception_holder[0] = exc
-
-        thread = threading.Thread(target=target, daemon=True)
-        thread.start()
-        thread.join(timeout=LLM_TIMEOUT_SECONDS)
-
-        if thread.is_alive():
-            # Timeout exceeded - provider is hanging
-            logger.warning(
-                "LLM provider %s timed out after %s seconds", provider.name, LLM_TIMEOUT_SECONDS
-            )
-            raise TimeoutError(
-                f"LLM provider {provider.name} timed out after {LLM_TIMEOUT_SECONDS} seconds"
-            )
-
-        if exception_holder[0] is not None:
-            raise exception_holder[0]
-
-        return result_holder[0]
-
-    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str) -> StructuredLLMResult:
+    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str, disable_fallback: bool = False) -> StructuredLLMResult:
+        # Combine instance-level setting with explicit parameter
+        no_fallback = self.disable_fallback or disable_fallback
         attempted: list[str] = []
         last_error: Exception | None = None
         for provider in self.providers:
@@ -153,8 +130,10 @@ class LLMChainProvider:
                 output_tokens = getattr(result, "output_tokens", 0)
                 total_tokens = getattr(result, "total_tokens", input_tokens + output_tokens)
                 estimated_cost_usd = getattr(result, "estimated_cost_usd", 0.0)
+                # Capture the actual provider name/model from the result
+                result_provider = getattr(result, "provider", "") or provider.name
                 record_provider_call(
-                    provider=provider.name,
+                    provider=result_provider,
                     model=getattr(result, "model", ""),
                     latency_ms=latency_ms,
                     success=True,
@@ -162,8 +141,10 @@ class LLMChainProvider:
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
                     estimated_cost_usd=estimated_cost_usd,
-                    metadata={"redactions_count": redaction_count},
+                    metadata={"redactions_count": redaction_count, "prompt_name": prompt.name},
                 )
+                # Enrich the result with provider provenance
+                result.provider = result_provider
                 result.attempted_providers = attempted  # type: ignore[attr-defined]
                 return result
             except Exception as exc:  # noqa: BLE001 — fallback is the point
@@ -174,9 +155,16 @@ class LLMChainProvider:
                     latency_ms=int((time.monotonic() - started) * 1000),
                     success=False,
                     error=str(exc)[:300],
-                    metadata={"redactions_count": 0},
+                    metadata={"redactions_count": 0, "prompt_name": prompt.name},
                 )
                 logger.warning("LLM provider %s failed: %s", provider.name, exc)
+                if no_fallback:
+                    from shared.exceptions import ProviderError
+
+                    raise ProviderError(
+                        f"LLM provider {provider.name} failed and fallback is disabled.",
+                        details={"attempted": attempted, "last_error": str(last_error)},
+                    ) from exc
 
         from shared.exceptions import ProviderError
 

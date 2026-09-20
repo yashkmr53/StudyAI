@@ -5,6 +5,7 @@ Values are environment-driven (12-factor). See .env.example at repo root.
 """
 from datetime import timedelta
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
 
@@ -202,7 +203,12 @@ RETRIEVAL_RRF_K = 60                    # Reciprocal Rank Fusion constant
 RETRIEVAL_CANDIDATES = 50               # per-channel depth before fusion
 
 # LLM Provider Chain (Phase 11)
-LLM_PROVIDER_CHAIN = "ollama,mock"     # primary, fallback — comma-separated string
+# Primary LLM provider and optional fallback. Configured via environment variable
+# LLM_PROVIDER_CHAIN (comma-separated, e.g. "ollama" or "ollama,mock").
+# When LLM_DISABLE_FALLBACK is set, the chain will NOT fall back to secondary
+# providers on failure — this is the intended behavior for real enrichment.
+LLM_PROVIDER_CHAIN = os.environ.get("LLM_PROVIDER_CHAIN", "mock,mock")
+LLM_DISABLE_FALLBACK = os.environ.get("LLM_DISABLE_FALLBACK", "0").strip() in ("1", "true", "True")
 
 # Web Search Provider (Phase 13: grounded RAG + web retrieval)
 WEB_SEARCH_PROVIDER = "duckduckgo"     # duckduckgo (real) | mock (tests)

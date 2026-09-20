@@ -166,10 +166,23 @@ def get_llm_provider() -> LLMChainProvider:
 
     LLM_PROVIDER_CHAIN can be a comma-separated list: "ollama,mock"
     Defaults to ["mock", "mock"] for backward compatibility.
+
+    When LLM_DISABLE_FALLBACK is set, the returned chain will raise on the
+    first provider failure instead of falling back to subsequent providers.
+    This is used for real enrichment to prevent silent mock fallback.
     """
     chain_str = _get_env("LLM_PROVIDER_CHAIN", "mock,mock")
     names = [n.strip() for n in chain_str.split(",") if n.strip()]
-    return LLMChainProvider([_build_llm(n) for n in names])
+    chain = LLMChainProvider([_build_llm(n) for n in names])
+    chain.disable_fallback = _flag("LLM_DISABLE_FALLBACK")
+    return chain
+
+
+def _flag(name: str, default: str = "false") -> bool:
+    """Get a boolean environment setting."""
+    from django.conf import settings as dj_settings
+    value = getattr(dj_settings, name, None) or os.environ.get(name, default)
+    return str(value).strip() in ("1", "true", "True", "TRUE")
 
 
 # ============================================================================

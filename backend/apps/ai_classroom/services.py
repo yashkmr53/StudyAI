@@ -272,6 +272,8 @@ def run_enrichment_job(job: Job) -> None:
         fill_result={},
         all_blocks=[],
         stitched_blocks=[],
+        llm_provider="",
+        llm_model="",
         errors=[],
         execution_metadata={},
     )
@@ -296,6 +298,8 @@ def run_enrichment_job(job: Job) -> None:
             fill_result={},
             all_blocks=[],
             stitched_blocks=[],
+            llm_provider="",
+            llm_model="",
             errors=[],
             execution_metadata={},
         )
@@ -329,6 +333,11 @@ def run_enrichment_job(job: Job) -> None:
     draft_prompt = active_prompt("enrichment_draft")
     llm = get_llm_provider()
 
+    # Use actual provider/model from the enrichment execution, falling back
+    # to the chain name / settings default only if not tracked in state.
+    actual_provider = final_state.get("llm_provider", llm.name)
+    actual_model = final_state.get("llm_model") or getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
+
     # ---- Persist atomically (§67-style boundary) --------------------------
     # Tagging and question generation are now inside the transaction (§53/§54):
     # if they fail, the entire enrichment (note + blocks + citations + tags + questions)
@@ -346,8 +355,8 @@ def run_enrichment_job(job: Job) -> None:
                     )
                 ],
                 generation_job=job,
-                provider=llm.name,
-                model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+                provider=actual_provider,
+                model=actual_model,
                 prompt_version=";".join(QUALIFIED.values()),
                 schema_version=draft_prompt.output_schema_version,
             )
