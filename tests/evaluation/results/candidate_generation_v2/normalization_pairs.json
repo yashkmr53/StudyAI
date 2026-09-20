@@ -1,0 +1,109 @@
+{
+  "description": "Pre-registered must-merge and must-not-merge concept pairs for candidate generation normalization evaluation",
+  "version": "v2",
+  "date": "2026-09-20",
+  "must_merge_pairs": [
+    {
+      "term_a": "AVL tree",
+      "term_b": "AVL trees",
+      "rationale": "Plural inflection of same data structure"
+    },
+    {
+      "term_a": "binary search trees",
+      "term_b": "binary search tree",
+      "rationale": "Plural inflection of same data structure"
+    },
+    {
+      "term_a": "asymptotic analysis",
+      "term_b": "Asymptotic Analysis",
+      "rationale": "Case variation of same algorithmic concept"
+    },
+    {
+      "term_a": "time complexity",
+      "term_b": "time-complexity",
+      "rationale": "Punctuation hyphenation variation"
+    },
+    {
+      "term_a": "Newton's second law",
+      "term_b": "newtons second law",
+      "rationale": "Possessive apostrophe and case variation"
+    },
+    {
+      "term_a": "differentiation rules",
+      "term_b": "differentiation rule",
+      "rationale": "Plural vs singular calculus theorem concept"
+    },
+    {
+      "term_a": "shortest paths",
+      "term_b": "shortest path",
+      "rationale": "Plural inflection of graph theory concept"
+    },
+    {
+      "term_a": "AVL rotation",
+      "term_b": "avl rotations",
+      "rationale": "Case and plural variation of tree rebalancing operation"
+    },
+    {
+      "term_a": "load factors",
+      "term_b": "load factor",
+      "rationale": "Plural vs singular hash table metric"
+    },
+    {
+      "term_a": "probe sequences",
+      "term_b": "probe sequence",
+      "rationale": "Plural vs singular open addressing concept"
+    }
+  ],
+  "must_not_merge_pairs": [
+    {
+      "term_a": "binary search",
+      "term_b": "binary search tree",
+      "rationale": "Search algorithm vs tree data structure; distinct computer science concepts"
+    },
+    {
+      "term_a": "time complexity",
+      "term_b": "space complexity",
+      "rationale": "Distinct computational complexity resources (time vs space)"
+    },
+    {
+      "term_a": "preorder traversal",
+      "term_b": "inorder traversal",
+      "rationale": "Distinct tree traversal ordering algorithms"
+    },
+    {
+      "term_a": "inorder traversal",
+      "term_b": "postorder traversal",
+      "rationale": "Distinct tree traversal ordering algorithms"
+    },
+    {
+      "term_a": "red-black tree",
+      "term_b": "AVL tree",
+      "rationale": "Distinct self-balancing binary search tree types"
+    },
+    {
+      "term_a": "single rotation",
+      "term_b": "double rotation",
+      "rationale": "Distinct tree balancing operations with different step counts"
+    },
+    {
+      "term_a": "linear probing",
+      "term_b": "quadratic probing",
+      "rationale": "Distinct collision resolution strategies in open addressing"
+    },
+    {
+      "term_a": "product rule",
+      "term_b": "quotient rule",
+      "rationale": "Distinct calculus differentiation rules"
+    },
+    {
+      "term_a": "chain rule",
+      "term_b": "power rule",
+      "rationale": "Distinct calculus differentiation rules"
+    },
+    {
+      "term_a": "inertial frame",
+      "term_b": "non-inertial frame",
+      "rationale": "Antithetical physical frames of reference"
+    }
+  ]
+}

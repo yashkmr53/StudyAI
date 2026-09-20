@@ -1,0 +1,94 @@
+{
+  "dev": {
+    "split": "dev",
+    "num_cases": 20,
+    "total_chunks": 117,
+    "total_candidates_emitted": 114,
+    "candidates_per_case": 5.7,
+    "candidates_per_chunk": 0.9743589743589743,
+    "unique_gold_hits": 47,
+    "total_gold_concepts": 117,
+    "recall": 0.4017094017094017,
+    "lenient_ceiling": 0.778,
+    "fraction_of_ceiling": 0.516335991914398,
+    "strict_unique_precision": 0.41228070175438597,
+    "f1_score": 0.4069264069264069,
+    "fragment_count": 3,
+    "fragment_rate": 0.02631578947368421,
+    "single_token_count": 0,
+    "single_token_rate": 0.0,
+    "recall_by_status": {
+      "gap": {
+        "gold": 58,
+        "hits": 24,
+        "recall": 0.41379310344827586
+      },
+      "partial": {
+        "gold": 4,
+        "hits": 2,
+        "recall": 0.5
+      },
+      "covered": {
+        "gold": 32,
+        "hits": 9,
+        "recall": 0.28125
+      },
+      "off_scope": {
+        "gold": 23,
+        "hits": 12,
+        "recall": 0.5217391304347826
+      }
+    },
+    "unmatched_count": 67
+  },
+  "test": {
+    "split": "test",
+    "num_cases": 20,
+    "total_chunks": 124,
+    "total_candidates_emitted": 122,
+    "candidates_per_case": 6.1,
+    "candidates_per_chunk": 0.9838709677419355,
+    "unique_gold_hits": 46,
+    "total_gold_concepts": 125,
+    "recall": 0.368,
+    "lenient_ceiling": 0.736,
+    "fraction_of_ceiling": 0.5,
+    "strict_unique_precision": 0.3770491803278688,
+    "f1_score": 0.3724696356275303,
+    "fragment_count": 9,
+    "fragment_rate": 0.07377049180327869,
+    "single_token_count": 0,
+    "single_token_rate": 0.0,
+    "recall_by_status": {
+      "gap": {
+        "gold": 56,
+        "hits": 20,
+        "recall": 0.35714285714285715
+      },
+      "partial": {
+        "gold": 5,
+        "hits": 1,
+        "recall": 0.2
+      },
+      "covered": {
+        "gold": 36,
+        "hits": 9,
+        "recall": 0.25
+      },
+      "off_scope": {
+        "gold": 28,
+        "hits": 16,
+        "recall": 0.5714285714285714
+      }
+    },
+    "unmatched_count": 75
+  },
+  "unmatched_sample_human_review": {
+    "sample_size": 50,
+    "valid_domain_concepts_count": 22,
+    "valid_concept_ratio_in_unmatched": 0.44,
+    "noise_fragments_count": 28,
+    "strict_precision": 0.3770491803278688,
+    "estimated_lenient_precision": 0.651
+  }
+}

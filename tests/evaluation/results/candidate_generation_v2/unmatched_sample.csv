@@ -1,0 +1,51 @@
+sample_id,case_id,chunk_id,candidate,canonical_key,salience_score,extraction_method,human_label,evidence_span
+1,g2_011,ref_011_04,acquired traits,acquired trait,0.6366,content_chunk,,acquired traits that are not encoded in the genome are not passed on
+2,g2_004,ref_004_04,forcing choices among alternatives,forcing choice among alternative,0.6099,content_chunk,,"Scarcity means wants exceed the resources available to satisfy them, forcing choices among alternatives"
+3,g2_020,ref_020_04,INNER JOIN outputs,inner join output,0.7401,content_chunk,,INNER JOIN outputs a row only when the join predicate is true for a pair of rows
+4,g2_019,ref_019_04,Effective nuclear charge Zeff,effective nuclear charge zeff,0.8152,copula_def,,Effective nuclear charge Zeff is the
+5,g2_016,ref_016_04,empty stack,empty stack,0.6869,content_chunk,,Popping from an empty stack is an underflow error
+6,g2_012,ref_012_01,HA quantifies acid strength,ha quantify acid strength,0.7479,content_chunk,,The acid dissociation constant Ka = [H⁺][A⁻]/[HA] quantifies acid strength
+7,g2_011,ref_011_03,evolutionary biology fitness,evolutionary biology fitness,0.7377,content_chunk,,"In evolutionary biology, fitness is relative reproductive success, not strength or health: the number of viable offsprin"
+8,g2_008,ref_008_03,message queues and shared memory,message queue and shared memory,0.7009,compound_concept,,message queues and shared memory
+9,g2_028,ref_028_04,common prefixes share nodes,common prefixe share node,0.6716,content_chunk,,"In a trie each edge is labelled with a character and the path from the root spells a prefix, so words with common prefix"
+10,g2_007,ref_007_02,Batch gradient descent,batch gradient descent,0.7521,content_chunk,,Batch gradient descent uses the full dataset per update
+11,g2_040,ref_040_02,quantity supplied rises,quantity supplied rise,0.6882,content_chunk,,"The law of supply states that quantity supplied rises with price, ceteris paribus"
+12,g2_036,ref_036_01,linear momentum of an isolated,linear momentum of an isolated,0.7792,noun_of_noun,,linear momentum of an isolated
+13,g2_036,ref_036_05,conserving momentum of the rocket,conserving momentum of the rocket,0.7615,noun_of_noun,,conserving momentum of the rocket
+14,g2_040,ref_040_01,quantity demanded falls,quantity demanded fall,0.6613,content_chunk,,"The law of demand states that, other things equal, quantity demanded falls as price rises"
+15,g2_019,ref_019_01,Atomic radius decreases across,atomic radius decrease across,0.8048,content_chunk,,"Atomic radius decreases across a period because increasing nuclear charge pulls electrons closer, and increases down a g"
+16,g2_023,ref_023_01,normal distribution N,normal distribution n,0.6968,content_chunk,,"A normal distribution N(μ, σ²) is completely specified by its mean μ and standard deviation σ"
+17,g2_004,ref_004_02,Sunk costs,sunk cost,0.7846,content_chunk,,Sunk costs are past expenditures that cannot be recovered and should be ignored in forward-looking decisions
+18,g2_040,ref_040_06,monopolist sets marginal revenue,monopolist set marginal revenue,0.7544,content_chunk,,"A monopolist sets marginal revenue equal to marginal cost and charges a price above marginal cost, creating deadweight l"
+19,g2_008,ref_008_04,write another's memory,write another memory,0.6419,content_chunk,,"Each process has a private virtual address space, so one process cannot directly read or write another's memory"
+20,g2_027,ref_027_07,periodically driven oscillator responds,periodically driven oscillator respond,0.7248,content_chunk,,"A periodically driven oscillator responds with maximum amplitude near its natural frequency, called resonance"
+21,g2_024,ref_024_03,Besides LRU common policies,beside lru common policy,0.7504,content_chunk,,"Besides LRU, common policies are FIFO, which can exhibit Belady's anomaly, and the clock algorithm, an inexpensive appro"
+22,g2_024,ref_024_07,demand paging pages,demand paging page,0.6681,content_chunk,,With demand paging pages are loaded only on first access
+23,g2_019,ref_019_06,form coloured compounds,form coloured compound,0.6236,content_chunk,,"Transition metals fill d subshells, often show multiple oxidation states, and form coloured compounds"
+24,g2_016,ref_016_05,LIFO order,lifo order,0.7683,content_chunk,,LIFO order means the most recently added element is the first one removed
+25,g2_031,ref_031_07,insertion sort,insertion sort,0.6176,content_chunk,,Timsort is a hybrid of merge sort and insertion sort that exploits existing runs
+26,g2_039,ref_039_02,lower-index medium,lower index medium,0.687,content_chunk,,entering a lower-index medium it bends away
+27,g2_023,ref_023_02,standard deviation of the mean,standard deviation of the mean,0.7328,noun_of_noun,,standard deviation of the mean
+28,g2_039,ref_039_04,angles of incidence and refraction,angle of incidence and refraction,0.8261,compound_concept,,angles of incidence and refraction
+29,g2_003,ref_003_04,independent assortment,independent assortment,0.596,content_chunk,,Meiosis involves two successive divisions and produces four genetically distinct haploid gametes through crossing over a
+30,g2_008,ref_008_05,own stack and register state,own stack and register state,0.7019,tech_head_noun,,own stack and register state
+31,g2_028,ref_028_08,insert and prefix search take,insert and prefix search take,0.6858,compound_concept,,insert and prefix search take
+32,g2_016,ref_016_03,Stacks underlie function,stack underlie function,0.746,tech_head_noun,,Stacks underlie function
+33,g2_015,ref_015_06,Special relativity relates rest energy,special relativity relate rest energy,0.7938,tech_head_noun,,Special relativity relates rest energy
+34,g2_027,ref_027_04,period increases slightly,period increase slightly,0.6628,content_chunk,,at larger amplitudes the period increases slightly
+35,g2_008,ref_008_01,Switching between threads,switching between thread,0.7392,content_chunk,,"Switching between threads of the same process is cheaper than switching processes because the address space, and often T"
+36,g2_031,ref_031_03,smaller element,smaller element,0.476,content_chunk,,"The merge step walks two pointers through the sorted halves, copying the smaller element each time, and needs O(n) auxil"
+37,g2_024,ref_024_02,page fault,page fault,0.7043,content_chunk,,A page fault is handled by finding a free frame and reading the page from disk
+38,g2_007,ref_007_05,scaled by the learning rate,scaled by the learning rate,0.7055,tech_head_noun,,scaled by the learning rate
+39,g2_007,ref_007_04,RMSProp and Adam scale each,rmsprop and adam scale each,0.7069,compound_concept,,RMSProp and Adam scale each
+40,g2_015,ref_015_01,energy converts into kinetic energy,energy convert into kinetic energy,0.6905,tech_head_noun,,energy converts into kinetic energy
+41,g2_027,ref_027_02,ideal SHM,ideal shm,0.639,content_chunk,,"In ideal SHM the period depends only on the mass and spring constant, not on how far the mass is displaced"
+42,g2_015,ref_015_05,exchanges neither matter nor energy,exchange neither matter nor energy,0.7606,tech_head_noun,,exchanges neither matter nor energy
+43,g2_019,ref_019_03,attract bonding electrons,attract bonding electron,0.6388,content_chunk,,Electronegativity measures an atom's tendency to attract bonding electrons
+44,g2_012,ref_012_05,one pH unit corresponds,one ph unit correspond,0.7533,content_chunk,,A change of one pH unit corresponds to a tenfold change in hydrogen-ion concentration
+45,g2_015,ref_015_02,conserved although total energy,conserved although total energy,0.638,content_chunk,,"Friction and drag are non-conservative: they convert mechanical energy into thermal energy, so mechanical energy alone i"
+46,g2_031,ref_031_04,Merge sort,merge sort,0.7585,content_chunk,,"Merge sort is stable: when two elements compare equal, taking the left one first preserves their original relative order"
+47,g2_015,ref_015_03,energy theorem,energy theorem,0.7436,formal_construct,,energy theorem
+48,g2_027,ref_027_08,uniform circular motion onto,uniform circular motion onto,0.5884,content_chunk,,SHM is the projection of uniform circular motion onto a diameter: a point moving at angular speed ω around a circle of r
+49,g2_035,ref_035_02,lower-order terms,lower order term,0.6028,content_chunk,,"Constant factors and lower-order terms are dropped, so 3n² + 5n + 2 is O(n²)"
+50,g2_032,ref_032_03,gravity supplies the centripetal force,gravity supply the centripetal force,0.7188,tech_head_noun,,gravity supplies the centripetal force

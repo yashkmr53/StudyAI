@@ -1,0 +1,1887 @@
+{
+  "control": {
+    "variant": "all_covered_control",
+    "num_cases": 9,
+    "total_calls": 56,
+    "elapsed_sec": 582.4232110977173,
+    "cases_with_false_alarms": 7,
+    "false_alarm_rate": 0.7777777777777778,
+    "total_gaps_reported": 11,
+    "cases": [
+      {
+        "case_id": "g2_004_ctrl",
+        "base_id": "g2_004",
+        "num_candidates": 4,
+        "reported_gaps": 0,
+        "has_false_alarm": false,
+        "candidates": [
+          {
+            "candidate": "Sunk costs",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Sunk costs are past expenditures that cannot be recovered and should be ignored in forward-looking decisions; only marginal costs and benefits matter.",
+            "reason": "The student note explicitly mentions the concept of sunk costs, providing a definition and explaining their relevance to decision-making."
+          },
+          {
+            "candidate": "production possibilities frontier",
+            "matched_concept": "production possibilities frontier",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The production possibilities frontier shows the maximum combinations of two goods an economy can produce with fixed resources. Its slope measures the opportunity cost of one good in terms of the other.",
+            "reason": "The student note explicitly mentions the production possibilities frontier and its relationship to opportunity cost, which is fully covered."
+          },
+          {
+            "candidate": "opportunity cost of producing it",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A producer has a comparative advantage in a good if its opportunity cost of producing it is lower than another producer's, which is the basis for gains from trade.",
+            "reason": "The student note explicitly mentions 'opportunity cost of producing it' as part of the definition of comparative advantage."
+          },
+          {
+            "candidate": "forcing choices among alternatives",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Every decision involving scarce resources has an opportunity cost.",
+            "reason": "The note mentions that decisions involve opportunity costs due to scarce resources, which implies forcing choices among alternatives."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_008_ctrl",
+        "base_id": "g2_008",
+        "num_candidates": 6,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Threads sharing memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Threads sharing memory can suffer race conditions when unsynchronized accesses interleave.",
+            "reason": "The student note explicitly mentions the candidate concept 'Threads sharing memory' and describes its potential issues."
+          },
+          {
+            "candidate": "Switching between threads",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Switching between threads of the same process is cheaper than switching processes because the address space, and often TLB contents, need not change.",
+            "reason": "The student note explicitly mentions the concept of switching between threads within a process."
+          },
+          {
+            "candidate": "Green threads",
+            "matched_concept": "green threads",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of green threads is not mentioned in the student note. The note discusses processes, threads, and inter-process communication but does not cover user-space threading or how it differs from kernel scheduling."
+          },
+          {
+            "candidate": "own stack and register state",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "threads in the same process share the heap and global data but have separate stacks.",
+            "reason": "The note mentions that threads have separate stacks, which is part of the candidate concept 'own stack and register state'. However, it does not explicitly mention register state."
+          },
+          {
+            "candidate": "message queues and shared memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "message queues and shared memory",
+            "reason": "The candidate concept 'message queues and shared memory' is explicitly mentioned in the student note."
+          },
+          {
+            "candidate": "write another's memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'write another's memory' is relevant to the note's subject as it pertains to inter-process communication and memory management. However, the student note does not mention this specific concept."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_012_ctrl",
+        "base_id": "g2_012",
+        "num_candidates": 6,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "pH = pKa + log",
+            "matched_concept": "Ka and pKa",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "pH = pKa + log([A\u207b]/[HA])",
+            "reason": "The student note explicitly states the Henderson\u2013Hasselbalch equation, which matches the candidate concept 'pH = pKa + log'."
+          },
+          {
+            "candidate": "one pH unit corresponds",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'one pH unit corresponds' is relevant to the note's subject as it relates to the quantitative relationship between pH and hydrogen-ion concentration. However, this specific detail is not mentioned in the student note."
+          },
+          {
+            "candidate": "HA quantifies acid strength",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "The acid dissociation constant Ka = [H\u207a][A\u207b]/[HA] quantifies acid strength; pKa = \u2212log Ka, and a smaller pKa means a stronger acid.",
+            "reason": "The note mentions that the acid dissociation constant Ka quantifies acid strength, which includes HA in its formula. However, it does not explicitly state that HA itself quantifies acid strength."
+          },
+          {
+            "candidate": "Weak acids establish",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "Weak acids only partially dissociate.",
+            "reason": "The note mentions that weak acids only partially dissociate, which implies the establishment of an equilibrium. However, it does not explicitly state the equilibrium equation 'HA \u21cc H\u207a + A\u207b'."
+          },
+          {
+            "candidate": "Lowry theory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "In Br\u00f8nsted\u2013Lowry theory an acid donates a proton and forms its conjugate base; the stronger the acid, the weaker its conjugate base.",
+            "reason": "The note mentions 'Br\u00f8nsted\u2013Lowry theory' but does not explicitly use the term 'Lowry theory'. The concept is covered as it describes the key aspects of Br\u00f8nsted\u2013Lowry theory."
+          },
+          {
+            "candidate": "moles of base",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of 'moles of base' is relevant to the topic of acid-base chemistry and titrations. However, it is not mentioned in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_016_ctrl",
+        "base_id": "g2_016",
+        "num_candidates": 6,
+        "reported_gaps": 0,
+        "has_false_alarm": false,
+        "candidates": [
+          {
+            "candidate": "LIFO order",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A stack is a last-in, first-out (LIFO) data structure.",
+            "reason": "The note explicitly mentions LIFO order as the definition of a stack."
+          },
+          {
+            "candidate": "Stacks underlie function",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Stacks underlie function call management, expression evaluation and parsing, balanced-parentheses checks, backtracking and undo features.",
+            "reason": "The note explicitly mentions that stacks underlie function call management, which directly covers the candidate concept."
+          },
+          {
+            "candidate": "core stack operations",
+            "matched_concept": "push, pop and peek operations",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The core stack operations are push (add to top), pop (remove and return the top) and peek (read the top without removing it); all run in O(1) time.",
+            "reason": "The student note explicitly mentions the core stack operations, which is a direct match with the reference evidence."
+          },
+          {
+            "candidate": "empty stack",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Popping from an empty stack is an underflow error;",
+            "reason": "The student note explicitly mentions the concept of an 'empty stack' and describes its behavior."
+          },
+          {
+            "candidate": "amortized O 1 push",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A stack can be built on a dynamic array, with amortized O(1) push, or on a singly linked list with O(1) worst-case push and pop, at the cost of pointer overhead.",
+            "reason": "The student note explicitly mentions 'amortized O(1) push' for building a stack on a dynamic array."
+          },
+          {
+            "candidate": "first-in first-out elements",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'first-in first-out elements' is not mentioned in the student note. The note discusses stacks, which are last-in, first-out (LIFO) data structures, and does not relate to first-in, first-out (FIFO) data structures."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_020_ctrl",
+        "base_id": "g2_020",
+        "num_candidates": 5,
+        "reported_gaps": 1,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "INNER JOIN outputs",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "INNER JOIN returns only rows with matching values in both tables.",
+            "reason": "The note mentions that INNER JOIN returns only rows with matching values, which is a core claim of the candidate concept. However, it does not explicitly state what INNER JOIN outputs."
+          },
+          {
+            "candidate": "CROSS JOIN returns",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A CROSS JOIN returns the Cartesian product of two tables.",
+            "reason": "The student note explicitly mentions that a CROSS JOIN returns the Cartesian product of two tables, which is the core claim of the candidate concept."
+          },
+          {
+            "candidate": "correlated subqueries reference columns",
+            "matched_concept": "subqueries",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses various types of SQL joins and query planning but does not mention correlated subqueries or their reference to columns from the outer query."
+          },
+          {
+            "candidate": "hash and merge joins",
+            "matched_concept": "join performance",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Query planners choose among nested-loop, hash and merge joins.",
+            "reason": "The student note explicitly mentions 'hash and merge joins' as one of the join types chosen by query planners."
+          },
+          {
+            "candidate": "LEFT JOIN keeps",
+            "matched_concept": "outer joins",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "LEFT JOIN keeps every row from the left table and fills unmatched right-side columns with NULL; RIGHT JOIN is symmetric, and FULL OUTER JOIN keeps unmatched rows from both.",
+            "reason": "The student note explicitly states the core claim of the candidate concept."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_024_ctrl",
+        "base_id": "g2_024",
+        "num_candidates": 8,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Segmentation divides the address space",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of segmentation is not mentioned in the student note. The note focuses on virtual memory and page-based addressing, which are different concepts from segmentation."
+          },
+          {
+            "candidate": "Thrashing occurs",
+            "matched_concept": "thrashing",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Thrashing occurs when processes lack enough frames for their working sets, so the system spends most of its time servicing page faults rather than doing useful work.",
+            "reason": "The student note explicitly mentions thrashing and provides a detailed explanation that matches the reference evidence."
+          },
+          {
+            "candidate": "Besides LRU common policies",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Besides LRU, common policies are FIFO, which can exhibit Belady's anomaly, and the clock algorithm, an inexpensive approximation of LRU using a reference bit.",
+            "reason": "The student note explicitly mentions 'Besides LRU common policies' and provides details about FIFO and the clock algorithm."
+          },
+          {
+            "candidate": "two-level page table splits",
+            "matched_concept": "multi-level page tables",
+            "gold_status": "covered",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'two-level page table splits' is relevant to the topic of virtual memory and page tables. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "page fault",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A page fault is handled by finding a free frame and reading the page from disk. The OS then updates the page table entry, whose dirty bit records whether the page must be written back on eviction.",
+            "reason": "The student note explicitly mentions 'page fault' and describes how it is handled, which matches the reference evidence."
+          },
+          {
+            "candidate": "virtual page number",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Addresses are split into a virtual page number and an offset; the page table maps virtual pages to physical frames.",
+            "reason": "The student note explicitly mentions 'virtual page number' as part of the address splitting process, which is covered in the reference evidence."
+          },
+          {
+            "candidate": "demand paging pages",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "With demand paging pages are loaded only on first access.",
+            "reason": "The student note explicitly mentions the concept of 'demand paging pages' and explains that they are loaded only on first access, which is a core claim of the candidate concept."
+          },
+          {
+            "candidate": "TLB miss triggers",
+            "matched_concept": "TLB",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A TLB miss triggers a page-table walk, and the TLB is typically flushed or tagged on context switch.",
+            "reason": "The student note explicitly mentions that a TLB miss triggers a page-table walk."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_028_ctrl",
+        "base_id": "g2_028",
+        "num_candidates": 9,
+        "reported_gaps": 1,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Heaps implement priority queues",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Heaps implement priority queues and power heapsort (O(n log n) time, in place), top-k selection, event simulation and Dijkstra's algorithm.",
+            "reason": "The student note explicitly mentions that 'Heaps implement priority queues' as part of a list of functionalities implemented by heaps."
+          },
+          {
+            "candidate": "union links two roots",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "union by rank and path compression together make union-find operations run in amortized O(\u03b1(n)) time, where \u03b1 is the inverse Ackermann function, effectively constant.",
+            "reason": "The note mentions union-find but does not explicitly state that 'union links two roots'. The reference provides this detail, indicating partial coverage."
+          },
+          {
+            "candidate": "union-find operations run",
+            "matched_concept": "union-find operations",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "union-find operations run in amortized O(\u03b1(n)) time, where \u03b1 is the inverse Ackermann function, effectively constant.",
+            "reason": "The student note explicitly mentions 'union-find operations run' and provides relevant information about their time complexity."
+          },
+          {
+            "candidate": "bottom-up heapify",
+            "matched_concept": "heap operation complexity",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "building a heap from n elements with bottom-up heapify takes O(n).",
+            "reason": "The student note explicitly mentions 'bottom-up heapify' and its time complexity, which is covered in the reference evidence."
+          },
+          {
+            "candidate": "insert and prefix search take",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Trie lookup, insert and prefix search take O(L) time for a key of length L regardless of the number of keys, but memory can be large; radix trees compress single-child chains.",
+            "reason": "The student note explicitly mentions 'insert and prefix search take' in relation to trie operations."
+          },
+          {
+            "candidate": "common prefixes share nodes",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "Trie stores strings by sharing prefixes along tree edges.",
+            "reason": "The note mentions that tries store strings by sharing prefixes, which is a core claim of the candidate concept. However, it does not explicitly state that common prefixes share nodes."
+          },
+          {
+            "candidate": "array layout",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "Binary heaps store a complete binary tree in an array, where the parent of index i is at \u230a(i\u22121)/2\u230b.",
+            "reason": "The note mentions that binary heaps are stored in an array but does not explicitly state the children's positions, which are part of the 'array layout' concept."
+          },
+          {
+            "candidate": "smallest element",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The min-heap property means every parent is no larger than its children.",
+            "reason": "The note mentions the min-heap property which implies that the smallest element is always at the root, thus covering the candidate concept."
+          },
+          {
+            "candidate": "supports point updates",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'supports point updates' is not mentioned in the student note. The note discusses binary heaps and tries but does not cover segment trees or their ability to support point updates."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_032_ctrl",
+        "base_id": "g2_032",
+        "num_candidates": 7,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Kepler's laws",
+            "matched_concept": "Kepler's laws",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's laws of gravitation and circular orbits, but does not mention Kepler's laws. These are separate topics in celestial mechanics."
+          },
+          {
+            "candidate": "General relativity models gravity",
+            "matched_concept": "general relativity",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newtonian gravity and its applications but does not mention general relativity or the concept of gravity as the curvature of spacetime."
+          },
+          {
+            "candidate": "gravitational potential energy",
+            "matched_concept": "gravitational potential energy",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "Gravitational potential energy is relevant to the note's subject as it pertains to gravitational forces. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "g = GM/r\u00b2",
+            "matched_concept": "gravitational field strength",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The gravitational field strength at distance r from mass M is g = GM/r\u00b2; at Earth's surface this gives about 9.8 m/s\u00b2.",
+            "reason": "The student note explicitly mentions the candidate concept 'g = GM/r\u00b2' and provides additional information about its value at Earth's surface."
+          },
+          {
+            "candidate": "masses reduces the gravitational force",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "The force is proportional to the product of masses and inversely proportional to the square of the distance.",
+            "reason": "The note mentions that the gravitational force is inversely proportional to the square of the distance, which implies that increasing mass increases the force. However, it does not explicitly state that doubling the distance reduces the force to one quarter."
+          },
+          {
+            "candidate": "Coulomb's law",
+            "matched_concept": "Coulomb's law",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's law of universal gravitation and its applications in circular orbits. Coulomb's law, which deals with electrostatic forces, is not mentioned or relevant to the content of the note."
+          },
+          {
+            "candidate": "gravity supplies the centripetal force",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "gravity supplies the centripetal force, so orbital speed is v = \u221a(GM/r), independent of the orbiting mass.",
+            "reason": "The student note explicitly mentions that 'gravity supplies the centripetal force' for a circular orbit."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_040_ctrl",
+        "base_id": "g2_040",
+        "num_candidates": 5,
+        "reported_gaps": 1,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Price elasticity of demand measures",
+            "matched_concept": "price elasticity of demand",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Price elasticity of demand measures how strongly quantity demanded responds to a price change; demand for necessities tends to be inelastic and for luxuries elastic.",
+            "reason": "The student note explicitly states the definition of price elasticity of demand, which matches the candidate concept."
+          },
+          {
+            "candidate": "monopolist sets marginal revenue",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of a monopolist setting marginal revenue is not mentioned in the student note. The note discusses market-clearing prices, price ceilings and floors, and price elasticity of demand but does not cover the behavior of monopolists."
+          },
+          {
+            "candidate": "equilibrium price",
+            "matched_concept": "equilibrium price",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The price where the amount buyers want equals the amount sellers offer is the market-clearing price.",
+            "reason": "The student note explicitly mentions the concept of equilibrium price, even though it uses the term 'market-clearing price' instead."
+          },
+          {
+            "candidate": "quantity supplied rises",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "producers are willing to supply more.",
+            "reason": "The note mentions that producers are willing to supply more when the price rises, which aligns with the candidate concept 'quantity supplied rises'."
+          },
+          {
+            "candidate": "quantity demanded falls",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "When the price of a good rises, people usually buy less of it, while producers are willing to supply more.",
+            "reason": "The note explicitly states that 'people usually buy less of it' when the price rises, which is equivalent to saying 'quantity demanded falls'."
+          }
+        ]
+      }
+    ]
+  },
+  "noisy": {
+    "variant": "noisy",
+    "num_cases": 20,
+    "total_calls": 122,
+    "elapsed_sec": 1254.7872352600098,
+    "cases_with_false_alarms": 20,
+    "false_alarm_rate": 1.0,
+    "total_gaps_reported": 86,
+    "cases": [
+      {
+        "case_id": "g2_003_noisy",
+        "base_id": "g2_003",
+        "num_candidates": 4,
+        "reported_gaps": 3,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Cytokinesis physically divides",
+            "matched_concept": "cytokinesis",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Cytokinesis physically divides' is relevant to the note's subject on mitosis. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "anaphase and telophase",
+            "matched_concept": "phases of mitosis",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "It has four main phases: prophase, metaphase, anaphase and telophase",
+            "reason": "The student note explicitly mentions the candidate concept 'anaphase and telophase' as part of the four main phases of mitosis."
+          },
+          {
+            "candidate": "Cyclin-dependent kinases CDKs paired",
+            "matched_concept": "cell cycle checkpoints",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Cyclin-dependent kinases CDKs paired' is not mentioned in the student note. It is relevant to the topic of cell division, which is covered in the note."
+          },
+          {
+            "candidate": "independent assortment",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'independent assortment' is not mentioned in the student note. It pertains to meiosis, which is a separate topic from mitosis."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_004_noisy",
+        "base_id": "g2_004",
+        "num_candidates": 4,
+        "reported_gaps": 3,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Sunk costs",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of sunk costs is not mentioned in the student note. The note discusses opportunity cost and its implications for decision-making, but does not address sunk costs."
+          },
+          {
+            "candidate": "production possibilities frontier",
+            "matched_concept": "production possibilities frontier",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The production possibilities frontier is a separate concept not mentioned in the student note. The note discusses opportunity cost but does not cover the specific graphical representation of it."
+          },
+          {
+            "candidate": "opportunity cost of producing it",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": "opportunity cost is the value of the next best alternative that is given up when a choice is made",
+            "reason": "The note mentions opportunity cost but does not specify 'the opportunity cost of producing it', which includes the production context."
+          },
+          {
+            "candidate": "forcing choices among alternatives",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "- every decision involving scarce resources has an opporutnity cost",
+            "reason": "The note mentions that decisions involving scarce resources have opportunity costs, which implies forcing choices among alternatives. However, the concept is not explicitly stated."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_007_noisy",
+        "base_id": "g2_007",
+        "num_candidates": 6,
+        "reported_gaps": 4,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Batch gradient descent",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses gradient descent in general terms and the learning rate, but does not mention batch gradient descent specifically. The concept is relevant to the topic of optimization methods discussed in the note."
+          },
+          {
+            "candidate": "Newton's method",
+            "matched_concept": "Newton's method",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses gradient descent and learning rate but does not mention Newton's method. This concept is relevant to optimization methods, which are discussed in the context of minimizing a loss function."
+          },
+          {
+            "candidate": "Momentum accumulates",
+            "matched_concept": "momentum",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of momentum is not mentioned in the student note. The note discusses gradient descent and learning rate, which are related to optimization algorithms but do not include the concept of momentum."
+          },
+          {
+            "candidate": "RMSProp and Adam scale each",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses gradient descent and learning rate but does not mention RMSProp or Adam. These concepts are relevant to optimization methods in machine learning, which is the subject of the note."
+          },
+          {
+            "candidate": "scaled by the learning rate",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "The learning rate controls the step size",
+            "reason": "Although not explicitly mentioned, the concept of scaling by the learning rate is covered as it is implied in how the learning rate controls the step size."
+          },
+          {
+            "candidate": "learning rate",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "\u2022 The learning rate controls the step size",
+            "reason": "The student note explicitly mentions the concept of 'learning rate' and its role in controlling the step size during gradient descent."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_008_noisy",
+        "base_id": "g2_008",
+        "num_candidates": 6,
+        "reported_gaps": 4,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Threads sharing memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "A thread is a unit of execution within a process; therads in the same process share the heap and global data but have separate stacks",
+            "reason": "The note mentions that threads in the same process share the heap and global data, which implies sharing memory. However, it does not explicitly state 'Threads sharing memory' or discuss race conditions."
+          },
+          {
+            "candidate": "Switching between threads",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The concept of switching between threads is related to the topic of processes and threads. However, the student note does not mention this specific action or its cost implications."
+          },
+          {
+            "candidate": "Green threads",
+            "matched_concept": "green threads",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of green threads is not mentioned in the student note. The note discusses processes and threads at a high level, but does not cover user-space threading or runtime scheduling."
+          },
+          {
+            "candidate": "own stack and register state",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "therads in the same process share the heap and global data but have separate stacks",
+            "reason": "The note mentions that threads have separate stacks, which is part of the candidate concept. However, it does not mention register state."
+          },
+          {
+            "candidate": "message queues and shared memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note does not mention message queues or shared memory, which are relevant to the topic of inter-process communication."
+          },
+          {
+            "candidate": "write another's memory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'write another's memory' is relevant to the note's subject as it pertains to process memory isolation. However, the student note does not mention this specific aspect."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_011_noisy",
+        "base_id": "g2_011",
+        "num_candidates": 5,
+        "reported_gaps": 5,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Genetic drift",
+            "matched_concept": "genetic drift",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of genetic drift is not mentioned in the student note. The note discusses natural selection and its effects on heritable traits, which are related to evolution but do not include genetic drift."
+          },
+          {
+            "candidate": "Sexual selection favours traits",
+            "matched_concept": "sexual selection",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses natural selection and its effects on heritable traits. Sexual selection is a separate concept that was not mentioned in the note."
+          },
+          {
+            "candidate": "evolutionary biology fitness",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of 'evolutionary biology fitness' is not mentioned in the student note. While natural selection and heritable traits are discussed, the specific term 'fitness' as used in evolutionary biology is absent."
+          },
+          {
+            "candidate": "acquired traits",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'acquired traits' is not mentioned in the student note. The note discusses heritable traits relevant to natural selection, but does not address acquired traits."
+          },
+          {
+            "candidate": "resistance alleles rapidly increase",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'resistance alleles rapidly increase' is not mentioned in the student note. It pertains to a similar topic of natural selection and heritable traits, but it is not covered."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_012_noisy",
+        "base_id": "g2_012",
+        "num_candidates": 6,
+        "reported_gaps": 6,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "pH = pKa + log",
+            "matched_concept": "Ka and pKa",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'pH = pKa + log' is not mentioned in the student note. It pertains to buffer solutions and the Henderson\u2013Hasselbalch equation, which are not discussed in the provided notes."
+          },
+          {
+            "candidate": "one pH unit corresponds",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'one pH unit corresponds' is relevant to the note's subject as it pertains to understanding pH values. However, the student note does not mention this relationship between pH units and hydrogen-ion concentration."
+          },
+          {
+            "candidate": "HA quantifies acid strength",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'HA quantifies acid strength' is not mentioned in the student note. The note discusses pH and acid dissociation, but does not cover how HA relates to acid strength."
+          },
+          {
+            "candidate": "Weak acids establish",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Weak acids establish' is relevant to the note's subject as it pertains to acid behavior. However, this specific equilibrium description is not mentioned in the student note."
+          },
+          {
+            "candidate": "Lowry theory",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The Lowry theory is not mentioned in the student note. The note discusses pH and acid dissociation but does not cover Br\u00f8nsted\u2013Lowry theory."
+          },
+          {
+            "candidate": "moles of base",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'moles of base' is relevant to the topic of titration and pH, but it is not mentioned in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_015_noisy",
+        "base_id": "g2_015",
+        "num_candidates": 6,
+        "reported_gaps": 4,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Special relativity relates rest energy",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses the conservation of energy in isolated systems but does not mention special relativity or the relationship between mass and energy, which is a separate topic."
+          },
+          {
+            "candidate": "exchanges neither matter nor energy",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'exchanges neither matter nor energy' is relevant to the topic of an isolated system but is not mentioned in the student note."
+          },
+          {
+            "candidate": "energy theorem",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The energy theorem is not mentioned in the student note. The note discusses the conservation of energy and the total energy of an isolated system, which are related concepts but do not explicitly cover the work\u2013energy theorem."
+          },
+          {
+            "candidate": "elastic collisions kinetic energy",
+            "matched_concept": "energy in collisions",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The note discusses the conservation of energy in an isolated system but does not mention elastic collisions or kinetic energy, which are key aspects of the candidate concept. However, the reference evidence indicates that these concepts are relevant to the topic of energy transformation and conservation."
+          },
+          {
+            "candidate": "energy converts into kinetic energy",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "* energy cannot be created or destroyed, only trnasformed from one form to another",
+            "reason": "The note mentions the transformation of energy but does not specifically mention that kinetic energy is a form into which energy can convert."
+          },
+          {
+            "candidate": "conserved although total energy",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "* the total energy of an isolated system stays constnat",
+            "reason": "The note mentions that the total energy in an isolated system remains constant, which aligns with the candidate concept 'conserved although total energy'. However, it does not explicitly state that this is true for all systems or contexts."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_016_noisy",
+        "base_id": "g2_016",
+        "num_candidates": 6,
+        "reported_gaps": 5,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "LIFO order",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A stack is a last-in, first-out (LIFO) data strcuture",
+            "reason": "The note explicitly mentions LIFO order as the definition of a stack."
+          },
+          {
+            "candidate": "Stacks underlie function",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The candidate concept 'Stacks underlie function' is relevant to the note's subject. However, it is not explicitly mentioned in the student note, which only describes a stack as LIFO and operations on top."
+          },
+          {
+            "candidate": "core stack operations",
+            "matched_concept": "push, pop and peek operations",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The note mentions the basic concept of a stack as LIFO and operations on its top, but does not explicitly mention 'core stack operations' such as push, pop, and peek."
+          },
+          {
+            "candidate": "empty stack",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of an empty stack is relevant to the discussion on stacks as a data structure. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "amortized O 1 push",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note mentions the basic definition of a stack and how elements are added and removed. However, it does not mention anything about amortized O(1) push."
+          },
+          {
+            "candidate": "first-in first-out elements",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'first-in first-out elements' is relevant to the note's subject as it pertains to queue data structures, but it is not mentioned in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_019_noisy",
+        "base_id": "g2_019",
+        "num_candidates": 6,
+        "reported_gaps": 6,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Effective nuclear charge Zeff",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of effective nuclear charge Zeff is not mentioned in the student note. It is a relevant topic as it pertains to periodic trends and electron behavior, which are related to the content discussed in the note."
+          },
+          {
+            "candidate": "Atomic radius decreases across",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Atomic radius decreases across' is relevant to the periodic table and atomic structure. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "Valence electrons",
+            "matched_concept": "valence electrons",
+            "gold_status": "covered",
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The concept of valence electrons is relevant to the note's subject as it pertains to chemical properties and bonding behavior, which are discussed in the note. However, the note does not explicitly mention 'valence electrons' but rather refers to elements having similar chemical properties due to the same number of valence electrons."
+          },
+          {
+            "candidate": "First ionization energy",
+            "matched_concept": "ionization energy",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "First ionization energy is not mentioned in the student note. It is a relevant concept related to chemical properties and electron configurations, which are discussed in the note."
+          },
+          {
+            "candidate": "attract bonding electrons",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'attract bonding electrons' is not mentioned in the student note. It is relevant as it pertains to chemical properties and electron configuration, which are discussed in the reference evidence."
+          },
+          {
+            "candidate": "form coloured compounds",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'form coloured compounds' is not mentioned in the student note. It is relevant as it pertains to chemical properties of elements, which are discussed in the context of valence electrons."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_020_noisy",
+        "base_id": "g2_020",
+        "num_candidates": 5,
+        "reported_gaps": 4,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "INNER JOIN outputs",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "INNER JOIN returns only rows with matching values in both tables",
+            "reason": "The note mentions INNER JOIN and its behavior, but does not explicitly state what INNER JOIN outputs. The reference provides this missing detail."
+          },
+          {
+            "candidate": "CROSS JOIN returns",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses INNER JOIN and SQL JOIN in general but does not mention CROSS JOIN or its functionality."
+          },
+          {
+            "candidate": "correlated subqueries reference columns",
+            "matched_concept": "subqueries",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'correlated subqueries reference columns' is not mentioned in the student note. The note discusses SQL JOIN and INNER JOIN, which are related to database operations but do not cover correlated subqueries."
+          },
+          {
+            "candidate": "hash and merge joins",
+            "matched_concept": "join performance",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'hash and merge joins' is not mentioned in the student note. The note discusses SQL JOINs, inner joins specifically, which are a different topic from hash and merge joins."
+          },
+          {
+            "candidate": "LEFT JOIN keeps",
+            "matched_concept": "outer joins",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note does not mention LEFT JOIN or its behavior. While the concept is related to SQL joins, it is not covered in the provided note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_023_noisy",
+        "base_id": "g2_023",
+        "num_candidates": 6,
+        "reported_gaps": 3,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Normal modes",
+            "matched_concept": "normal modes",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Normal modes' is not related to the topic of normal distribution discussed in the student note."
+          },
+          {
+            "candidate": "standard deviation of the mean",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'standard deviation of the mean' is not mentioned in the student note. The note only covers the basic properties of a normal distribution, such as symmetry and being described by its mean and standard deviation."
+          },
+          {
+            "candidate": "central limit theorem",
+            "matched_concept": "central limit theorem",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The central limit theorem is not mentioned in the student note, which focuses on the properties of a normal distribution. This concept is relevant to statistics but not covered in the given note."
+          },
+          {
+            "candidate": "normal distribution N",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A normal distribution is symmetric & bell-shaped, described by its mean and standard deviation",
+            "reason": "The student note mentions 'normal distribution' and describes it in terms of its mean and standard deviation, which aligns with the candidate concept."
+          },
+          {
+            "candidate": "maps any normal variable",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'maps any normal variable' is not mentioned in the student note. While the note covers the basic properties of a normal distribution, it does not address how to map a normal variable to another."
+          },
+          {
+            "candidate": "normal vector",
+            "matched_concept": "normal vector",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'normal vector' is not related to the topic of normal distribution discussed in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_024_noisy",
+        "base_id": "g2_024",
+        "num_candidates": 8,
+        "reported_gaps": 6,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Segmentation divides the address space",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses virtual memory concepts such as page tables and page faults but does not mention segmentation. The candidate concept is about a different memory management technique."
+          },
+          {
+            "candidate": "Thrashing occurs",
+            "matched_concept": "thrashing",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of thrashing is not mentioned in the student note. While it relates to virtual memory and page faults, which are discussed, the specific term 'thrashing' is absent."
+          },
+          {
+            "candidate": "Besides LRU common policies",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Besides LRU common policies' is not mentioned in the student note. The note discusses page replacement algorithms, but does not list FIFO or other common policies."
+          },
+          {
+            "candidate": "two-level page table splits",
+            "matched_concept": "multi-level page tables",
+            "gold_status": "covered",
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": null,
+            "reason": "The student note mentions multi-level page tables but does not explicitly state 'two-level page table splits'. The reference evidence provides additional detail about how two-level page tables save memory by splitting the virtual page number, which is not covered in the student's note."
+          },
+          {
+            "candidate": "page fault",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "A page fault occurs when a referenced page is not present in RAM, & the OS loads it from disk",
+            "reason": "The student note explicitly mentions the concept of a page fault and describes its occurrence."
+          },
+          {
+            "candidate": "virtual page number",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": "addresses are split into a virtual page number and an offset; the page table maps virtual pages to physical frames",
+            "reason": "The student note explicitly mentions 'virtual page number' as part of the address splitting process, which is covered in the reference evidence."
+          },
+          {
+            "candidate": "demand paging pages",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of demand paging is not mentioned in the student note. The note discusses virtual memory and page fault handling but does not cover demand paging specifically."
+          },
+          {
+            "candidate": "TLB miss triggers",
+            "matched_concept": "TLB",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'TLB miss triggers' is relevant to the topic of virtual memory and page table management. However, it is not mentioned in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_027_noisy",
+        "base_id": "g2_027",
+        "num_candidates": 9,
+        "reported_gaps": 7,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "SHM the total mechanical energy",
+            "matched_concept": "energy in SHM",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses the basic aspects of simple harmonic motion such as the restoring force, equation of motion, angular frequency, and period. However, it does not mention the total mechanical energy or its constancy in SHM."
+          },
+          {
+            "candidate": "Underdamped systems oscillate",
+            "matched_concept": "damped oscillations",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of underdamped systems oscillating is not mentioned in the student note. The note focuses on simple harmonic motion and its properties, without discussing damped systems."
+          },
+          {
+            "candidate": "periodically driven oscillator responds",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'periodically driven oscillator responds' is not mentioned in the student note. The note discusses simple harmonic motion and its properties, which are related to oscillators, but does not cover periodically driven oscillators or their response characteristics."
+          },
+          {
+            "candidate": "gives a linear restoring force",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'gives a linear restoring force' is not mentioned in the student note. The note discusses SHM and its characteristics, but does not address Hooke's law or the linearity of the restoring force."
+          },
+          {
+            "candidate": "period increases slightly",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "The period T = 2\u03c0\u221a(m/k) is independent of amplitude",
+            "reason": "The note mentions that the period is independent of amplitude for a mass\u2013spring system, but does not explicitly state that the period increases slightly for larger amplitudes in simple pendulums."
+          },
+          {
+            "candidate": "sinusoidal solutions",
+            "matched_concept": "sinusoidal solution",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "the motion is sinusoidal, x(t) = A cos(\u03c9t + \u03c6)",
+            "reason": "The student note explicitly mentions that the motion of simple harmonic motion (SHM) is sinusoidal."
+          },
+          {
+            "candidate": "ideal SHM",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of 'ideal SHM' is not explicitly mentioned in the student note. The note discusses simple harmonic motion and its properties, but does not specifically address the ideal case where the period depends only on mass and spring constant."
+          },
+          {
+            "candidate": "crests align destructive",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'crests align destructive' is not mentioned in the student note. It pertains to wave interference, which is a separate topic from simple harmonic motion."
+          },
+          {
+            "candidate": "uniform circular motion onto",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of uniform circular motion onto is relevant to simple harmonic motion as it explains the projection that results in SHM. However, this concept is not mentioned in the student note."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_028_noisy",
+        "base_id": "g2_028",
+        "num_candidates": 9,
+        "reported_gaps": 6,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Heaps implement priority queues",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": "Binary heaps store a complete binary tree in an array, where the parent of index i is at \u230a(i\u22121)/2\u230b and the min-heap prpoerty means every parent is no larger than its children.",
+            "reason": "The note mentions that binary heaps are used to implement the min-heap property but does not explicitly state that heaps implement priority queues. The reference evidence provides this additional context."
+          },
+          {
+            "candidate": "union links two roots",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "separately, union-find maintains disojint sets and supports find and union",
+            "reason": "The note mentions union-find but does not explicitly state that it links two roots. The reference provides this detail."
+          },
+          {
+            "candidate": "union-find operations run",
+            "matched_concept": "union-find operations",
+            "gold_status": "covered",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note mentions union-find but does not discuss its operations running. The reference provides information about the performance of union-find operations, which is relevant to the topic but not covered in the note."
+          },
+          {
+            "candidate": "bottom-up heapify",
+            "matched_concept": "heap operation complexity",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'bottom-up heapify' is not mentioned in the student note. The note discusses binary heaps and their properties, but does not cover the process of building a heap using bottom-up heapify."
+          },
+          {
+            "candidate": "insert and prefix search take",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'insert and prefix search take' is not mentioned in the student note. The note discusses binary heaps, min-heaps, union-find, and tries but does not cover operations like insert or prefix search for tries."
+          },
+          {
+            "candidate": "common prefixes share nodes",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'common prefixes share nodes' is not mentioned in the student note. The note discusses tries and their properties, but does not cover the specific aspect of common prefixes sharing nodes."
+          },
+          {
+            "candidate": "array layout",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "Binary heaps store a complete binary tree in an array, where the parent of index i is at \u230a(i\u22121)/2\u230b",
+            "reason": "The note mentions that binary heaps are stored in an array but does not explicitly state 'array layout'. The reference provides more detail about the children indices, which are not mentioned."
+          },
+          {
+            "candidate": "smallest element",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "the min-heap prpoerty means every parent is no larger than its children",
+            "reason": "The note mentions the min-heap property, which implies that the smallest element is at the root. However, it does not explicitly state 'smallest element'."
+          },
+          {
+            "candidate": "supports point updates",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'supports point updates' is not mentioned in the student note. The note discusses binary heaps, min-heaps, union-find, and tries but does not cover data structures that support point updates."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_031_noisy",
+        "base_id": "g2_031",
+        "num_candidates": 8,
+        "reported_gaps": 4,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Counting sort sorts integers",
+            "matched_concept": "counting sort",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Counting sort sorts integers' is not related to the topic of merge sort and its time complexity."
+          },
+          {
+            "candidate": "Quicksort partitions around",
+            "matched_concept": "quicksort",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'Quicksort partitions around' is not mentioned in the student note. The note discusses merge sort, which is a different sorting algorithm from quicksort."
+          },
+          {
+            "candidate": "Merge sort",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "* Merge sort is a divide-and-conquer algorithm that splits the array in half, recursviely sorts each half, & merges the two sorted halves",
+            "reason": "The student note explicitly mentions 'Merge sort' and describes its core functionality."
+          },
+          {
+            "candidate": "Heapsort builds",
+            "matched_concept": "heapsort",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses merge sort and does not mention heapsort or its core claim of building a max-heap."
+          },
+          {
+            "candidate": "Merge sort divides",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "* Merge sort is a divide-and-conquer algorithm that splits the array in half, recursviely sorts each half, & merges the two sorted halves",
+            "reason": "The student note explicitly mentions 'Merge sort divides' as part of its description of the algorithm."
+          },
+          {
+            "candidate": "O(n log n",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "* it runs in O(n log n) time in all cases",
+            "reason": "The student note explicitly mentions the candidate concept 'O(n log n)' as part of the time complexity statement."
+          },
+          {
+            "candidate": "insertion sort",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses merge sort and its time complexity but does not mention insertion sort. Therefore, the concept is relevant to sorting algorithms in general but missing from the note."
+          },
+          {
+            "candidate": "smaller element",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": "The merge step walks two pointers through the sorted halves, copying the smaller element each time, and needs O(n) auxiliary space for arrays.",
+            "reason": "The note mentions 'smaller element' in the context of the merge step but does not explicitly state that it is part of the algorithm's core claim."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_032_noisy",
+        "base_id": "g2_032",
+        "num_candidates": 7,
+        "reported_gaps": 5,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Kepler's laws",
+            "matched_concept": "Kepler's laws",
+            "gold_status": "off_scope",
+            "predicted_class": "IRRELEVANT",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's law of universal gravitation and does not mention or allude to Kepler's laws, which pertain to planetary orbits."
+          },
+          {
+            "candidate": "General relativity models gravity",
+            "matched_concept": "general relativity",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's law of universal gravitation and does not mention general relativity. While the concept is relevant to the topic of gravity, it is not covered in the provided note."
+          },
+          {
+            "candidate": "gravitational potential energy",
+            "matched_concept": "gravitational potential energy",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's law of universal gravitation and the force between masses but does not mention gravitational potential energy. This concept is relevant to the topic of gravity, so it should be included in a comprehensive study."
+          },
+          {
+            "candidate": "g = GM/r\u00b2",
+            "matched_concept": "gravitational field strength",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'g = GM/r\u00b2' is not mentioned in the student note. It refers to gravitational field strength, which is a related but distinct topic from Newton's law of universal gravitation discussed in the note."
+          },
+          {
+            "candidate": "masses reduces the gravitational force",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "* The force is proportional to the prdouct of masses & inversely proportional to the square of the distance",
+            "reason": "The note mentions that the force is proportional to the product of masses, which implies that increasing mass increases gravitational force. However, it does not explicitly state that masses reduce the gravitational force when considered in a context where distance or other factors are changing."
+          },
+          {
+            "candidate": "Coulomb's law",
+            "matched_concept": "Coulomb's law",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses Newton's law of universal gravitation and does not mention Coulomb's law. While both laws describe inverse-square relationships, the note is focused on gravitational forces, making Coulomb's law a separate topic."
+          },
+          {
+            "candidate": "gravity supplies the centripetal force",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The candidate concept 'gravity supplies the centripetal force' is not mentioned in the student note. While the note discusses Newton's law of universal gravitation, it does not address the specific role of gravity in providing centripetal force for circular orbits."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_035_noisy",
+        "base_id": "g2_035",
+        "num_candidates": 5,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Amortized analysis averages",
+            "matched_concept": "amortized analysis",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "Amortized analysis is not mentioned in the student note. The note discusses big-O notation and its usage but does not cover amortized analysis."
+          },
+          {
+            "candidate": "Big-O notation",
+            "matched_concept": "asymptotic upper bound",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "big-O notation descrbies an upper bound on how an algorithm's running time grows with input size n, ignoring constant factors and lower-order terms",
+            "reason": "The student note explicitly mentions Big-O notation and describes its core claim of providing an upper bound for the growth rate of an algorithm."
+          },
+          {
+            "candidate": "Space complexity",
+            "matched_concept": "space complexity",
+            "gold_status": "off_scope",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses time complexity using big-O notation but does not mention space complexity. The candidate concept is relevant to the topic of algorithm analysis, which typically includes both time and space complexities."
+          },
+          {
+            "candidate": "gives an asymptotic lower bound",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "Big-Omega gives a lower bound and Big-Theta a tight bound that is both an upper and lower bound",
+            "reason": "The student note mentions Big-Omega, which provides an asymptotic lower bound, thus covering the candidate concept."
+          },
+          {
+            "candidate": "lower-order terms",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "big-O notation descrbies an upper bound on how an algorithm's running time grows with input size n, ignoring constant factors and lower-order terms",
+            "reason": "The student note explicitly mentions 'lower-order terms' as part of the explanation for big-O notation."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_036_noisy",
+        "base_id": "g2_036",
+        "num_candidates": 5,
+        "reported_gaps": 1,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "J = F\u0394t = \u0394p",
+            "matched_concept": "impulse",
+            "gold_status": "off_scope",
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "* Momentum is mass times velocity, p = mv",
+            "reason": "The note mentions the formula for momentum (p = mv), but does not explicitly state or derive the concept of impulse (J = F\u0394t = \u0394p)."
+          },
+          {
+            "candidate": "linear momentum of an isolated",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "* In a closed system w/ no net external force, the total momentum stays the same before and after an intreaction",
+            "reason": "The note states that in a closed system with no net external force, the total momentum remains constant, which aligns with the candidate concept of linear momentum of an isolated system."
+          },
+          {
+            "candidate": "conserving momentum of the rocket",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of conserving momentum in the context of a rocket is not mentioned in the student note. The note discusses closed systems, collisions, and conservation of momentum but does not specifically address rockets."
+          },
+          {
+            "candidate": "Linear momentum p mv",
+            "matched_concept": "definition of momentum",
+            "gold_status": "covered",
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "* Momentum is mass times velocity, p = mv",
+            "reason": "The student note explicitly mentions the candidate concept 'Linear momentum p mv' in the form of 'Momentum is mass times velocity, p = mv'."
+          },
+          {
+            "candidate": "perfectly inelastic collision",
+            "matched_concept": "perfectly inelastic collisions",
+            "gold_status": "covered",
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "* in collisions where objects stick together, kinetic energy is not conserved but moemntum still is",
+            "reason": "The note mentions a collision where objects stick together, which aligns with the concept of a perfectly inelastic collision. However, it does not explicitly state 'perfectly inelastic collision' or mention the loss of kinetic energy."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_039_noisy",
+        "base_id": "g2_039",
+        "num_candidates": 6,
+        "reported_gaps": 6,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "angles of incidence and refraction",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": true,
+            "quote": "The amount of bending depends on how much the speeds differ",
+            "reason": "The note mentions that the amount of bending (refraction) is dependent on the difference in speed between media, which implicitly refers to angles of incidence and refraction. However, it does not explicitly state these terms."
+          },
+          {
+            "candidate": "lower-index medium",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept 'lower-index medium' is relevant to the note's subject as it pertains to refraction. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "n = c/v",
+            "matched_concept": "refractive index",
+            "gold_status": "partial",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The student note discusses the behavior of light when passing between media but does not mention the refractive index or the formula n = c/v. This concept is relevant to the topic of light refraction."
+          },
+          {
+            "candidate": "wavelength shortens",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of wavelength shortening is relevant to the topic of light behavior when passing from one medium to another. However, it is not mentioned in the student note."
+          },
+          {
+            "candidate": "Refractive index varies slightly",
+            "matched_concept": "refractive index",
+            "gold_status": "partial",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of refractive index varying slightly is not mentioned in the student note. While it relates to the topic of light bending at boundaries, the specific detail about variation with wavelength is absent."
+          },
+          {
+            "candidate": "optical fibres",
+            "matched_concept": "total internal reflection",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of optical fibres is not mentioned in the student note. The note discusses refraction when light passes from one transparent medium to another, but does not cover total internal reflection or the use of optical fibres."
+          }
+        ]
+      },
+      {
+        "case_id": "g2_040_noisy",
+        "base_id": "g2_040",
+        "num_candidates": 5,
+        "reported_gaps": 2,
+        "has_false_alarm": true,
+        "candidates": [
+          {
+            "candidate": "Price elasticity of demand measures",
+            "matched_concept": "price elasticity of demand",
+            "gold_status": "gap",
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of price elasticity of demand is not mentioned in the student note. The note discusses supply and demand basics but does not cover how strongly quantity demanded responds to a price change, which is what the candidate concept describes."
+          },
+          {
+            "candidate": "monopolist sets marginal revenue",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "MISSING",
+            "downgraded": false,
+            "quote": null,
+            "reason": "The concept of a monopolist setting marginal revenue is not mentioned in the student note. The note discusses market-clearing prices and basic supply-demand dynamics, which are related to market structures but do not include the specific concept of a monopolist's pricing strategy."
+          },
+          {
+            "candidate": "equilibrium price",
+            "matched_concept": "equilibrium price",
+            "gold_status": "covered",
+            "predicted_class": "PARTIALLY_COVERED",
+            "downgraded": false,
+            "quote": "the price where the amount buyers want equals the amount sellers offer is the market-clearing price",
+            "reason": "The note mentions the concept of equilibrium through the term 'market-clearing price', which aligns with the candidate concept. However, it does not explicitly use the term 'equilibrium price'."
+          },
+          {
+            "candidate": "quantity supplied rises",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "while producers are willing to supply more",
+            "reason": "The note mentions that producers are willing to supply more when the price rises, which aligns with the candidate concept 'quantity supplied rises'."
+          },
+          {
+            "candidate": "quantity demanded falls",
+            "matched_concept": null,
+            "gold_status": null,
+            "predicted_class": "COVERED",
+            "downgraded": false,
+            "quote": "When the price of a good rises, people usually buy less of it",
+            "reason": "The note states that quantity demanded falls when the price rises, which is equivalent to the candidate concept."
+          }
+        ]
+      }
+    ]
+  }
+}

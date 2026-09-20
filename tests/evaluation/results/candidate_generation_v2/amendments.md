@@ -13,7 +13,7 @@ Definitions fixed here:
 - Candidates per chunk = emitted / chunks in the split; also report the max per chunk.
 - Lenient precision counts only human-reviewed labels from unmatched_sample.csv.
 
-Reference: Phase A artifacts at commit pending.
+Reference: Phase A artifacts at commit c32fedc52e90bb1b441aaec1fec09099c1576dad.
 
 ---
 
