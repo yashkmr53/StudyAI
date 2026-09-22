@@ -41,6 +41,7 @@ class OllamaLLMProvider:
         self.name = name
         self.fail = fail
         self.timeout = timeout
+        self._supports_chat = True  # Default, will be updated by _check_ollama
         
         self.base_url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         self.model = model or os.environ.get("LLM_MODEL", "llama3.1:8b")
@@ -48,7 +49,7 @@ class OllamaLLMProvider:
         # Test connection
         self._check_ollama()
         
-        logger.info("Ollama LLM initialized (base_url=%s, model=%s)", self.base_url, self.model)
+        logger.info("Ollama LLM initialized (base_url=%s, model=%s, chat=%s)", self.base_url, self.model, self._supports_chat)
     
     def _check_ollama(self) -> None:
         """Verify Ollama server is reachable and model exists."""
@@ -70,10 +71,22 @@ class OllamaLLMProvider:
             else:
                 logger.info("Ollama model '%s' is available", self.model)
                 
+            # Check if model supports chat endpoint
+            model_info = next((m for m in resp.json().get("models", []) if m["name"].startswith(model_base)), None)
+            if model_info:
+                caps = model_info.get("capabilities", [])
+                self._supports_chat = "chat" in caps if "capabilities" in model_info else True
+                if not self._supports_chat:
+                    logger.info("Model '%s' does not support chat endpoint, will use generate", self.model)
+            else:
+                self._supports_chat = True  # Default to chat for unknown models
+                
         except requests.exceptions.ConnectionError:
             logger.warning("Cannot connect to Ollama at %s. Is it running?", self.base_url)
+            self._supports_chat = True
         except Exception as e:
             logger.warning("Ollama health check failed: %s", e)
+            self._supports_chat = True
     
     def generate_structured(
         self,
@@ -84,82 +97,241 @@ class OllamaLLMProvider:
     ) -> StructuredLLMResult:
         """Generate structured output from Ollama.
         
-        Uses JSON schema to constrain output format.
+        Uses the chat API for models that support it, otherwise falls back to generate API.
+        Uses format="json" for structured output.
         """
         if self.fail:
             raise RuntimeError(f"{self.name}: simulated provider failure")
-        
-        # Build the prompt with schema instructions
+
+        # Build the system prompt with schema instructions
         system_prompt = self._build_system_prompt(prompt, schema)
         user_prompt = prompt.user
-        
-        # Determine format value for Ollama
+
+        # Use Ollama's JSON format mode (format="json") which constrains
+        # output to valid JSON. The detailed schema is conveyed via the
+        # system prompt instructions.
         format_value = self._resolve_format(schema)
-        
-        # Prepare request
-        payload = {
-            "model": self.model,
-            "prompt": f"{system_prompt}\n\n{user_prompt}",
-            "stream": False,
-            "format": format_value,
-            "options": {
-                "temperature": 0.1,  # Low temperature for structured output
-                "num_predict": 4096,
-            },
-        }
-        
-        started = time.monotonic()
-        
-        try:
-            resp = requests.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            
-            latency_ms = int((time.monotonic() - started) * 1000)
-            
-            # Parse response
-            response_text = data.get("response", "{}")
+
+        # For models without chat support, combine system and user into single prompt
+        if self._supports_chat:
+            return self._generate_with_chat(prompt, system_prompt, user_prompt, format_value, schema, request_id)
+        else:
+            return self._generate_with_generate(prompt, system_prompt, user_prompt, format_value, schema, request_id)
+    
+    def _generate_with_chat(
+        self,
+        prompt: Prompt,
+        system_prompt: str,
+        user_prompt: str,
+        format_value: Union[str, dict, None],
+        schema: Union[type, dict, None],
+        request_id: str,
+    ) -> StructuredLLMResult:
+        """Generate using Ollama chat API."""
+        max_retries = 3
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "stream": False,
+                "format": format_value,
+                "options": {
+                    "temperature": getattr(prompt, "temperature", 0.0) if prompt and getattr(prompt, "temperature", None) is not None else 0.0,
+                    "seed": 42,
+                    "num_ctx": 4096,
+                    "num_predict": 512,
+                },
+            }
+
+            started = time.monotonic()
+
             try:
-                result_data = json.loads(response_text)
-            except json.JSONDecodeError:
-                # Try to extract JSON from response
-                result_data = self._extract_json(response_text)
-                if isinstance(result_data, dict) and result_data.get("error"):
-                    raise RuntimeError(
-                        f"Ollama response was not valid JSON and no JSON could be extracted. "
-                        f"Raw: {response_text[:200]}"
-                    )
-            
-            # Validate output against schema if provided
-            self._validate_output(result_data, schema)
-            
-            # Extract token counts if available
-            input_tokens = data.get("prompt_eval_count", 0)
-            output_tokens = data.get("eval_count", 0)
-            total_tokens = input_tokens + output_tokens
-            
-            return StructuredLLMResult(
-                data=result_data,
-                model=self.model,
-                prompt_name=prompt.name,
-                prompt_version=prompt.version,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                estimated_cost_usd=0.0,  # Local model = no cost
-            )
-            
-        except requests.exceptions.Timeout:
-            raise RuntimeError(f"Ollama request timed out after {self.timeout}s")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Ollama request failed: {e}") from e
-        except Exception as e:
-            logger.exception("Ollama generation failed")
-            raise RuntimeError(f"Ollama generation failed: {e}") from e
+                resp = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    timeout=self.timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                latency_ms = int((time.monotonic() - started) * 1000)
+
+                # Parse response from chat message
+                message = data.get("message", {})
+                response_text = message.get("content", "{}")
+
+                try:
+                    result_data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Try to extract JSON from response
+                    result_data = self._extract_json(response_text)
+                    if isinstance(result_data, dict) and result_data.get("error"):
+                        last_error = RuntimeError(
+                            f"Ollama response was not valid JSON and no JSON could be extracted. "
+                            f"Raw: {response_text[:200]}"
+                        )
+                        if attempt < max_retries:
+                            logger.warning(
+                                "Ollama non-JSON response on attempt %d/%d, retrying... Raw: %s",
+                                attempt, max_retries, response_text[:100],
+                            )
+                            time.sleep(1)
+                            continue
+                        raise last_error
+
+                # Validate output against schema if provided
+                self._validate_output(result_data, schema)
+
+                # Extract token counts if available
+                input_tokens = data.get("prompt_eval_count", 0)
+                output_tokens = data.get("eval_count", 0)
+                total_tokens = input_tokens + output_tokens
+
+                return StructuredLLMResult(
+                    data=result_data,
+                    model=self.model,
+                    provider=self.name,
+                    prompt_name=prompt.name,
+                    prompt_version=prompt.version,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    estimated_cost_usd=0.0,  # Local model = no cost
+                )
+
+            except requests.exceptions.Timeout:
+                last_error = RuntimeError(f"Ollama request timed out after {self.timeout}s")
+                if attempt < max_retries:
+                    logger.warning("Ollama timeout on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                raise last_error
+            except requests.exceptions.RequestException as e:
+                last_error = RuntimeError(f"Ollama request failed: {e}")
+                if attempt < max_retries:
+                    logger.warning("Ollama request error on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                raise last_error
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries and "not valid JSON" not in str(e):
+                    logger.warning("Ollama generation error on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                logger.exception("Ollama generation failed")
+                raise RuntimeError(f"Ollama generation failed: {e}") from e
+    
+    def _generate_with_generate(
+        self,
+        prompt: Prompt,
+        system_prompt: str,
+        user_prompt: str,
+        format_value: Union[str, dict, None],
+        schema: Union[type, dict, None],
+        request_id: str,
+    ) -> StructuredLLMResult:
+        """Generate using Ollama generate API (for models without chat support)."""
+        # Combine system and user prompts
+        combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+        
+        max_retries = 3
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            payload = {
+                "model": self.model,
+                "prompt": combined_prompt,
+                "stream": False,
+                "format": format_value,
+                "options": {
+                    "temperature": getattr(prompt, "temperature", 0.0) if prompt and getattr(prompt, "temperature", None) is not None else 0.0,
+                    "seed": 42,
+                    "num_ctx": 4096,
+                    "num_predict": 512,
+                },
+            }
+
+            started = time.monotonic()
+
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    timeout=self.timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                latency_ms = int((time.monotonic() - started) * 1000)
+
+                # Parse response from generate
+                response_text = data.get("response", "{}")
+
+                try:
+                    result_data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Try to extract JSON from response
+                    result_data = self._extract_json(response_text)
+                    if isinstance(result_data, dict) and result_data.get("error"):
+                        last_error = RuntimeError(
+                            f"Ollama response was not valid JSON and no JSON could be extracted. "
+                            f"Raw: {response_text[:200]}"
+                        )
+                        if attempt < max_retries:
+                            logger.warning(
+                                "Ollama non-JSON response on attempt %d/%d, retrying... Raw: %s",
+                                attempt, max_retries, response_text[:100],
+                            )
+                            time.sleep(1)
+                            continue
+                        raise last_error
+
+                # Validate output against schema if provided
+                self._validate_output(result_data, schema)
+
+                # Extract token counts if available
+                input_tokens = data.get("prompt_eval_count", 0)
+                output_tokens = data.get("eval_count", 0)
+                total_tokens = input_tokens + output_tokens
+
+                return StructuredLLMResult(
+                    data=result_data,
+                    model=self.model,
+                    provider=self.name,
+                    prompt_name=prompt.name,
+                    prompt_version=prompt.version,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    estimated_cost_usd=0.0,  # Local model = no cost
+                )
+
+            except requests.exceptions.Timeout:
+                last_error = RuntimeError(f"Ollama request timed out after {self.timeout}s")
+                if attempt < max_retries:
+                    logger.warning("Ollama timeout on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                raise last_error
+            except requests.exceptions.RequestException as e:
+                last_error = RuntimeError(f"Ollama request failed: {e}")
+                if attempt < max_retries:
+                    logger.warning("Ollama request error on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                raise last_error
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries and "not valid JSON" not in str(e):
+                    logger.warning("Ollama generation error on attempt %d/%d, retrying...", attempt, max_retries)
+                    time.sleep(1)
+                    continue
+                logger.exception("Ollama generation failed")
+                raise RuntimeError(f"Ollama generation failed: {e}") from e
     
     def _build_system_prompt(self, prompt: Prompt, schema: Union[type, dict, None]) -> str:
         """Build system prompt with schema instructions."""
@@ -188,11 +360,15 @@ class OllamaLLMProvider:
         return "\n\n".join(parts)
     
     def _resolve_format(self, schema: Union[type, dict, None]) -> Union[str, dict, None]:
-        """Resolve the format value to send to Ollama."""
-        if not schema:
-            return None
-        schema_dict = self._schema_to_dict(schema)
-        return schema_dict if isinstance(schema_dict, dict) else "json"
+        """Resolve the format value to send to Ollama.
+
+        Uses Ollama's JSON format mode (format="json") which constrains
+        output to valid JSON. The detailed schema is conveyed via the
+        system prompt instructions.
+        """
+        if schema:
+            return "json"
+        return None
     
     def _schema_to_dict(self, schema: Union[type, dict]) -> dict:
         """Convert schema (Pydantic type or dict) to JSON schema dict."""
@@ -219,15 +395,47 @@ class OllamaLLMProvider:
             ) from exc
     
     def _extract_json(self, text: str) -> dict:
-        """Extract JSON from text response."""
-        # Try to find JSON object in response
+        """Extract JSON from text response, handling various model output formats."""
+        import re
+
+        # Try to find a JSON object in the response
+        # First attempt: find the first { and matching }
         start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
+        if start >= 0:
+            end = text.rfind("}")
+            if end > start:
+                candidate = text[start:end + 1]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    pass
+
+        # Second attempt: use regex to find balanced JSON-like structures
+        # Look for the outermost braces
+        brace_depth = 0
+        json_start = -1
+        for i, ch in enumerate(text):
+            if ch == "{":
+                if brace_depth == 0:
+                    json_start = i
+                brace_depth += 1
+            elif ch == "}":
+                brace_depth -= 1
+                if brace_depth == 0 and json_start >= 0:
+                    candidate = text[json_start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        pass
+
+        # Third attempt: try to parse markdown code blocks
+        code_block = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if code_block:
             try:
-                return json.loads(text[start:end+1])
+                return json.loads(code_block.group(1))
             except json.JSONDecodeError:
                 pass
+
         return {"error": "Failed to parse JSON from response", "raw": text[:500]}
 
 
@@ -315,6 +523,7 @@ class OllamaChatProvider:
             return StructuredLLMResult(
                 data=result_data,
                 model=self.model,
+                provider=self.name,
                 prompt_name=prompt.name,
                 prompt_version=prompt.version,
                 input_tokens=input_tokens,

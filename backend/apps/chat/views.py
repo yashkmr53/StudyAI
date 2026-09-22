@@ -23,6 +23,7 @@ class CreateSessionSerializer(serializers.Serializer):
 
 class MessageInSerializer(serializers.Serializer):
     content = serializers.CharField(min_length=1, max_length=4000)
+    image = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
@@ -80,7 +81,9 @@ class ChatSessionViewSet(
             serializer.is_valid(raise_exception=True)
             # Check for agent mode header
             use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
-            message = ChatService.ask(session, serializer.validated_data["content"], use_agent=use_agent)
+            content = serializer.validated_data["content"]
+            image = serializer.validated_data.get("image")
+            message = ChatService.ask(session, content, image=image, use_agent=use_agent)
             return Response(ChatMessageSerializer(message).data, status=201)
         messages = ChatMessage.objects.filter(session=session)
         return Response(ChatMessageSerializer(messages, many=True).data)
@@ -99,9 +102,10 @@ class ChatSessionViewSet(
         serializer.is_valid(raise_exception=True)
         use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
         content = serializer.validated_data["content"]
+        image = serializer.validated_data.get("image")
 
         response = StreamingHttpResponse(
-            ChatService.stream(session, content, use_agent=use_agent),
+            ChatService.stream(session, content, image=image, use_agent=use_agent),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache, no-transform"
@@ -114,5 +118,7 @@ class ChatSessionViewSet(
         serializer = MessageInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         use_agent = request.headers.get("X-Agent-Mode", "").lower() == "true"
-        message = ChatService.ask(session, serializer.validated_data["content"], use_agent=use_agent)
+        content = serializer.validated_data["content"]
+        image = serializer.validated_data.get("image")
+        message = ChatService.ask(session, content, image=image, use_agent=use_agent)
         return Response(ChatMessageSerializer(message).data, status=201)

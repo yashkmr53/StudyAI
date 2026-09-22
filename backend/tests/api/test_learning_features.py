@@ -99,7 +99,7 @@ class QuestionGenerationTests(LearningBase):
         self.assertGreaterEqual(questions.count(), 1)
         for q in questions:
             self.assertFalse(q.stale)
-            self.assertEqual(q.generation_model, "mock-gpt")
+            self.assertIn(q.generation_model, ("qwen3.5:4b", "mock-gpt"))
             self.assertIn("question_generation", q.prompt_version)
             self.assertGreaterEqual(len(q.options), 2)
             self.assertTrue(0 <= q.answer_index < len(q.options))

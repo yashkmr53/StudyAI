@@ -56,22 +56,40 @@ def _candidate_depth() -> int:
     return int(getattr(settings, "RETRIEVAL_CANDIDATES", 50))
 
 
-def _base_queryset(user, subject=None):
+def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: bool = False):
     from apps.profiles.models import Profile
     from apps.retrieval.models import NoteChunk
 
     profile_ids = list(Profile.objects.filter(user=user).values_list("id", flat=True))
-    qs = NoteChunk.objects.filter(stale=False).filter(
-        Q(profile_id__in=profile_ids) | Q(profile_id__isnull=True)
-    )
+    if reference_only:
+        qs = NoteChunk.objects.filter(stale=False, profile_id__isnull=True)
+    else:
+        qs = NoteChunk.objects.filter(stale=False).filter(
+            Q(profile_id__in=profile_ids) | Q(profile_id__isnull=True)
+        )
     if subject is not None:
         qs = qs.filter(subject=subject)
+    if reference_book_ids is not None:
+        if reference_only:
+            qs = qs.filter(reference_book_id__in=reference_book_ids)
+        else:
+            qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile_id__in=profile_ids))
     return qs
 
 
 class RetrievalService:
     @staticmethod
-    def search(user, query: str, *, subject=None, top_k: int = 8, include_reference: bool = True):
+    def search(
+        user,
+        query: str,
+        *,
+        subject=None,
+        subject_id=None,
+        top_k: int = 8,
+        include_reference: bool = True,
+        reference_book_ids: list = None,
+        reference_only: bool = False,
+    ):
         """Returns list[Evidence]. The dense leg runs on PostgreSQL only;
         SQLite unit runs degrade to keyword-only."""
         from apps.retrieval.models import NoteChunk
@@ -81,7 +99,14 @@ class RetrievalService:
         if not query:
             return []
 
-        base = _base_queryset(user, subject)
+        if subject is None and subject_id is not None:
+            from apps.subjects.models import Subject
+            try:
+                subject = Subject.objects.filter(pk=subject_id).first()
+            except Exception:
+                subject = None
+
+        base = _base_queryset(user, subject, reference_book_ids, reference_only=reference_only)
         if not include_reference:
             base = base.exclude(source_type="reference")
 
@@ -105,7 +130,7 @@ class RetrievalService:
             for rank, chunk in enumerate(dense_qs, start=1):
                 dense_ids[str(chunk.pk)] = 1.0 / (rrf_k + rank)
 
-        # --- keyword channel (tsvector rank) ---
+# --- keyword channel (tsvector rank) ---
         keyword_ids: dict[str, float] = {}
         if connection.vendor == "postgresql":
             sq = SearchQuery(query, config="english")

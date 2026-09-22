@@ -6,6 +6,8 @@ import { ModuleProvider, useSubjectModule } from "../modules/ModuleContext";
 import { HandwrittenView } from "./HandwrittenView";
 import { EnrichedView } from "./EnrichedView";
 import { useWorkspaceStore } from "../../state/workspaceStore";
+import { documentsApi } from "../../services/api/documents";
+import type { NoteMeta } from "../../types/domain";
 import { UNFILED_FOLDER_ID } from "../../types/domain";
 import { breadcrumbCrumbs } from "../../utils/folderTree";
 
@@ -25,11 +27,62 @@ export function NoteDetailPage() {
   const subjects = useWorkspaceStore((s) => s.subjects);
   const folders = useWorkspaceStore((s) => s.folders);
   const notes = useWorkspaceStore((s) => s.notes);
+  const workspaceLoading = useWorkspaceStore((s) => s.loading);
+  const workspaceLoaded = useWorkspaceStore((s) => s.loaded);
 
   const { moduleId, services } = useSubjectModule(subjectId);
 
-  const subject = subjects.find((x) => x.id === subjectId);
-  const note = notes.find((n) => n.id === noteId);
+  const [remoteNote, setRemoteNote] = useState<NoteMeta | null>(null);
+  const [fetchingRemote, setFetchingRemote] = useState<boolean>(false);
+  const [fetchFailed, setFetchFailed] = useState<boolean>(false);
+
+  const storeNote = notes.find((n) => n.id === noteId || n.refId === noteId);
+  const activeNote = storeNote || remoteNote;
+
+  useEffect(() => {
+    if (!noteId) return;
+    const existing = notes.find((n) => n.id === noteId || n.refId === noteId);
+    if (existing) {
+      setRemoteNote(null);
+      setFetchFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setFetchingRemote(true);
+    documentsApi
+      .get(noteId)
+      .then((doc) => {
+        if (cancelled) return;
+        const title = (doc as any).title || (doc as any).filename || `Note ${doc.id.slice(0, 8)}`;
+        const meta: NoteMeta = {
+          id: doc.id,
+          refId: doc.id,
+          profileId: doc.profile,
+          subjectId: doc.subject || subjectId || "",
+          folderId: UNFILED_FOLDER_ID,
+          title,
+          source: (doc.source === "canvas" ? "canvas" : "upload"),
+          createdAt: doc.created_at,
+          updatedAt: doc.created_at,
+        };
+        setRemoteNote(meta);
+        setFetchFailed(false);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setFetchingRemote(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [noteId, notes, subjectId]);
+
+  const subject =
+    subjects.find((x) => x.id === subjectId) ||
+    (activeNote?.subjectId ? subjects.find((x) => x.id === activeNote.subjectId) : null) ||
+    (subjectId ? { id: subjectId, name: "Subject" } : null);
 
   // Handwritten is always the default landing tab.
   const [tab, setTab] = useState<"handwritten" | "enriched">("handwritten");
@@ -45,16 +98,17 @@ export function NoteDetailPage() {
   }, [services.enrichment, tab]);
 
   const crumbs = useMemo(() => {
-    if (!subject || !note) return [{ label: "Subjects", to: "/subjects" }];
-    const subjectFolders = folders.filter((f) => f.subjectId === subject.id);
+    if (!activeNote) return [{ label: t("common.breadcrumb.subjects", "Subjects"), to: "/subjects" }];
+    const targetSubject = subject || { id: subjectId || "", name: "Subject" };
+    const subjectFolders = folders.filter((f) => f.subjectId === targetSubject.id);
     const base = breadcrumbCrumbs(
       subjectFolders,
-      note.folderId ?? UNFILED_FOLDER_ID,
-      subject.name,
-      `/subjects/${subject.id}`,
+      activeNote.folderId ?? UNFILED_FOLDER_ID,
+      targetSubject.name,
+      `/subjects/${targetSubject.id}`,
     );
-    return [...base, { label: note.title }];
-  }, [subject, note, folders]);
+    return [...base, { label: activeNote.title }];
+  }, [subject, activeNote, folders, subjectId, t]);
 
   function onCitation(targetPage: number) {
     setPage(targetPage);
@@ -62,13 +116,26 @@ export function NoteDetailPage() {
     setHighlightToken((t) => t + 1);
   }
 
-  if (!subject || !note) {
+  if ((workspaceLoading && !activeNote) || fetchingRemote) {
+    return (
+      <div className="content__inner content__inner--wide">
+        <div className="skeleton" style={{ height: 400, borderRadius: 14 }} />
+      </div>
+    );
+  }
+
+  if (!activeNote && (fetchFailed || workspaceLoaded)) {
     return (
       <div className="content__inner">
         <p className="muted">{t("notes.detail.loadFailed")}</p>
       </div>
     );
   }
+
+  if (!activeNote) return null;
+
+  const note = activeNote;
+  const displaySubject = subject || { id: subjectId || "", name: "Subject" };
 
   return (
     <ModuleProvider value={{ moduleId, services }}>
@@ -78,7 +145,7 @@ export function NoteDetailPage() {
         <div className="page-heading" style={{ marginTop: 14 }}>
           <h1>{note.title}</h1>
           <p className="subtitle" style={{ marginTop: 5 }}>
-            <Link to={`/subjects/${subjectId}`}>{subject.name}</Link>
+            <Link to={`/subjects/${displaySubject.id}`}>{displaySubject.name}</Link>
             {" · "}
             {note.source === "canvas"
               ? t("notes.source.canvas")

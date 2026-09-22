@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { NoteMeta } from "../../types/domain";
 import { EnrichmentChip, timeAgo, TranscriptionChip } from "../ui/primitives";
 import { useServices } from "../modules/ModuleContext";
 import { NoteIcon } from "../ui/icons";
+import { documentsApi } from "../../services/api/documents";
+import { enrichmentApi } from "../../services/api/enrichment";
 
 /**
  * One note in a folder listing. Status chips follow the active module:
@@ -13,6 +16,8 @@ import { NoteIcon } from "../ui/icons";
 export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
   const services = useServices();
   const { t } = useTranslation();
+  const docId = note.refId || note.id;
+
   return (
     <Link to={to} className="note-row" style={{ textDecoration: "none" }}>
       <span className="sidebar__item-icon">
@@ -33,20 +38,36 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
         </span>
       </span>
       <span className="note-row__end">
-        {note.source === "upload" && <TranscriptionChip status="pending" />}
-        {services.enrichment && <EnrichmentStateChip noteId={note.id} />}
+        {note.source === "upload" && <NoteOcrStatusChip documentId={docId} />}
+        {services.enrichment && <EnrichmentStateChip noteId={docId} />}
       </span>
     </Link>
   );
+}
+
+function NoteOcrStatusChip({ documentId }: { documentId: string }) {
+  const [status, setStatus] = useState<string>("pending");
+  useEffect(() => {
+    let cancelled = false;
+    documentsApi
+      .pages(documentId)
+      .then((pages) => {
+        if (!cancelled && pages && pages.length > 0) {
+          setStatus(pages[0].ocr_status || "pending");
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
+  return <TranscriptionChip status={status} />;
 }
 
 /**
  * Enrichment chip resolved from the live enrichment snapshot. Kept lazy:
  * rows render instantly and the chip hydrates when the fetch resolves.
  */
-import { useEffect, useState } from "react";
-import { enrichmentApi } from "../../services/api/enrichment";
-
 function EnrichmentStateChip({ noteId }: { noteId: string }) {
   const [state, setState] = useState<string>("not_enriched");
   useEffect(() => {

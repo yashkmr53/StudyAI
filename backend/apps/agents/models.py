@@ -80,7 +80,7 @@ def seed_agent_prompt_versions() -> int:
     from apps.agents.prompts.agent_prompts import AGENT_SYSTEM_PROMPT, TOOL_DESCRIPTION_TEMPLATE
     from apps.agents.tools import get_tool_registry
 
-    model = getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
+    model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
     registry = get_tool_registry()
 
     tool_descriptions = {}

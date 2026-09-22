@@ -42,6 +42,7 @@ export function SubjectWorkspace() {
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { t } = useTranslation();
 
   const subject = subjects.find((x) => x.id === subjectId);
@@ -63,7 +64,7 @@ export function SubjectWorkspace() {
     [subjectFolders],
   );
   const unfiledCount = notes.filter(
-    (n) => n.subjectId === subjectId && n.folderId === UNFILED_FOLDER_ID,
+    (n) => n.subjectId === subjectId && (n.folderId === UNFILED_FOLDER_ID || !n.folderId),
   ).length;
 
   function countNotesIn(folderId: string): number {
@@ -97,20 +98,21 @@ export function SubjectWorkspace() {
     const file = e.target.files?.[0];
     if (!file || !subjectId || !profile) return;
     setUploading(true);
+    setUploadError(null);
     try {
-      const created = await documentsApi.create(profile.id, file.name, "image");
+      const created = await documentsApi.create(profile.id, file.name, "image", subjectId);
       await documentsApi.uploadToSignedUrl(created.upload.url, await file.arrayBuffer(), file.type);
       await documentsApi.finalizeUpload(created.document.id, created.page.id);
       await useWorkspaceStore.getState().registerUploadNote({
         documentId: created.document.id,
         profileId: profile.id,
         subjectId,
-        folderId: null,
+        folderId: UNFILED_FOLDER_ID,
         title: file.name,
       });
       navigate(`/subjects/${subjectId}/notes/${created.document.id}`);
-    } catch {
-      // TODO: surface upload error to user
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : t("workspace.uploadError", "Failed to upload note. Please try again."));
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -159,6 +161,12 @@ export function SubjectWorkspace() {
             </div>
           </section>
         ) : null}
+
+        {uploadError && (
+          <div className="form-error" role="alert" style={{ marginBottom: 16 }}>
+            {uploadError}
+          </div>
+        )}
 
         <section className="panel-section" aria-label={t("workspace.foldersTitle")}>
           <div className="panel-section__header">

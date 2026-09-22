@@ -1,0 +1,321 @@
+{
+  "phase": "candidate_generation_v2",
+  "created_at": "2026-09-20T18:40:00+05:30",
+  "authoritative_dataset": {
+    "name": "golden_v2.json",
+    "metadata": "golden_v2_metadata.json",
+    "total_base_cases": 40,
+    "split_rule": "dev = n mod 4 in {1,2}, test = n mod 4 in {0,3}",
+    "dev_cases_count": 20,
+    "test_cases_count": 20
+  },
+  "stack_configuration": {
+    "llm": "ollama / qwen2.5:7b",
+    "llm_sha256": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "acceleration": "Metal GPU (Apple M2)",
+    "temperature": 0.0,
+    "seed": 42,
+    "num_ctx": 4096,
+    "num_predict": 512,
+    "fallback_enabled": false,
+    "embeddings": "sentence-transformers/all-MiniLM-L6-v2",
+    "frozen_match_spec": "tests/evaluation/results/candidate_generation_v2/match_spec.md",
+    "frozen_thresholds": "tests/evaluation/results/candidate_generation_v2/amendments.md"
+  },
+  "phase_a_baseline_audit": {
+    "candidates_emitted": 1191,
+    "ngram_fallback_share": 0.996,
+    "raw_noise_share": 0.829,
+    "test_split_baseline": {
+      "candidates_emitted": 594,
+      "candidates_per_case": 29.7,
+      "unique_gold_concepts_hit": 78,
+      "gold_concept_recall": 0.624,
+      "strict_unique_concept_precision": 0.126,
+      "gap_recall": 0.661
+    },
+    "extractive_ceiling": {
+      "overall_lenient": 0.773,
+      "test_split_lenient": 0.736,
+      "test_split_strict": 0.400,
+      "gap_lenient": 0.839
+    }
+  },
+  "phase_b_extractor_v2": {
+    "max_candidates_per_chunk": 1,
+    "normalization_pairs_path": "tests/evaluation/results/candidate_generation_v2/normalization_pairs.json",
+    "must_merge_accuracy": 1.0,
+    "must_not_merge_accuracy": 1.0,
+    "regression_tests": {
+      "suite_file": "backend/tests/evaluation/test_gap_candidates_v2.py",
+      "total_tests": 10,
+      "passed": 10,
+      "failed": 0
+    }
+  },
+  "phase_c_candidate_only_evaluation": {
+    "dev_split": {
+      "cases": 20,
+      "chunks": 117,
+      "candidates_emitted": 114,
+      "candidates_per_chunk": 0.97,
+      "candidates_per_case": 5.7,
+      "unique_gold_hits": 47,
+      "gold_concepts_total": 117,
+      "overall_recall": 0.402,
+      "strict_unique_concept_precision": 0.412,
+      "fragment_rate": 0.026,
+      "single_token_rate": 0.000,
+      "gap_recall": 0.414,
+      "covered_recall": 0.385,
+      "partial_recall": 0.500,
+      "off_scope_recall": 0.368
+    },
+    "test_split": {
+      "cases": 20,
+      "chunks": 124,
+      "candidates_emitted": 122,
+      "candidates_per_chunk": 0.98,
+      "candidates_per_case": 6.1,
+      "unique_gold_hits": 46,
+      "gold_concepts_total": 125,
+      "overall_recall": 0.368,
+      "recall_over_lenient_ceiling": 0.500,
+      "strict_unique_concept_precision": 0.377,
+      "strict_precision_absolute_gain_over_baseline": 0.251,
+      "lenient_reviewed_precision": 0.651,
+      "fragment_rate": 0.074,
+      "single_token_rate": 0.000,
+      "gap_recall": 0.357,
+      "covered_recall": 0.380,
+      "partial_recall": 0.400,
+      "off_scope_recall": 0.370
+    },
+    "unmatched_sample_human_review": {
+      "sample_size": 50,
+      "valid_domain_concepts_count": 22,
+      "valid_concept_ratio_in_unmatched": 0.440,
+      "noise_fragments_count": 28,
+      "estimated_lenient_precision": 0.651
+    }
+  },
+  "phase_d_downstream_qwen_evaluation": {
+    "test_base_variant": {
+      "num_cases": 20,
+      "gold_concepts": 125,
+      "gold_gaps": 56,
+      "arms": {
+        "Arm A": {
+          "description": "Baseline extractor (capped at 6/case) + Current prompt (v2)",
+          "calls": 120,
+          "avg_latency_sec": 13.87,
+          "four_way_accuracy": 0.500,
+          "macro_f1": 0.405,
+          "e2e_gap_recall": 0.125,
+          "e2e_gap_recall_95ci": [0.054, 0.196],
+          "e2e_gap_precision": 0.200,
+          "e2e_gap_precision_95ci": [0.094, 0.333],
+          "true_gaps_found": 7,
+          "reported_gaps": 35,
+          "false_gaps": 23,
+          "irrelevant_gaps": 2,
+          "downgrade_count": 0,
+          "class_metrics": {
+            "MISSING": {"n_gold": 21, "precision": 0.750, "recall": 0.571, "f1": 0.649, "reliable": true},
+            "PARTIALLY_COVERED": {"n_gold": 3, "precision": 0.111, "recall": 0.333, "f1": 0.167, "reliable": false},
+            "COVERED": {"n_gold": 0, "precision": 0.000, "recall": 0.000, "f1": 0.000, "reliable": false},
+            "IRRELEVANT": {"n_gold": 6, "precision": 0.500, "recall": 0.333, "f1": 0.400, "reliable": false}
+          }
+        },
+        "Arm B": {
+          "description": "New extractor v2 (max 1/chunk) + Current prompt (v2)",
+          "calls": 122,
+          "avg_latency_sec": 12.80,
+          "four_way_accuracy": 0.574,
+          "macro_f1": 0.560,
+          "e2e_gap_recall": 0.179,
+          "e2e_gap_recall_95ci": [0.103, 0.256],
+          "e2e_gap_precision": 0.323,
+          "e2e_gap_precision_95ci": [0.190, 0.464],
+          "true_gaps_found": 10,
+          "reported_gaps": 31,
+          "false_gaps": 21,
+          "irrelevant_gaps": 3,
+          "downgrade_count": 0,
+          "class_metrics": {
+            "MISSING": {"n_gold": 20, "precision": 0.667, "recall": 0.500, "f1": 0.571, "reliable": true},
+            "PARTIALLY_COVERED": {"n_gold": 2, "precision": 0.143, "recall": 1.000, "f1": 0.250, "reliable": false},
+            "COVERED": {"n_gold": 9, "precision": 0.857, "recall": 0.667, "f1": 0.750, "reliable": false},
+            "IRRELEVANT": {"n_gold": 16, "precision": 0.818, "recall": 0.562, "f1": 0.667, "reliable": true}
+          }
+        },
+        "Arm C": {
+          "description": "New extractor v2 (max 1/chunk) + Grounded prompt (with note_quote & code downgrade)",
+          "calls": 122,
+          "avg_latency_sec": 10.62,
+          "four_way_accuracy": 0.617,
+          "macro_f1": 0.454,
+          "e2e_gap_recall": 0.357,
+          "e2e_gap_recall_95ci": [0.271, 0.443],
+          "e2e_gap_precision": 0.238,
+          "e2e_gap_precision_95ci": [0.176, 0.302],
+          "true_gaps_found": 20,
+          "reported_gaps": 84,
+          "false_gaps": 64,
+          "irrelevant_gaps": 13,
+          "downgrade_count": 13,
+          "class_metrics": {
+            "MISSING": {"n_gold": 20, "precision": 0.541, "recall": 1.000, "f1": 0.702, "reliable": true},
+            "PARTIALLY_COVERED": {"n_gold": 2, "precision": 0.000, "recall": 0.000, "f1": 0.000, "reliable": false},
+            "COVERED": {"n_gold": 9, "precision": 1.000, "recall": 0.667, "f1": 0.800, "reliable": false},
+            "IRRELEVANT": {"n_gold": 16, "precision": 1.000, "recall": 0.188, "f1": 0.316, "reliable": true}
+          }
+        },
+        "ORACLE-EXTRACTABLE": {
+          "description": "Gold concepts whose topic/alias appears in reference chunks (91) + Grounded prompt",
+          "calls": 91,
+          "avg_latency_sec": 9.64,
+          "four_way_accuracy": 0.670,
+          "macro_f1": 0.556,
+          "e2e_gap_recall": 0.768,
+          "e2e_gap_recall_95ci": [0.667, 0.862],
+          "e2e_gap_precision": 0.642,
+          "e2e_gap_precision_95ci": [0.544, 0.722],
+          "true_gaps_found": 43,
+          "reported_gaps": 67,
+          "false_gaps": 24,
+          "irrelevant_gaps": 22,
+          "downgrade_count": 7,
+          "class_metrics": {
+            "MISSING": {"n_gold": 45, "precision": 0.642, "recall": 0.956, "f1": 0.768, "reliable": true},
+            "PARTIALLY_COVERED": {"n_gold": 4, "precision": 0.286, "recall": 0.500, "f1": 0.364, "reliable": false},
+            "COVERED": {"n_gold": 16, "precision": 0.923, "recall": 0.750, "f1": 0.828, "reliable": true},
+            "IRRELEVANT": {"n_gold": 26, "precision": 1.000, "recall": 0.154, "f1": 0.267, "reliable": true}
+          }
+        },
+        "ORACLE": {
+          "description": "All gold concepts (125) + Grounded prompt",
+          "calls": 125,
+          "avg_latency_sec": 10.52,
+          "four_way_accuracy": 0.696,
+          "macro_f1": 0.565,
+          "e2e_gap_recall": 0.964,
+          "e2e_gap_recall_95ci": [0.918, 1.000],
+          "e2e_gap_precision": 0.667,
+          "e2e_gap_precision_95ci": [0.577, 0.744],
+          "true_gaps_found": 54,
+          "reported_gaps": 81,
+          "false_gaps": 27,
+          "irrelevant_gaps": 22,
+          "downgrade_count": 10,
+          "class_metrics": {
+            "MISSING": {"n_gold": 56, "precision": 0.667, "recall": 0.964, "f1": 0.788, "reliable": true},
+            "PARTIALLY_COVERED": {"n_gold": 5, "precision": 0.231, "recall": 0.600, "f1": 0.333, "reliable": false},
+            "COVERED": {"n_gold": 36, "precision": 0.960, "recall": 0.667, "f1": 0.787, "reliable": true},
+            "IRRELEVANT": {"n_gold": 28, "precision": 1.000, "recall": 0.214, "f1": 0.353, "reliable": true}
+          }
+        }
+      }
+    },
+    "variant_robustness": {
+      "all_covered_control": {
+        "cases_evaluated": 9,
+        "total_calls": 56,
+        "elapsed_sec": 582.4,
+        "cases_with_false_alarms": 7,
+        "false_alarm_rate": 0.778,
+        "total_false_gaps_reported": 11
+      },
+      "noisy": {
+        "cases_evaluated": 20,
+        "total_calls": 122,
+        "elapsed_sec": 1254.8,
+        "gold_gaps": 56,
+        "true_gaps_found": 20,
+        "gap_recall": 0.357,
+        "total_gaps_reported": 86,
+        "false_gaps": 55,
+        "irrelevant_gaps": 11,
+        "gap_precision": 0.233,
+        "cases_with_reported_gaps": 20,
+        "reported_gap_rate": 1.000
+      }
+    }
+  },
+  "failure_taxonomy_arm_c": {
+    "total_missed_gaps": 36,
+    "breakdown": {
+      "CANDIDATE_GENERATION": {
+        "count": 27,
+        "percentage": 75.0,
+        "description": "Concept topic/alias was present in reference chunk but not emitted due to Stage 1 top-1 chunk budget or salience ranking"
+      },
+      "CONTEXT": {
+        "count": 9,
+        "percentage": 25.0,
+        "description": "Concept topic and aliases were completely absent from retrieved reference chunks"
+      },
+      "SEMANTIC_CLASSIFICATION": {
+        "count": 0,
+        "percentage": 0.0,
+        "description": "Concept was emitted by Stage 1 but misclassified by Qwen"
+      },
+      "PROMPT": {
+        "count": 0,
+        "percentage": 0.0,
+        "description": "Concept was emitted but prompt instructions caused misclassification"
+      },
+      "MODEL_CAPABILITY": {
+        "count": 0,
+        "percentage": 0.0,
+        "description": "7B reasoning limitation on emitted candidate"
+      }
+    }
+  },
+  "preregistered_threshold_scorecard": {
+    "C1_overall_recall": {
+      "threshold": ">= 0.85 x lenient ceiling (>= 62.6%) AND gap recall >= baseline (66.1%)",
+      "measured_overall_recall": 0.368,
+      "measured_gap_recall": 0.357,
+      "status": "NOT MET"
+    },
+    "C2_precision": {
+      "threshold": "strict >= 0.40, lenient >= 0.60",
+      "measured_strict": 0.377,
+      "measured_lenient": 0.651,
+      "baseline_strict": 0.126,
+      "absolute_gain": 0.251,
+      "status": "MET on lenient (65.1%); strict is 37.7% (+25.1% absolute gain over baseline)"
+    },
+    "C3_budget": {
+      "threshold": "<= 1.6 candidates per chunk (~10 per case)",
+      "measured_per_chunk": 0.98,
+      "measured_per_case": 6.1,
+      "status": "PASS"
+    },
+    "C4_fragment_rate": {
+      "threshold": "fragment rate <= 2.0%, single-token rate reported",
+      "measured_fragment_rate": 0.074,
+      "measured_single_token_rate": 0.000,
+      "status": "NOT MET (fragment rate 7.4% > 2.0%)"
+    },
+    "D1_e2e_gap_recall": {
+      "threshold": ">= 0.70 AND >= 0.85 x ORACLE-EXTRACTABLE (>= 65.3%)",
+      "measured": 0.357,
+      "oracle_extractable_baseline": 0.768,
+      "status": "NOT MET"
+    },
+    "D2_e2e_gap_precision": {
+      "threshold": "strict (arm C) >= 0.60",
+      "measured": 0.238,
+      "status": "NOT MET"
+    },
+    "D3_false_alarm_rate": {
+      "threshold": "fully_covered + control <= 10% of cases",
+      "measured": 0.778,
+      "status": "NOT MET"
+    }
+  },
+  "final_decision": "PARTIAL \u2014 candidate generation improved but recall remains insufficient (provisional)",
+  "gap_filling_readiness": "NOT READY"
+}

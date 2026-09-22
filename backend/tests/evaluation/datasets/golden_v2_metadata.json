@@ -1,0 +1,71 @@
+{
+ "dataset_version": "v2",
+ "created": "2026-09-19",
+ "num_cases": 99,
+ "num_base_cases": 40,
+ "variants": {
+  "base": 40,
+  "noisy": 40,
+  "all_covered_control": 19
+ },
+ "categories_base": {
+  "simple_factual": 4,
+  "multi_concept": 6,
+  "implicit_relationship": 4,
+  "missing_info": 6,
+  "ambiguous": 3,
+  "long_multi_chunk": 4,
+  "multi_topic": 3,
+  "distractor_prone": 4,
+  "fully_covered": 3,
+  "paraphrase_coverage": 3
+ },
+ "subjects_base": {
+  "Computer Science": 15,
+  "Physics": 7,
+  "Biology": 6,
+  "Economics": 3,
+  "Mathematics & Statistics": 5,
+  "Chemistry": 4
+ },
+ "corpus_chunks": 241,
+ "concept_status_counts_base": {
+  "gap": 114,
+  "covered": 68,
+  "off_scope": 51,
+  "partial": 9
+ },
+ "total_expected_gaps_all_variants": 228,
+ "total_expected_gaps_base": 114,
+ "multiword_gap_fraction": 0.921,
+ "zero_gap_cases": 25,
+ "note_length_words": {
+  "min": 14,
+  "median": 29,
+  "max": 92
+ },
+ "total_min_questions": 251,
+ "trivial_baselines_on_base_cases": {
+  "flag_every_chunk": {
+   "precision": 0.491,
+   "recall": 1.0,
+   "f1": 0.659
+  },
+  "flag_nothing": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1": 0.0
+  },
+  "lexical_overlap_lt_0.2": {
+   "precision": 0.644,
+   "recall": 0.825,
+   "f1": 0.723
+  }
+ },
+ "notes": [
+  "All counts are computed from the data by build_golden_v2.py (v1 metadata was hand-typed and inconsistent).",
+  "expected_question_characteristics is a length-based heuristic, not authored gold.",
+  "Compute retrieval metrics on variant=='base' only; noisy/control share the same chunks.",
+  "Labels are single-annotator judgement calls; have a second person review the off_scope vs gap boundary."
+ ]
+}

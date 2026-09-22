@@ -17,7 +17,7 @@ from apps.profiles.models import Profile
 from apps.subjects.models import Subject
 from pgvector.django import VectorField
 
-EMBEDDING_DIMENSIONS = int(getattr(settings, "EMBEDDING_DIMENSIONS", 384))
+EMBEDDING_DIMENSIONS = int(getattr(settings, "EMBEDDING_DIMENSIONS", 1024))
 
 
 class AdaptiveVectorField(VectorField):

@@ -10,6 +10,9 @@ from apps.ai_classroom.enrichment_nodes import (
     draft_node,
     format_output_node,
     gap_detection_node,
+    candidate_generation_node,
+    coverage_comparison_node,
+    candidate_validation_node,
     gap_fill_node,
     retrieve_chunks_node,
 )
@@ -56,7 +59,10 @@ def build_enrichment_graph():
 
     graph.add_node("retrieve", retrieve_chunks_node)
     graph.add_node("draft", draft_node)
-    graph.add_node("gap_detection", gap_detection_node)
+    # Candidate-based gap detection pipeline
+    graph.add_node("candidate_generation", candidate_generation_node)
+    graph.add_node("coverage_comparison", coverage_comparison_node)
+    graph.add_node("candidate_validation", candidate_validation_node)
     graph.add_node("gap_fill", gap_fill_node)
     graph.add_node("citation_stitch", citation_stitch_node)
     graph.add_node("evidence_verification", _run_verification)
@@ -64,10 +70,12 @@ def build_enrichment_graph():
 
     graph.set_entry_point("retrieve")
     graph.add_edge("retrieve", "draft")
-    graph.add_edge("draft", "gap_detection")
+    graph.add_edge("draft", "candidate_generation")
+    graph.add_edge("candidate_generation", "coverage_comparison")
+    graph.add_edge("coverage_comparison", "candidate_validation")
 
     graph.add_conditional_edges(
-        "gap_detection",
+        "candidate_validation",
         _branch_after_gap_detection,
         {
             "gap_fill": "gap_fill",

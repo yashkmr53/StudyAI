@@ -49,10 +49,11 @@ from providers.email import MailpitEmailProvider, SMTPEmailProvider
 def _get_env(name: str, default: Optional[str] = None) -> Optional[str]:
     """Get environment variable with Django settings fallback.
     
-from typing import Optional
     Handles both string and list formats from settings.
     """
-    value = getattr(settings, name, None) or os.environ.get(name, default)
+    value = getattr(settings, name, None)
+    if value is None:
+        value = os.environ.get(name, default)
     if isinstance(value, list):
         return ",".join(value)
     return value
@@ -91,7 +92,15 @@ def get_object_storage() -> ObjectStorageProvider:
 # ============================================================================
 
 def _build_ocr(name: str):
-    """Build single OCR provider by name."""
+    """Build single OCR provider by name.
+
+    The StudyAI production AI stack uses qwen3.5:4b for handwritten note OCR.
+    Legacy local OCR engines (Tesseract, PaddleOCR) and hosted vision APIs
+    are superseded by native multimodal qwen3.5:4b.
+    """
+    if name in ("qwen35", "qwen3.5", "qwen3.5:4b", "ollama"):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        return Qwen35OCRProvider()
     if name == "mock":
         return MockOCRProvider()
     if name == "mock_low_confidence":
@@ -116,13 +125,17 @@ def _build_ocr(name: str):
 
 def get_ocr_provider() -> OCRChainProvider:
     """Get OCR provider chain (primary + fallback).
-    
-    OCR_PROVIDER_CHAIN can be a comma-separated list: "tesseract,mock"
-    Defaults to ["mock", "mock"] for backward compatibility.
+
+    OCR_PROVIDER_CHAIN can be a comma-separated list: "qwen35" or "qwen35,mock"
+    Defaults to "qwen35" in production, or "mock,mock" in unit tests.
     """
-    chain_str = _get_env("OCR_PROVIDER_CHAIN", "mock,mock")
+    chain_str = _get_env("OCR_PROVIDER_CHAIN", "qwen35")
     names = [n.strip() for n in chain_str.split(",") if n.strip()]
-    return OCRChainProvider([_build_ocr(n) for n in names])
+    providers = [_build_ocr(n) for n in names]
+
+    is_qwen35 = bool(providers and getattr(providers[0], "name", "") in ("qwen35", "ollama"))
+    disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_qwen35 else "false")
+    return OCRChainProvider(providers, disable_fallback=disable_fallback)
 
 
 # ============================================================================
@@ -130,46 +143,56 @@ def get_ocr_provider() -> OCRChainProvider:
 # ============================================================================
 
 def _build_llm(name: str):
-    """Build single LLM provider by name."""
+    """Build single LLM provider by name.
+    
+    The StudyAI production AI stack uses qwen3.5:4b via Ollama.
+    Legacy hosted providers (OpenAI, Anthropic) are removed from the production path.
+    """
     if name == "mock":
         return MockLLMProvider()
     if name == "failing":
         return FailingLLMProvider()
-    if name == "ollama":
-        from providers.llm.local import OllamaLLMProvider
-        return OllamaLLMProvider()
-    if name == "ollama-chat":
-        from providers.llm.local import OllamaChatProvider
-        return OllamaChatProvider()
-    # Production providers (require credentials)
+    if name in ("ollama", "qwen35", "qwen", "qwen3.5:4b", "ollama-chat"):
+        from providers.llm.qwen35 import Qwen35Provider
+        return Qwen35Provider()
     if name == "openai":
-        try:
-            from providers.llm.openai import OpenAILLMProvider
-        except ImportError:
-            raise ValueError("OpenAI provider not available (providers.llm.openai not implemented)")
-        if not _get_env("OPENAI_API_KEY"):
-            raise ValueError("OpenAI provider requires OPENAI_API_KEY environment variable")
-        return OpenAILLMProvider()
-    if name == "anthropic":
-        try:
-            from providers.llm.anthropic import AnthropicLLMProvider
-        except ImportError:
-            raise ValueError("Anthropic provider not available (providers.llm.anthropic not implemented)")
-        if not _get_env("ANTHROPIC_API_KEY"):
-            raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY environment variable")
-        return AnthropicLLMProvider()
-    raise ValueError(f"Unknown LLM provider: {name}")
+        raise ValueError("OpenAI provider not available (legacy hosted provider removed in favor of qwen3.5:4b)")
+    raise ValueError(
+        f"Unknown LLM provider: {name}. Production stack exclusively uses 'ollama' (qwen3.5:4b)."
+    )
 
 
 def get_llm_provider() -> LLMChainProvider:
-    """Get LLM provider chain (primary + fallback).
+    """Get canonical LLM provider chain.
 
-    LLM_PROVIDER_CHAIN can be a comma-separated list: "ollama,mock"
-    Defaults to ["mock", "mock"] for backward compatibility.
+    In production, LLM_PROVIDER=ollama and LLM_MODEL=qwen3.5:4b route
+    exclusively to Qwen35Provider with zero fallback.
+    Mock providers are permitted only in isolated unit tests (Rule 5).
     """
-    chain_str = _get_env("LLM_PROVIDER_CHAIN", "mock,mock")
+    provider_name = _get_env("LLM_PROVIDER")
+    chain_str = _get_env("LLM_PROVIDER_CHAIN")
+
+    if provider_name and not chain_str:
+        chain_str = provider_name
+    if not chain_str:
+        chain_str = "ollama"
+
     names = [n.strip() for n in chain_str.split(",") if n.strip()]
-    return LLMChainProvider([_build_llm(n) for n in names])
+    providers = [_build_llm(n) for n in names]
+    chain = LLMChainProvider(providers)
+
+    is_ollama = bool(providers and getattr(providers[0], "name", "") == "ollama")
+    chain.disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_ollama else "false")
+    return chain
+
+
+def _flag(name: str, default: str = "false") -> bool:
+    """Get a boolean environment setting."""
+    from django.conf import settings as dj_settings
+    value = getattr(dj_settings, name, None)
+    if value is None:
+        value = os.environ.get(name, default)
+    return str(value).strip() in ("1", "true", "True", "TRUE")
 
 
 # ============================================================================
@@ -202,7 +225,7 @@ def get_web_search_provider() -> WebSearchProvider:
 # ============================================================================
 
 def get_embedding_provider() -> EmbeddingProvider:
-    """Get embedding provider based on EMBEDDING_PROVIDER."""
+    """Get canonical embedding provider based on EMBEDDING_PROVIDER."""
     name = _get_env("EMBEDDING_PROVIDER")
     if not name:
         raise ValueError("EMBEDDING_PROVIDER is not configured")
@@ -210,19 +233,12 @@ def get_embedding_provider() -> EmbeddingProvider:
     if name == "hashing":
         return HashingEmbeddingProvider()
     
-    if name == "sentence_transformers":
-        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
-        return SentenceTransformerEmbeddingProvider()
+    if name in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding", "Qwen/Qwen3-Embedding-0.6B"):
+        from providers.embeddings.qwen3 import Qwen3EmbeddingProvider
+        return Qwen3EmbeddingProvider()
     
-    # Production: same model but hosted
     if name == "openai":
-        try:
-            from providers.embeddings.openai import OpenAIEmbeddingProvider
-        except ImportError:
-            raise ValueError("OpenAI embeddings provider not available (providers.embeddings.openai not implemented)")
-        if not _get_env("OPENAI_API_KEY"):
-            raise ValueError("OpenAI embeddings require OPENAI_API_KEY")
-        return OpenAIEmbeddingProvider()
+        raise ValueError("OpenAI embeddings provider not available (legacy hosted provider removed in favor of Qwen/Qwen3-Embedding-0.6B)")
     
     raise ValueError(f"Unknown embedding provider: {name}")
 
@@ -232,10 +248,13 @@ def embedding_model_version() -> str:
     provider = _get_env("EMBEDDING_PROVIDER")
     if not provider:
         raise ValueError("EMBEDDING_PROVIDER is not configured")
-    if provider == "sentence_transformers":
-        model_name = _get_env("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+    if provider in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding"):
+        version = _get_env("EMBEDDING_MODEL_VERSION")
+        if version and not version.startswith("hashing"):
+            return version
+        model_name = _get_env("EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B")
         return f"{model_name.replace('/', '-')}-v1"
-    return _get_env("EMBEDDING_MODEL_VERSION", "hashing-384-v1")
+    return _get_env("EMBEDDING_MODEL_VERSION", "hashing-1024-v1")
 
 
 def embedding_dimension() -> int:
@@ -243,12 +262,9 @@ def embedding_dimension() -> int:
     provider = _get_env("EMBEDDING_PROVIDER")
     if not provider:
         raise ValueError("EMBEDDING_PROVIDER is not configured")
-    if provider == "sentence_transformers":
-        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
-        # Create temporary instance to get dimension
-        p = SentenceTransformerEmbeddingProvider()
-        return p.dimension
-    return 384  # hashing default
+    if provider in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding"):
+        return int(_get_env("EMBEDDING_DIMENSIONS", "1024"))
+    return int(_get_env("EMBEDDING_DIMENSIONS", "1024"))
 
 
 # ============================================================================

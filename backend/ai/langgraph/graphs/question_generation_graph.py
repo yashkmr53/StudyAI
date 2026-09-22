@@ -24,9 +24,10 @@ def _run_verification(state: QuestionGenerationState) -> dict:
         if not q.get("is_valid", False):
             verified.append({**q, "verification_status": "skipped"})
             continue
+        chunk_source = q.get("chunk_content") or q.get("prompt", "")
         verification_state = VerificationState(
             content=q.get("prompt", ""),
-            cited_contents=[q.get("prompt", "")],
+            cited_contents=[chunk_source],
             verification_status="not_verified",
             verification_score=0.0,
             errors=[],

@@ -1,18 +1,20 @@
 """LLM provider fallback chain (architecture §28).
-from typing import Optional
 
 Mirrors OCRChainProvider: primary attempt → fallback attempt(s) →
 ProviderUnavailable. Every attempt is recorded in ProviderCallLog for
 observability (§25).
 """
+from __future__ import annotations
+
 import logging
 import re
 import time
+from typing import Any, Optional
 
 from django.conf import settings
 from django.db import transaction
 
-from providers.base import LLMProvider, Prompt, StructuredLLMResult
+from providers.base import LLMProvider, LLMResult, Prompt, StructuredLLMResult
 
 logger = logging.getLogger(__name__)
 
@@ -92,41 +94,68 @@ class LLMChainProvider:
         if not providers:
             raise ValueError("LLM chain requires at least one provider.")
         self.providers = providers
+        self.disable_fallback = False  # Set by get_llm_provider() based on env
 
-    def _timeouted_generate(self, provider, prompt, schema, request_id):
-        """Run provider.generate_structured with a timeout."""
-        import threading
+    @property
+    def model(self) -> str:
+        if self.providers and hasattr(self.providers[0], "model"):
+            return self.providers[0].model
+        from django.conf import settings
+        return getattr(settings, "LLM_MODEL", "qwen3.5:4b")
 
-        result_holder = [None]
-        exception_holder = [None]
+    def _timeouted_generate(self, provider, prompt, schema, request_id, **kwargs):
+        """Run provider.generate_structured."""
+        result = provider.generate_structured(
+            prompt=prompt, schema=schema, request_id=request_id, **kwargs
+        )
+        return result
 
-        def target():
-            try:
-                result_holder[0] = provider.generate_structured(
-                    prompt=prompt, schema=schema, request_id=request_id
-                )
-            except Exception as exc:
-                exception_holder[0] = exc
+    def generate(self, prompt: Optional[Prompt] = None, *, request_id: str = "", **kwargs) -> LLMResult:
+        """Route plain text generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        if actual_prompt is None:
+            raise ValueError("Prompt is required for generate()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate"):
+            return primary.generate(prompt=actual_prompt, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate()")
 
-        thread = threading.Thread(target=target, daemon=True)
-        thread.start()
-        thread.join(timeout=LLM_TIMEOUT_SECONDS)
+    def generate_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, *, request_id: str = "", **kwargs) -> LLMResult:
+        """Route multimodal image generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        actual_image = image if image is not None else kwargs.get("image")
+        if actual_prompt is None or actual_image is None:
+            raise ValueError("Prompt and image are required for generate_with_image()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate_with_image"):
+            return primary.generate_with_image(prompt=actual_prompt, image=actual_image, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate_with_image()")
 
-        if thread.is_alive():
-            # Timeout exceeded - provider is hanging
-            logger.warning(
-                "LLM provider %s timed out after %s seconds", provider.name, LLM_TIMEOUT_SECONDS
-            )
-            raise TimeoutError(
-                f"LLM provider {provider.name} timed out after {LLM_TIMEOUT_SECONDS} seconds"
-            )
+    def generate_structured_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, schema: Any = None, *, request_id: str = "", **kwargs) -> StructuredLLMResult:
+        """Route multimodal structured generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        actual_image = image if image is not None else kwargs.get("image")
+        actual_schema = schema or kwargs.get("schema")
+        if actual_prompt is None or actual_image is None:
+            raise ValueError("Prompt and image are required for generate_structured_with_image()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate_structured_with_image"):
+            return primary.generate_structured_with_image(prompt=actual_prompt, image=actual_image, schema=actual_schema, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate_structured_with_image()")
 
-        if exception_holder[0] is not None:
-            raise exception_holder[0]
-
-        return result_holder[0]
-
-    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str) -> StructuredLLMResult:
+    def generate_structured(self, prompt: Optional[Prompt] = None, *, schema=None, request_id: str = "", disable_fallback: bool = False, **kwargs) -> StructuredLLMResult:
+        actual_prompt = prompt or kwargs.get("prompt")
+        if actual_prompt is None:
+            raise ValueError("Prompt is required for generate_structured()")
+        prompt = actual_prompt
+        # Combine instance-level setting with explicit parameter
+        no_fallback = self.disable_fallback or disable_fallback
         attempted: list[str] = []
         last_error: Exception | None = None
         for provider in self.providers:
@@ -146,15 +175,17 @@ class LLMChainProvider:
                     user=sanitized_user,
                 )
                 
-                result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id)
+                result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id, **kwargs)
                 latency_ms = int((time.monotonic() - started) * 1000)
                 # Mock providers don't return token counts; real providers will populate these
                 input_tokens = getattr(result, "input_tokens", 0)
                 output_tokens = getattr(result, "output_tokens", 0)
                 total_tokens = getattr(result, "total_tokens", input_tokens + output_tokens)
                 estimated_cost_usd = getattr(result, "estimated_cost_usd", 0.0)
+                # Capture the actual provider name/model from the result
+                result_provider = getattr(result, "provider", "") or provider.name
                 record_provider_call(
-                    provider=provider.name,
+                    provider=result_provider,
                     model=getattr(result, "model", ""),
                     latency_ms=latency_ms,
                     success=True,
@@ -162,8 +193,10 @@ class LLMChainProvider:
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
                     estimated_cost_usd=estimated_cost_usd,
-                    metadata={"redactions_count": redaction_count},
+                    metadata={"redactions_count": redaction_count, "prompt_name": prompt.name},
                 )
+                # Enrich the result with provider provenance
+                result.provider = result_provider
                 result.attempted_providers = attempted  # type: ignore[attr-defined]
                 return result
             except Exception as exc:  # noqa: BLE001 — fallback is the point
@@ -174,9 +207,16 @@ class LLMChainProvider:
                     latency_ms=int((time.monotonic() - started) * 1000),
                     success=False,
                     error=str(exc)[:300],
-                    metadata={"redactions_count": 0},
+                    metadata={"redactions_count": 0, "prompt_name": prompt.name},
                 )
                 logger.warning("LLM provider %s failed: %s", provider.name, exc)
+                if no_fallback:
+                    from shared.exceptions import ProviderError
+
+                    raise ProviderError(
+                        f"LLM provider {provider.name} failed and fallback is disabled.",
+                        details={"attempted": attempted, "last_error": str(last_error)},
+                    ) from exc
 
         from shared.exceptions import ProviderError
 

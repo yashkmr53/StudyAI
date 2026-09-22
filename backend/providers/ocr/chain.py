@@ -30,16 +30,20 @@ def record_ocr_call(*, provider: str, latency_ms: int, success: bool, error: str
 class OCRChainProvider:
     name = "chain"
 
-    def __init__(self, providers: list[OCRProvider]):
+    def __init__(self, providers: list[OCRProvider], *, disable_fallback: bool = False):
         if not providers:
             raise ValueError("OCR chain requires at least one provider.")
         self.providers = providers
+        self.disable_fallback = disable_fallback
 
     def recognize(self, image_uri: str, *, request_id: str) -> tuple[OCRResult, list[str]]:
         """Returns (result, attempted_provider_names). Raises if all fail."""
         attempted: list[str] = []
         last_error: Exception | None = None
-        for provider in self.providers:
+        for i, provider in enumerate(self.providers):
+            if i > 0 and self.disable_fallback:
+                logger.warning("OCR fallback disabled; stopping before fallback provider %s", provider.name)
+                break
             attempted.append(provider.name)
             started = time.monotonic()
             try:

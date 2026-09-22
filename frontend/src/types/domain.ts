@@ -88,6 +88,13 @@ export interface SourcePageRef {
 export interface CitationRef {
   page: number;
   bbox?: number[] | null;
+  sourceType?: string;
+  content?: string;
+  chunkId?: string;
+  documentId?: string;
+  title?: string;
+  verificationStatus?: string;
+  verificationScore?: number | null;
 }
 
 export interface ChatCitation {

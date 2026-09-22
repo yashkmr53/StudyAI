@@ -161,3 +161,100 @@ class TestPaddleOCRProvider(TestCase):
         
         # Just verify it can be instantiated without error
         assert provider.name == "paddleocr"
+
+
+class TestQwen35OCRProvider(TestCase):
+    """Test canonical Qwen3.5:4B OCR provider."""
+
+    def test_qwen35_ocr_initialization(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        provider = Qwen35OCRProvider(confidence=0.95)
+        assert provider.name == "qwen35"
+        assert provider.confidence == 0.95
+        assert provider.fail is False
+
+    def test_qwen35_ocr_recognize_parses_lines(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        from providers.base import LLMResult
+
+        provider = Qwen35OCRProvider()
+        mock_output = (
+            "Title: Cell Biology\n"
+            "Mitochondria is the powerhouse of the cell.\n"
+            "ATP synthesis occurs in cristae.\n"
+            "C6H12O6 + 6O2 -> 6CO2 + 6H2O"
+        )
+        provider._llm.generate_with_image = MagicMock(
+            return_value=LLMResult(text=mock_output, model="qwen3.5:4b", provider="ollama")
+        )
+
+        result = provider.recognize("dummy_image.png", request_id="req-test-1")
+        assert result.provider == "qwen35"
+        assert len(result.lines) == 4
+        assert result.confidence == 0.95
+        assert result.raw_ref == "dummy_image.png"
+
+        assert result.lines[0]["line_index"] == 0
+        assert result.lines[0]["text"] == "Title: Cell Biology"
+        assert result.lines[0]["bbox"] is None
+        assert result.lines[0]["confidence"] == 0.95
+
+        assert result.lines[3]["text"] == "C6H12O6 + 6O2 -> 6CO2 + 6H2O"
+
+    def test_qwen35_ocr_strips_markdown_fences(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        from providers.base import LLMResult
+
+        provider = Qwen35OCRProvider()
+        mock_output = "```markdown\nLine 1: E = mc^2\nLine 2: F = ma\n```"
+        provider._llm.generate_with_image = MagicMock(
+            return_value=LLMResult(text=mock_output, model="qwen3.5:4b", provider="ollama")
+        )
+
+        result = provider.recognize("dummy.png", request_id="req-fence")
+        assert len(result.lines) == 2
+        assert result.lines[0]["text"] == "Line 1: E = mc^2"
+        assert result.lines[1]["text"] == "Line 2: F = ma"
+
+    def test_qwen35_ocr_handles_illegible_words(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        from providers.base import LLMResult
+
+        provider = Qwen35OCRProvider(confidence=0.95)
+        mock_output = "Line 1: Clear text\nLine 2: Some [illegible] handwriting"
+        provider._llm.generate_with_image = MagicMock(
+            return_value=LLMResult(text=mock_output, model="qwen3.5:4b", provider="ollama")
+        )
+
+        result = provider.recognize("dummy.png", request_id="req-illegible")
+        assert len(result.lines) == 2
+        assert result.lines[0]["confidence"] == 0.95
+        assert result.lines[1]["confidence"] == 0.75  # 0.95 - 0.20
+        assert result.confidence == 0.85
+
+    def test_qwen35_ocr_empty_output(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+        from providers.base import LLMResult
+
+        provider = Qwen35OCRProvider()
+        provider._llm.generate_with_image = MagicMock(
+            return_value=LLMResult(text="", model="qwen3.5:4b", provider="ollama")
+        )
+
+        result = provider.recognize("empty.png", request_id="req-empty")
+        assert len(result.lines) == 0
+        assert result.confidence == 0.0
+
+    def test_qwen35_ocr_simulated_failure(self):
+        from providers.ocr.qwen35 import Qwen35OCRProvider
+
+        provider = Qwen35OCRProvider(fail=True)
+        with self.assertRaises(RuntimeError):
+            provider.recognize("img.png", request_id="req-fail")
+
+    @override_settings(OCR_PROVIDER_CHAIN="qwen35", LLM_DISABLE_FALLBACK=1)
+    def test_ocr_chain_with_qwen35_no_fallback(self):
+        from providers.registry import get_ocr_provider
+        chain = get_ocr_provider()
+        assert chain.disable_fallback is True
+        assert chain.providers[0].name == "qwen35"

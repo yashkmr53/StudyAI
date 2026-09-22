@@ -1,0 +1,116 @@
+{
+  "phase": "candidate_generation_v2",
+  "step": "Phase A: Audit & Measure",
+  "dataset": "golden_v2.json",
+  "total_base_cases": 40,
+  "total_gold_concepts": 242,
+  "total_chunks": 241,
+  "baseline_extractor": "gap_candidates.py (extract_candidates_from_chunk)",
+  "overall_baseline": {
+    "candidates_emitted": 1191,
+    "candidates_per_case": 29.8,
+    "candidates_per_chunk": 4.94,
+    "raw_hits": 283,
+    "raw_precision": 0.238,
+    "unique_gold_concepts_hit": 148,
+    "unique_concept_precision": 0.124,
+    "overall_recall": 0.612,
+    "noise_candidates": 908,
+    "noise_share": 0.762,
+    "fragment_count": 13,
+    "fragment_rate": 0.011,
+    "single_token_count": 454,
+    "single_token_rate": 0.381
+  },
+  "source_breakdown": {
+    "DOMAIN_DICTIONARY": {
+      "candidates": 4,
+      "raw_hits": 2,
+      "raw_precision": 0.5,
+      "unique_concepts": 2,
+      "marginal_recall": 0.008,
+      "exclusive_unique_hits": 0,
+      "fragments": 0
+    },
+    "TECHNICAL_PATTERN": {
+      "candidates": 1,
+      "raw_hits": 0,
+      "raw_precision": 0.0,
+      "unique_concepts": 0,
+      "marginal_recall": 0.0,
+      "exclusive_unique_hits": 0,
+      "fragments": 0
+    },
+    "CAPITALIZED_PHRASE": {
+      "candidates": 0,
+      "raw_hits": 0,
+      "raw_precision": 0.0,
+      "unique_concepts": 0,
+      "marginal_recall": 0.0,
+      "exclusive_unique_hits": 0,
+      "fragments": 0
+    },
+    "NGRAM": {
+      "candidates": 1186,
+      "raw_hits": 281,
+      "raw_precision": 0.237,
+      "unique_concepts": 148,
+      "marginal_recall": 0.612,
+      "exclusive_unique_hits": 146,
+      "fragments": 13
+    }
+  },
+  "extractive_ceiling": {
+    "overall_strict": 0.393,
+    "overall_lenient": 0.773,
+    "by_status_lenient": {
+      "gap": {
+        "gold": 114,
+        "extractable": 96,
+        "ceiling": 0.842
+      },
+      "partial": {
+        "gold": 9,
+        "extractable": 8,
+        "ceiling": 0.889
+      },
+      "covered": {
+        "gold": 68,
+        "extractable": 35,
+        "ceiling": 0.515
+      },
+      "off_scope": {
+        "gold": 51,
+        "extractable": 48,
+        "ceiling": 0.941
+      }
+    },
+    "test_split_lenient": 0.736,
+    "test_split_strict": 0.4,
+    "dev_split_lenient": 0.812,
+    "dev_split_strict": 0.385
+  },
+  "test_split_baseline": {
+    "cases": 20,
+    "chunks": 124,
+    "gold_concepts": 125,
+    "candidates_emitted": 594,
+    "candidates_per_case": 29.7,
+    "unique_gold_hits": 78,
+    "overall_recall": 0.624,
+    "fraction_of_ceiling": 0.848,
+    "strict_unique_concept_precision": 0.126,
+    "gap_recall": 0.661
+  },
+  "dev_split_baseline": {
+    "cases": 20,
+    "chunks": 117,
+    "gold_concepts": 117,
+    "candidates_emitted": 597,
+    "candidates_per_case": 29.9,
+    "unique_gold_hits": 73,
+    "overall_recall": 0.624,
+    "strict_unique_concept_precision": 0.122,
+    "gap_recall": 0.638
+  }
+}

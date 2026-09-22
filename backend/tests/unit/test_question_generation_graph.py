@@ -21,7 +21,7 @@ class MockLLMProvider:
     model_name = "mock-gpt"
     name = "mock"
 
-    def generate_structured(self, *, prompt=None, schema=None, request_id=None):
+    def generate_structured(self, *, prompt=None, schema=None, request_id=None, disable_fallback=False):
         return type("R", (), {
             "data": {
                 "prompt": "What does Dijkstra compute?",
@@ -30,6 +30,7 @@ class MockLLMProvider:
                 "difficulty": "medium",
             },
             "model": "mock-gpt",
+            "provider": "mock",
             "prompt_name": getattr(prompt, 'name', 'question_generation'),
             "prompt_version": getattr(prompt, 'version', 'v1'),
             "input_tokens": 15,
@@ -216,6 +217,133 @@ class TestQuestionGenerationGraphNodes(TestCase):
                         result = persist_questions_node(state)
                         self.assertEqual(len(result["persisted_questions"]), 1)
                         self.assertEqual(result["persisted_questions"][0]["id"], "q-1")
+
+    def test_validate_multi_format_questions(self):
+        # Flashcard valid
+        state_fc = QuestionGenerationState(
+            document_id="doc-1",
+            chunks=[],
+            questions=[{
+                "chunk_id": "c-1",
+                "question_type": "flashcard",
+                "prompt": "What is Dijkstra's algorithm?",
+                "options": [],
+                "answer_index": 0,
+                "explanation": "Shortest path algorithm for non-negative edge weights.",
+            }],
+            validated_questions=[],
+            verified_questions=[],
+            persisted_questions=[],
+            max_questions=1,
+            errors=[],
+            execution_metadata={},
+        )
+        res_fc = validate_questions_node(state_fc)
+        self.assertTrue(res_fc["validated_questions"][0]["is_valid"])
+
+        # Short answer valid
+        state_sa = QuestionGenerationState(
+            document_id="doc-1",
+            chunks=[],
+            questions=[{
+                "chunk_id": "c-2",
+                "question_type": "short_answer",
+                "prompt": "Explain why Dijkstra fails with negative cycles.",
+                "options": [],
+                "answer_index": 0,
+                "explanation": "Greedy choices assume shortest distance cannot decrease.",
+            }],
+            validated_questions=[],
+            verified_questions=[],
+            persisted_questions=[],
+            max_questions=1,
+            errors=[],
+            execution_metadata={},
+        )
+        res_sa = validate_questions_node(state_sa)
+        self.assertTrue(res_sa["validated_questions"][0]["is_valid"])
+
+        # Explanation valid
+        state_ex = QuestionGenerationState(
+            document_id="doc-1",
+            chunks=[],
+            questions=[{
+                "chunk_id": "c-3",
+                "question_type": "explanation",
+                "prompt": "Describe step-by-step how the priority queue optimizes Dijkstra.",
+                "options": [],
+                "answer_index": 0,
+                "explanation": "Using a min-heap decreases extract-min to O(log V) from O(V).",
+            }],
+            validated_questions=[],
+            verified_questions=[],
+            persisted_questions=[],
+            max_questions=1,
+            errors=[],
+            execution_metadata={},
+        )
+        res_ex = validate_questions_node(state_ex)
+        self.assertTrue(res_ex["validated_questions"][0]["is_valid"])
+
+    def test_difficulty_adaptation(self):
+        from apps.questions.question_generation_nodes import _resolve_target_difficulty
+
+        state_weak = QuestionGenerationState(
+            document_id="doc-1", chunks=[], questions=[], validated_questions=[],
+            verified_questions=[], persisted_questions=[], max_questions=1,
+            mastery_level="weak", errors=[], execution_metadata={},
+        )
+        self.assertEqual(_resolve_target_difficulty(state_weak), "easy")
+
+        state_fair = QuestionGenerationState(
+            document_id="doc-1", chunks=[], questions=[], validated_questions=[],
+            verified_questions=[], persisted_questions=[], max_questions=1,
+            mastery_level="fair", errors=[], execution_metadata={},
+        )
+        self.assertEqual(_resolve_target_difficulty(state_fair), "medium")
+
+        state_strong = QuestionGenerationState(
+            document_id="doc-1", chunks=[], questions=[], validated_questions=[],
+            verified_questions=[], persisted_questions=[], max_questions=1,
+            mastery_level="strong", errors=[], execution_metadata={},
+        )
+        self.assertEqual(_resolve_target_difficulty(state_strong), "hard")
+
+        state_override = QuestionGenerationState(
+            document_id="doc-1", chunks=[], questions=[], validated_questions=[],
+            verified_questions=[], persisted_questions=[], max_questions=1,
+            difficulty="hard", mastery_level="weak", errors=[], execution_metadata={},
+        )
+        self.assertEqual(_resolve_target_difficulty(state_override), "hard")
+
+    def test_verify_evidence_uses_chunk_content(self):
+        with patch("apps.ai_classroom.services.EvidenceVerifier") as mock_verifier:
+            mock_verifier._classify.return_value = ("supported", 0.95)
+            state = QuestionGenerationState(
+                document_id="doc-1",
+                chunks=[],
+                questions=[],
+                validated_questions=[
+                    {
+                        "chunk_id": "chunk-1",
+                        "chunk_content": "Source text about Dijkstra algorithm and priority queues.",
+                        "prompt": "What does Dijkstra compute?",
+                        "is_valid": True,
+                    }
+                ],
+                verified_questions=[],
+                persisted_questions=[],
+                max_questions=3,
+                errors=[],
+                execution_metadata={},
+            )
+
+            result = verify_evidence_node(state)
+            mock_verifier._classify.assert_called_once_with(
+                "What does Dijkstra compute?",
+                ["Source text about Dijkstra algorithm and priority queues."],
+            )
+            self.assertEqual(result["verified_questions"][0]["verification_status"], "supported")
 
 
 class TestQuestionGenerationGraphIntegration(TestCase):

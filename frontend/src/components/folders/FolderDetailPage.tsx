@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useWorkspaceStore } from "../../state/workspaceStore";
-import { isUnfiledFolder } from "../../types/domain";
+import { isUnfiledFolder, UNFILED_FOLDER_ID } from "../../types/domain";
 import {
   breadcrumbCrumbs,
   childrenOf,
@@ -49,9 +49,15 @@ export function FolderDetailPage() {
   const folderNotes = useMemo(
     () =>
       notes
-        .filter((n) => n.subjectId === subjectId && n.folderId === folderId)
+        .filter((n) => {
+          if (n.subjectId !== subjectId) return false;
+          if (unfiled) {
+            return n.folderId === UNFILED_FOLDER_ID || !n.folderId;
+          }
+          return n.folderId === folderId;
+        })
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [notes, subjectId, folderId],
+    [notes, subjectId, folderId, unfiled],
   );
 
   if (!subject || (!folder && !unfiled)) {

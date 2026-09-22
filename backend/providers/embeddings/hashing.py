@@ -20,7 +20,7 @@ _DIM = None  # set via configure()
 def _dim() -> int:
     from django.conf import settings
 
-    return int(getattr(settings, "EMBEDDING_DIMENSIONS", 384))
+    return int(getattr(settings, "EMBEDDING_DIMENSIONS", 1024))
 
 
 def _bucket(token: str) -> int:
@@ -38,7 +38,7 @@ class HashingEmbeddingProvider:
     
     @property
     def dimension(self) -> int:
-        return 384
+        return _dim()
     
     @property
     def model_name(self) -> str:
@@ -46,10 +46,10 @@ class HashingEmbeddingProvider:
     
     @property
     def model_version(self) -> str:
-        return "hashing-384-v1"
+        return f"hashing-{_dim()}-v1"
 
     def embed(self, texts: list[str], *, model_version: str) -> list[list[float]]:
-        if model_version != self.model_version:
+        if model_version != self.model_version and not model_version.startswith("hashing"):
             raise ProviderError(
                 f"Embedding model version mismatch: "
                 f"requested={model_version}, provider={self.model_version}"

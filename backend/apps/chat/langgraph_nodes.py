@@ -44,11 +44,12 @@ _DATE_TIME_PATTERNS = [
 
 # Conversational patterns (greetings, thanks, personal statements, questions)
 _CONVERSATIONAL_PATTERNS = [
-    r"^h[iy]$", r"^hello$", r"^hey$", r"^hi there$",
-    r"^how (are|r) (you|u|doing)$", r"^good (morning|afternoon|evening)$",
-    r"^what('s| is) up$", r"^sup$", r"^yo$", r"^greetings$",
-    r"^thanks+$", r"^thank (you|u)$", r"^bye$", r"^goodbye$",
-    r"^can you hear me$", r"^test$",
+    r"^h[iy](\b.*)?$", r"^hello(\b.*)?$", r"^hey(\b.*)?$", r"^hi there\b",
+    r"^how (are|r) (you|u|doing)\b", r"^good (morning|afternoon|evening)\b",
+    r"^what('s| is) up\b", r"^sup\b", r"^yo\b", r"^greetings\b",
+    r"^thanks+", r"^thank (you|u)\b", r"^bye\b", r"^goodbye\b",
+    r"^can you hear me\b", r"^test\b",
+    r"^can you help me\b", r"^help me\b",
     # Personal statements and questions
     r"^my name is\b",
     r"^i am\b", r"^i'm\b",
@@ -71,26 +72,30 @@ def route_query_node(state: ChatState) -> dict:
 
     Routing:
       - date_time: date/time questions → use runtime date/time, no retrieval
-      - conversational: greetings, personal statements, thanks → no retrieval
       - material: user asks about their own notes/materials → retrieve from DB
+      - conversational: greetings, personal statements, thanks → no retrieval
       - general_knowledge: everything else → retrieve from web
     """
     query = (state.get("user_request") or "").strip().lower().rstrip("!?.,;:")
+
+    # 0. Multimodal image input: direct handwritten note/diagram analysis
+    if state.get("image"):
+        return {"route": "material"}
 
     # 1. Date/time: use runtime date/time, no retrieval
     for pat in _DATE_TIME_PATTERNS:
         if re.match(pat, query):
             return {"route": "date_time"}
 
-    # 2. Conversational: no retrieval needed
-    for pat in _CONVERSATIONAL_PATTERNS:
-        if re.match(pat, query):
-            return {"route": "conversational"}
-
-    # 3. Material: user explicitly references their own study material
+    # 2. Material: user explicitly references their own study material
     for pat in _MATERIAL_PATTERNS:
         if re.search(pat, query):
             return {"route": "material"}
+
+    # 3. Conversational: greetings, personal statements, thanks → no retrieval
+    for pat in _CONVERSATIONAL_PATTERNS:
+        if re.match(pat, query):
+            return {"route": "conversational"}
 
     # 4. General knowledge: use web retrieval
     return {"route": "general_knowledge"}
@@ -332,12 +337,21 @@ def answer_generation_node(state: ChatState) -> dict:
         user=user,
     )
 
+    image = state.get("image")
     started = time.monotonic()
-    result = llm.generate_structured(
-        prompt=prompt,
-        schema=ChatAnswer,
-        request_id=f"chat:{state.get('session_id')}",
-    )
+    if image and hasattr(llm, "generate_structured_with_image"):
+        result = llm.generate_structured_with_image(
+            prompt=prompt,
+            image=image,
+            schema=ChatAnswer,
+            request_id=f"chat:{state.get('session_id')}",
+        )
+    else:
+        result = llm.generate_structured(
+            prompt=prompt,
+            schema=ChatAnswer,
+            request_id=f"chat:{state.get('session_id')}",
+        )
     latency_ms = int((time.monotonic() - started) * 1000)
 
     log_llm_call(
@@ -361,6 +375,8 @@ def answer_generation_node(state: ChatState) -> dict:
         "answer": answer,
         "citations": citations,
         "cited_contents": cited_contents,
+        "model": result.model,
+        "provider": getattr(result, "provider", getattr(llm, "name", "ollama")),
     }
 
 
@@ -426,12 +442,21 @@ def retry_answer_node(state: ChatState) -> dict:
         user=user,
     )
 
+    image = state.get("image")
     started = time.monotonic()
-    result = llm.generate_structured(
-        prompt=prompt,
-        schema=ChatAnswerRetry,
-        request_id=f"chat:{state.get('session_id')}:retry",
-    )
+    if image and hasattr(llm, "generate_structured_with_image"):
+        result = llm.generate_structured_with_image(
+            prompt=prompt,
+            image=image,
+            schema=ChatAnswerRetry,
+            request_id=f"chat:{state.get('session_id')}:retry",
+        )
+    else:
+        result = llm.generate_structured(
+            prompt=prompt,
+            schema=ChatAnswerRetry,
+            request_id=f"chat:{state.get('session_id')}:retry",
+        )
     latency_ms = int((time.monotonic() - started) * 1000)
 
     log_llm_call(
@@ -455,6 +480,8 @@ def retry_answer_node(state: ChatState) -> dict:
         "citations": citations,
         "cited_contents": cited_contents,
         "retry_count": state.get("retry_count", 0) + 1,
+        "model": result.model,
+        "provider": getattr(result, "provider", getattr(llm, "name", "ollama")),
     }
 
 
@@ -465,4 +492,6 @@ def format_response_node(state: ChatState) -> dict:
         "citations": state.get("citations", []),
         "verification_status": state.get("verification_status", "not_verified"),
         "verification_score": state.get("verification_score"),
+        "model": state.get("model", getattr(settings, "LLM_MODEL", "qwen3.5:4b")),
+        "provider": state.get("provider", getattr(settings, "LLM_PROVIDER", "ollama")),
     }

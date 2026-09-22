@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -61,7 +62,7 @@ class EmbeddingProviderTests(TestCase):
         v2 = provider.embed(["quicksort partition pivot"], model_version=version)
         self.assertEqual(v1, v2)
         vec = v1[0]
-        self.assertEqual(len(vec), 384)
+        self.assertEqual(len(vec), provider.dimension)
         norm = sum(x * x for x in vec) ** 0.5
         self.assertAlmostEqual(norm, 1.0, places=2)
 
@@ -105,7 +106,8 @@ class ModelVersionMigrationTests(TestCase):
         chunk.save(update_fields=("stale",))
 
         fake_version = "hashing-fake-model-v99"
-        fake_vectors = [[0.5] * 384]
+        dim = int(getattr(settings, "EMBEDDING_DIMENSIONS", 1024))
+        fake_vectors = [[0.5] * dim]
 
         from unittest.mock import patch, MagicMock
 
@@ -113,7 +115,7 @@ class ModelVersionMigrationTests(TestCase):
         mock_provider.name = "hashing"
         mock_provider.model_version = fake_version
         mock_provider.embed.return_value = fake_vectors
-        mock_provider.dimension = 384
+        mock_provider.dimension = dim
 
         with patch("providers.registry.get_embedding_provider", return_value=mock_provider), patch(
             "providers.registry.embedding_model_version", return_value=fake_version
@@ -173,7 +175,7 @@ class ChunkingTests(TestCase):
         self.assertGreaterEqual(chunks.count(), 1)
         for chunk in chunks:
             self.assertIsNotNone(chunk.embedding)
-            self.assertEqual(len(chunk.embedding), 384)
+            self.assertEqual(len(chunk.embedding), int(getattr(settings, "EMBEDDING_DIMENSIONS", 1024)))
             self.assertEqual(chunk.embedding_model, "hashing")
 
     def test_index_rerun_is_incremental_not_duplicating(self):
