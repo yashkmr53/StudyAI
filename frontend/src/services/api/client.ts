@@ -7,7 +7,7 @@ export interface RequestOptions {
   body?: unknown;
   auth?: boolean;
   retry?: boolean;
-  module?: string;
+  module?: string | null;
 }
 
 let accessToken: string | null = null;
@@ -31,19 +31,23 @@ export function getActiveModule(): string | null {
 export function setTokens(access: string | null, refresh: string | null): void {
   accessToken = access;
   refreshToken = refresh;
-  if (access && refresh) {
-    localStorage.setItem("studyai.access", access);
-    localStorage.setItem("studyai.refresh", refresh);
-  } else {
-    localStorage.removeItem("studyai.access");
-    localStorage.removeItem("studyai.refresh");
+  if (typeof localStorage !== "undefined") {
+    if (access && refresh) {
+      localStorage.setItem("studyai.access", access);
+      localStorage.setItem("studyai.refresh", refresh);
+    } else {
+      localStorage.removeItem("studyai.access");
+      localStorage.removeItem("studyai.refresh");
+    }
   }
 }
 
 /** Restore persisted tokens on app start. */
 export function loadPersistedTokens(): void {
-  accessToken = localStorage.getItem("studyai.access");
-  refreshToken = localStorage.getItem("studyai.refresh");
+  if (typeof localStorage !== "undefined") {
+    accessToken = localStorage.getItem("studyai.access");
+    refreshToken = localStorage.getItem("studyai.refresh");
+  }
 }
 
 export function getRefreshToken(): string | null {
@@ -78,8 +82,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
   if (activeProfileId) headers["X-Active-Profile"] = activeProfileId;
-  if (module) headers["X-Active-Module"] = module;
-  else if (activeModule) headers["X-Active-Module"] = activeModule;
+  if (module !== undefined) {
+    if (module !== null) {
+      headers["X-Active-Module"] = module;
+    }
+  } else if (activeModule) {
+    headers["X-Active-Module"] = activeModule;
+  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,

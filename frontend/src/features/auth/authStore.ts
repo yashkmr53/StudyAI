@@ -8,6 +8,7 @@ import {
   setSessionExpiredHandler,
   setTokens,
 } from "../../services/api/client";
+import { useWorkspaceStore } from "../../state/workspaceStore";
 import type { ModuleId } from "../../types/modules";
 import type { Profile } from "../../types/api";
 
@@ -35,6 +36,9 @@ interface AuthState {
 }
 
 function loadSelectedProfileIds(): Record<ModuleId, string | null> {
+  if (typeof localStorage === "undefined") {
+    return { NOTE_SPACE: null, AI_CLASSROOM: null };
+  }
   return {
     NOTE_SPACE: localStorage.getItem("studyai.profile.NOTE_SPACE"),
     AI_CLASSROOM: localStorage.getItem("studyai.profile.AI_CLASSROOM"),
@@ -42,6 +46,7 @@ function loadSelectedProfileIds(): Record<ModuleId, string | null> {
 }
 
 function saveSelectedProfileId(module: ModuleId, profileId: string | null) {
+  if (typeof localStorage === "undefined") return;
   if (profileId) {
     localStorage.setItem(`studyai.profile.${module}`, profileId);
   } else {
@@ -50,30 +55,68 @@ function saveSelectedProfileId(module: ModuleId, profileId: string | null) {
 }
 
 function persistModule(module: ModuleId) {
+  if (typeof localStorage === "undefined") return;
   localStorage.setItem("studyai.module", module);
 }
 
-function pickActiveForModule(profiles: Profile[], module: ModuleId, selectedIds: Record<ModuleId, string | null>): Profile | null {
+function resolveActiveProfile(
+  profiles: Profile[],
+  selectedIds: Record<ModuleId, string | null>,
+  lastActiveProfileId: string | null,
+  lastActiveModule: ModuleId | null,
+): Profile | null {
   if (profiles.length === 0) return null;
-  const remembered = selectedIds[module];
-  if (remembered) {
-    const found = profiles.find((p) => p.id === remembered);
-    if (found) return found;
+
+  // 1. If there is a last active profile ID, prefer it
+  if (lastActiveProfileId) {
+    const match = profiles.find((p) => p.id === lastActiveProfileId);
+    if (match) return match;
   }
+
+  // 2. If there is a remembered profile ID for the last active module, check it
+  if (lastActiveModule && selectedIds[lastActiveModule]) {
+    const match = profiles.find((p) => p.id === selectedIds[lastActiveModule]);
+    if (match) return match;
+  }
+
+  // 3. If there is any profile matching the last active module, pick the first
+  if (lastActiveModule) {
+    const match = profiles.find((p) => p.module === lastActiveModule);
+    if (match) return match;
+  }
+
+  // 4. Otherwise pick the first available profile regardless of module
   return profiles[0];
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
   const initialSelected = loadSelectedProfileIds();
-  const initialModule = (localStorage.getItem("studyai.module") as ModuleId) ?? "NOTE_SPACE";
+  const initialModule =
+    typeof localStorage !== "undefined"
+      ? ((localStorage.getItem("studyai.module") as ModuleId) ?? "NOTE_SPACE")
+      : "NOTE_SPACE";
+  const initialProfileId =
+    typeof localStorage !== "undefined" ? localStorage.getItem("studyai.profile") : null;
   setActiveModule(initialModule);
+  if (initialProfileId) {
+    setActiveProfileId(initialProfileId);
+  }
   
-  setSessionExpiredHandler(() =>
-    set({ email: null, profiles: [], profile: null, module: "NOTE_SPACE", selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null } }),
-  );
+  setSessionExpiredHandler(() => {
+    setActiveModule(null);
+    setActiveProfileId(null);
+    useWorkspaceStore.getState().resetWorkspace();
+    set({
+      email: null,
+      profiles: [],
+      profile: null,
+      module: "NOTE_SPACE",
+      selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+    });
+  });
   
   return {
-    email: localStorage.getItem("studyai.email"),
+    email: typeof localStorage !== "undefined" ? localStorage.getItem("studyai.email") : null,
     profiles: [],
     profile: null,
     module: initialModule,
@@ -81,88 +124,124 @@ export const useAuthStore = create<AuthState>((set, get) => {
     initialized: false,
 
     async init() {
-      if (!localStorage.getItem("studyai.access")) {
+      if (typeof localStorage === "undefined" || !localStorage.getItem("studyai.access")) {
         set({ initialized: true });
         return;
       }
       try {
-        const profiles = await profilesApi.list();
-        const module = get().module;
+        const allProfiles = await profilesApi.list();
+        const lastProfileId = localStorage.getItem("studyai.profile");
+        const lastModule =
+          (localStorage.getItem("studyai.module") as ModuleId | null) ?? get().module;
         const selectedIds = get().selectedProfileIds;
-        const profile = pickActiveForModule(profiles, module, selectedIds);
+
+        const profile = resolveActiveProfile(allProfiles, selectedIds, lastProfileId, lastModule);
         if (profile) {
-          saveSelectedProfileId(module, profile.id);
+          const activeModule = (profile.module as ModuleId) ?? "NOTE_SPACE";
+          saveSelectedProfileId(activeModule, profile.id);
           localStorage.setItem("studyai.profile", profile.id);
-          persistModule(module);
-          setActiveModule(module);
+          persistModule(activeModule);
+          setActiveModule(activeModule);
           setActiveProfileId(profile.id);
+
+          set({
+            profiles: allProfiles.filter((p) => p.module === activeModule),
+            profile,
+            module: activeModule,
+            selectedProfileIds: { ...selectedIds, [activeModule]: profile.id },
+            email: get().email ?? localStorage.getItem("studyai.email"),
+            initialized: true,
+          });
         } else {
           setActiveModule(null);
           setActiveProfileId(null);
+          set({
+            profiles: [],
+            profile: null,
+            module: "NOTE_SPACE",
+            selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+            email: get().email ?? localStorage.getItem("studyai.email"),
+            initialized: true,
+          });
         }
-        set({
-          profiles,
-          profile,
-          module,
-          selectedProfileIds: { ...selectedIds, [module]: profile?.id ?? null },
-          email: get().email ?? localStorage.getItem("studyai.email"),
-          initialized: true,
-        });
       } catch {
         setTokens(null, null);
         localStorage.removeItem("studyai.email");
-        set({ email: null, profiles: [], profile: null, module: "NOTE_SPACE", selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null }, initialized: true });
+        setActiveModule(null);
+        setActiveProfileId(null);
+        useWorkspaceStore.getState().resetWorkspace();
+        set({
+          email: null,
+          profiles: [],
+          profile: null,
+          module: "NOTE_SPACE",
+          selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+          initialized: true,
+        });
       }
     },
 
     async login(email, password) {
       await authApi.login(email, password);
       persistSession(email);
-      const profiles = await profilesApi.list();
-      const module = get().module;
+
+      const allProfiles = await profilesApi.list();
+      const lastProfileId = localStorage.getItem("studyai.profile");
+      const lastModule = localStorage.getItem("studyai.module") as ModuleId | null;
       const selectedIds = get().selectedProfileIds;
-      const profile = pickActiveForModule(profiles, module, selectedIds);
+
+      const profile = resolveActiveProfile(allProfiles, selectedIds, lastProfileId, lastModule);
       if (profile) {
-        saveSelectedProfileId(module, profile.id);
+        const activeModule = (profile.module as ModuleId) ?? "NOTE_SPACE";
+        saveSelectedProfileId(activeModule, profile.id);
         localStorage.setItem("studyai.profile", profile.id);
-        persistModule(module);
-        setActiveModule(module);
+        persistModule(activeModule);
+        setActiveModule(activeModule);
         setActiveProfileId(profile.id);
+
+        set({
+          email,
+          profiles: allProfiles.filter((p) => p.module === activeModule),
+          profile,
+          module: activeModule,
+          selectedProfileIds: { ...selectedIds, [activeModule]: profile.id },
+        });
       } else {
         setActiveModule(null);
         setActiveProfileId(null);
+        set({
+          email,
+          profiles: [],
+          profile: null,
+          module: "NOTE_SPACE",
+          selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+        });
       }
-      set({
-        email,
-        profiles,
-        profile,
-        module,
-        selectedProfileIds: { ...selectedIds, [module]: profile?.id ?? null },
-      });
     },
 
     async register(email, password) {
       const data = await authApi.register(email, password);
       persistSession(email);
-      let profiles: Profile[] = [];
+      let allProfiles: Profile[] = [];
       try {
-        profiles = await profilesApi.list();
+        allProfiles = await profilesApi.list();
       } catch {
-        profiles = [data.profile];
+        allProfiles = [data.profile];
       }
-      const module = (data.profile.module as ModuleId) ?? "NOTE_SPACE";
-      const profile = profiles.find((p) => p.id === data.profile.id) ?? data.profile;
-      saveSelectedProfileId(module, profile.id);
+      const profile = allProfiles.find((p) => p.id === data.profile.id) ?? data.profile;
+      const activeModule = (profile.module as ModuleId) ?? "NOTE_SPACE";
+      saveSelectedProfileId(activeModule, profile.id);
       localStorage.setItem("studyai.profile", profile.id);
-      persistModule(module);
-      setActiveModule(module);
+      persistModule(activeModule);
+      setActiveModule(activeModule);
       setActiveProfileId(profile.id);
+
       set({
         email,
-        profiles,
+        profiles: allProfiles.filter((p) => p.module === activeModule),
         profile,
-        module,
-        selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null, [module]: profile.id },
+        module: activeModule,
+        selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null, [activeModule]: profile.id },
       });
     },
 
@@ -175,78 +254,113 @@ export const useAuthStore = create<AuthState>((set, get) => {
       localStorage.removeItem("studyai.profile.NOTE_SPACE");
       localStorage.removeItem("studyai.profile.AI_CLASSROOM");
       localStorage.removeItem("studyai.profile");
-      set({ email: null, profiles: [], profile: null, module: "NOTE_SPACE", selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null } });
+      useWorkspaceStore.getState().resetWorkspace();
+      set({
+        email: null,
+        profiles: [],
+        profile: null,
+        module: "NOTE_SPACE",
+        selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+      });
     },
 
     async refreshProfiles() {
-      const profiles = await profilesApi.list();
-      const module = get().module;
+      const allProfiles = await profilesApi.list();
+      const currentProfile = get().profile;
+      const currentModule = get().module;
       const selectedIds = get().selectedProfileIds;
-      const profile = pickActiveForModule(profiles, module, selectedIds);
+
+      const profile = resolveActiveProfile(
+        allProfiles,
+        selectedIds,
+        currentProfile?.id ?? localStorage.getItem("studyai.profile"),
+        currentModule,
+      );
+
       if (profile) {
-        saveSelectedProfileId(module, profile.id);
+        const activeModule = (profile.module as ModuleId) ?? "NOTE_SPACE";
+        saveSelectedProfileId(activeModule, profile.id);
         localStorage.setItem("studyai.profile", profile.id);
-        persistModule(module);
-        setActiveModule(module);
+        persistModule(activeModule);
+        setActiveModule(activeModule);
         setActiveProfileId(profile.id);
+
+        set({
+          profiles: allProfiles.filter((p) => p.module === activeModule),
+          profile,
+          module: activeModule,
+          selectedProfileIds: { ...selectedIds, [activeModule]: profile.id },
+        });
       } else {
         setActiveModule(null);
         setActiveProfileId(null);
+        set({
+          profiles: [],
+          profile: null,
+          module: "NOTE_SPACE",
+          selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
+        });
       }
-      set({
-        profiles,
-        profile,
-        module,
-        selectedProfileIds: { ...selectedIds, [module]: profile?.id ?? null },
-      });
     },
 
     switchProfile(id) {
-      const profile = get().profiles.find((p) => p.id === id);
+      const allKnown = get().profiles;
+      const profile = allKnown.find((p) => p.id === id);
       if (!profile) return;
-      const module = get().module;
-      saveSelectedProfileId(module, id);
-      localStorage.setItem("studyai.profile", id);
-      persistModule(module);
-      setActiveModule(module);
-      setActiveProfileId(id);
-      set({ profile, module, selectedProfileIds: { ...get().selectedProfileIds, [module]: id } });
+      get().switchToProfile(profile);
     },
 
     switchToProfile(profile) {
-      const module = profile.module as ModuleId;
-      saveSelectedProfileId(module, profile.id);
+      const activeModule = (profile.module as ModuleId) ?? "NOTE_SPACE";
+      saveSelectedProfileId(activeModule, profile.id);
       localStorage.setItem("studyai.profile", profile.id);
-      localStorage.setItem("studyai.module", module);
-      setActiveModule(module);
+      persistModule(activeModule);
+      setActiveModule(activeModule);
       setActiveProfileId(profile.id);
-      set({
+
+      const currentWs = useWorkspaceStore.getState();
+      if (currentWs.profileId !== profile.id) {
+        currentWs.resetWorkspace();
+      }
+
+      set((state) => ({
         profile,
-        module,
-        selectedProfileIds: { ...get().selectedProfileIds, [module]: profile.id },
-      });
+        module: activeModule,
+        profiles: state.profiles.some((p) => p.id === profile.id)
+          ? state.profiles.map((p) => (p.id === profile.id ? profile : p))
+          : [...state.profiles, profile],
+        selectedProfileIds: { ...state.selectedProfileIds, [activeModule]: profile.id },
+      }));
     },
 
     async addProfile(name, module?: ModuleId) {
-      const created = await profilesApi.create(name, module);
-      const profiles = [...get().profiles, created];
-      const newModule = (created.module as ModuleId) ?? module ?? get().module;
-      saveSelectedProfileId(newModule, created.id);
+      const targetModule = module ?? get().module;
+      const created = await profilesApi.create(name, targetModule);
+      const activeModule = (created.module as ModuleId) ?? targetModule;
+      saveSelectedProfileId(activeModule, created.id);
       localStorage.setItem("studyai.profile", created.id);
-      persistModule(newModule);
-      setActiveModule(newModule);
+      persistModule(activeModule);
+      setActiveModule(activeModule);
       setActiveProfileId(created.id);
-      set({
-        profiles,
+
+      const currentWs = useWorkspaceStore.getState();
+      if (currentWs.profileId !== created.id) {
+        currentWs.resetWorkspace();
+      }
+
+      set((state) => ({
+        profiles: [...state.profiles.filter((p) => p.module === activeModule), created],
         profile: created,
-        module: newModule,
-        selectedProfileIds: { ...get().selectedProfileIds, [newModule]: created.id },
-      });
+        module: activeModule,
+        selectedProfileIds: { ...state.selectedProfileIds, [activeModule]: created.id },
+      }));
       return created;
     },
   };
 });
 
 function persistSession(email: string): void {
-  localStorage.setItem("studyai.email", email);
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("studyai.email", email);
+  }
 }
