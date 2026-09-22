@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { enrichmentApi } from "../../services/api/enrichment";
+import { enrichmentApi, parseEnrichment } from "../../services/api/enrichment";
 import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
@@ -29,10 +29,25 @@ export function EnrichedView({ note, onCitation }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tags, setTags] = useState<{ stable_key: string; display_name: string }[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+    } catch {
+      return null;
+    }
+  });
+  const [isGenerating, setIsGenerating] = useState<boolean>(() => {
+    try {
+      return !!sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+    } catch {
+      return false;
+    }
+  });
   const [activeCitation, setActiveCitation] = useState<any | null>(null);
   const pollsLeft = useRef(MAX_POLLS);
   const pollTimer = useRef<number | null>(null);
+  const jobIdRef = useRef<string | null>(jobId);
+  jobIdRef.current = jobId;
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
@@ -43,22 +58,50 @@ export function EnrichedView({ note, onCitation }: Props) {
 
   const refresh = useCallback(async () => {
     try {
+      const activeJobId = jobIdRef.current;
+      if (activeJobId) {
+        const jobInfo = await enrichmentApi.getJob(activeJobId);
+        if (jobInfo) {
+          if (
+            jobInfo.status === "failed_retryable" ||
+            jobInfo.status === "failed_dead_letter" ||
+            jobInfo.status === "cancelled"
+          ) {
+            setIsGenerating(false);
+            setJobId(null);
+            try {
+              sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+            } catch {}
+            const failSnap: EnrichmentSnapshot = { state: "failed", blocks: [], generatedAt: null };
+            setSnapshot(failSnap);
+            setLoadError(false);
+            return failSnap;
+          }
+        }
+      }
+
       const snap = await enrichmentApi.get(note.refId);
-      if (isGenerating && snap.state === "not_enriched") {
+      if ((isGenerating || jobIdRef.current) && snap.state === "not_enriched") {
         setSnapshot((prev) =>
           prev ? { ...prev, state: "enriching" } : { state: "enriching", blocks: [], generatedAt: null },
         );
         setLoadError(false);
         return { state: "enriching" as const, blocks: [], generatedAt: null };
       }
+
       if (snap.state === "enriched" || snap.state === "out_of_date" || snap.state === "failed") {
         setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+        } catch {}
       }
+
       setSnapshot(snap);
       setLoadError(false);
       return snap;
     } catch {
-      if (isGenerating) {
+      if (isGenerating || jobIdRef.current) {
         return null;
       }
       setLoadError(true);
@@ -67,10 +110,16 @@ export function EnrichedView({ note, onCitation }: Props) {
   }, [note.refId, isGenerating]);
 
   useEffect(() => {
-    setSnapshot(null);
+    let savedJob: string | null = null;
+    try {
+      savedJob = sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+    } catch {}
+
+    setJobId(savedJob);
+    setIsGenerating(!!savedJob);
+    setSnapshot(savedJob ? { state: "enriching", blocks: [], generatedAt: null } : null);
     setLoadError(false);
     setTags([]);
-    setIsGenerating(false);
     setActiveCitation(null);
     stopPolling();
     void refresh();
@@ -87,7 +136,7 @@ export function EnrichedView({ note, onCitation }: Props) {
 
   // Poll while generation job is running or state is enriching
   useEffect(() => {
-    const shouldPoll = isGenerating || snapshot?.state === "enriching";
+    const shouldPoll = isGenerating || jobId !== null || snapshot?.state === "enriching";
     if (!shouldPoll) {
       stopPolling();
       return;
@@ -97,6 +146,10 @@ export function EnrichedView({ note, onCitation }: Props) {
       if (pollsLeft.current-- <= 0) {
         stopPolling();
         setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+        } catch {}
         setSnapshot((prev) =>
           prev ? { ...prev, state: "failed" } : { state: "failed", blocks: [], generatedAt: null },
         );
@@ -109,10 +162,14 @@ export function EnrichedView({ note, onCitation }: Props) {
       ) {
         stopPolling();
         setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+        } catch {}
       }
     }, POLL_MS);
     return stopPolling;
-  }, [isGenerating, snapshot?.state, refresh, stopPolling]);
+  }, [isGenerating, jobId, snapshot?.state, refresh, stopPolling, note.refId]);
 
   async function generate() {
     setActionError(null);
@@ -123,9 +180,28 @@ export function EnrichedView({ note, onCitation }: Props) {
       generatedAt: prev?.generatedAt ?? null,
     }));
     try {
-      await enrichmentApi.generate(note.refId);
+      const res = await enrichmentApi.generate(note.refId);
+      if (res.jobId) {
+        setJobId(res.jobId);
+        try {
+          sessionStorage.setItem(`studyai.enrichment.job.${note.refId}`, res.jobId);
+        } catch {}
+      }
+      if (res.enrichedNote) {
+        const snap = await parseEnrichment({ enriched_note: res.enrichedNote });
+        setSnapshot(snap);
+        setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+        } catch {}
+      }
     } catch {
       setIsGenerating(false);
+      setJobId(null);
+      try {
+        sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+      } catch {}
       setActionError(t("notes.enriched.startFailed"));
     }
   }

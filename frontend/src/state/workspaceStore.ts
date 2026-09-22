@@ -53,6 +53,7 @@ interface WorkspaceState {
   ) => Promise<FolderNode>;
 
   placeNote: (noteId: string, folderId: string | null) => Promise<void>;
+  upsertNote: (note: NoteMeta) => Promise<void>;
   registerCanvasNote: (input: {
     sessionId: string;
     profileId: string;
@@ -260,11 +261,36 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   async placeNote(noteId, folderId) {
     const existing = get().notes.find((n) => n.id === noteId);
     if (!existing) return;
-    const updated = { ...existing, folderId, updatedAt: new Date().toISOString() };
+    const normalizedFolderId = folderId || UNFILED_FOLDER_ID;
+    const updated = { ...existing, folderId: normalizedFolderId, updatedAt: new Date().toISOString() };
     await putNote(updated);
     set((s) => ({
       notes: s.notes.map((n) => (n.id === noteId ? updated : n)),
     }));
+  },
+
+  async upsertNote(note: NoteMeta) {
+    const normalized: NoteMeta = {
+      ...note,
+      folderId: note.folderId || UNFILED_FOLDER_ID,
+    };
+    await putNote(normalized);
+    set((s) => {
+      const exists = s.notes.some((n) => n.id === normalized.id || n.refId === normalized.id);
+      const updatedNotes = exists
+        ? s.notes.map((n) => (n.id === normalized.id || n.refId === normalized.id ? normalized : n))
+        : [...s.notes, normalized];
+      return {
+        notes: updatedNotes,
+        subjects: s.subjects.map((sub) => {
+          if (sub.id !== normalized.subjectId) return sub;
+          return {
+            ...sub,
+            noteCount: updatedNotes.filter((n) => n.subjectId === sub.id).length,
+          };
+        }),
+      };
+    });
   },
 
   async registerCanvasNote(input) {
@@ -274,7 +300,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       refId: input.sessionId,
       profileId: input.profileId,
       subjectId: input.subjectId,
-      folderId: input.folderId,
+      folderId: input.folderId || UNFILED_FOLDER_ID,
       title: input.title ?? defaultNoteTitle(now),
       source: "canvas",
       createdAt: now,

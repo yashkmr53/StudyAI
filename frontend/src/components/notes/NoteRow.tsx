@@ -48,17 +48,35 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
 function NoteOcrStatusChip({ documentId }: { documentId: string }) {
   const [status, setStatus] = useState<string>("pending");
   useEffect(() => {
+    let timer: number | null = null;
     let cancelled = false;
-    documentsApi
-      .pages(documentId)
-      .then((pages) => {
-        if (!cancelled && pages && pages.length > 0) {
-          setStatus(pages[0].ocr_status || "pending");
+
+    async function check() {
+      try {
+        const pages = await documentsApi.pages(documentId);
+        if (cancelled || !pages || pages.length === 0) return;
+        const s = pages[0].ocr_status || "pending";
+        setStatus(s);
+        if (s === "completed" || s === "failed" || s === "needs_review") {
+          if (timer) {
+            window.clearInterval(timer);
+            timer = null;
+          }
         }
-      })
-      .catch(() => undefined);
+      } catch {
+        // non-fatal
+      }
+    }
+
+    void check();
+    timer = window.setInterval(check, 3000);
+
     return () => {
       cancelled = true;
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
     };
   }, [documentId]);
   return <TranscriptionChip status={status} />;
@@ -71,15 +89,34 @@ function NoteOcrStatusChip({ documentId }: { documentId: string }) {
 function EnrichmentStateChip({ noteId }: { noteId: string }) {
   const [state, setState] = useState<string>("not_enriched");
   useEffect(() => {
+    let timer: number | null = null;
     let cancelled = false;
-    enrichmentApi
-      .get(noteId)
-      .then((snap) => {
-        if (!cancelled) setState(snap.state);
-      })
-      .catch(() => undefined);
+
+    async function check() {
+      try {
+        const snap = await enrichmentApi.get(noteId);
+        if (cancelled) return;
+        setState(snap.state);
+        if (snap.state === "enriched" || snap.state === "out_of_date" || snap.state === "failed") {
+          if (timer) {
+            window.clearInterval(timer);
+            timer = null;
+          }
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+
+    void check();
+    timer = window.setInterval(check, 4000);
+
     return () => {
       cancelled = true;
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
     };
   }, [noteId]);
   if (state === "not_enriched") return null;

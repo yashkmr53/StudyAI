@@ -94,8 +94,11 @@ class DocumentViewSet(
         pages = DocumentPage.objects.filter(document=document)
         return Response(DocumentPageSerializer(pages, many=True).data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get", "post"], url_path="revisions")
     def revisions(self, request, pk=None):
+        """GET: list revisions for document/page. POST: finalize-upload (no lines) or user-edited revision (with lines)."""
+        if request.method == "POST":
+            return self.create_revision(request, pk)
         document = self.get_object()
         qs = DocumentPageRevision.objects.filter(page__document=document).select_related("page")
         page_id = request.query_params.get("page")
@@ -103,7 +106,6 @@ class DocumentViewSet(
             qs = qs.filter(page_id=page_id)
         return Response(DocumentPageRevisionSerializer(qs, many=True).data)
 
-    @action(detail=True, methods=["post"], url_path="revisions")
     def create_revision(self, request, pk=None):
         """Two modes: finalize-upload (no lines) or user-edited revision (with lines)."""
         document = self.get_object()
@@ -301,7 +303,7 @@ class PageDownloadView(APIView):
         storage = get_object_storage()
         if not storage.exists(page.image_ref):
             raise ResourceNotFound("Page image is missing from storage.")
-        url = storage.signed_download_url(page.image_ref, ttl_seconds=settings.SIGNED_URL_TTL_SECONDS)
+        url = storage.create_download_url(page.image_ref, ttl_seconds=settings.SIGNED_URL_TTL_SECONDS)
         return Response({"url": url, "expires_in": settings.SIGNED_URL_TTL_SECONDS, "file_size": None})
 
 

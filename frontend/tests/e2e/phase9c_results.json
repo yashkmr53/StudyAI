@@ -1,0 +1,247 @@
+{
+  "startedAt": "2026-09-22T10:34:16.381Z",
+  "steps": {},
+  "metrics": {
+    "ocrDurationMs": 11043,
+    "enrichDurationMs": 91589
+  },
+  "checklist": {
+    "cleanSession": true,
+    "activeProfileClassroom": true,
+    "correctSubjectsVisible": true,
+    "classroomWorkspaceActive": true,
+    "uploadRequestScoped": true,
+    "uploadSucceeded": true,
+    "ocrInitialPending": true,
+    "ocrCompletedWithoutRefresh": true,
+    "transcriptionDisplayed": true,
+    "enrichedEmptyState": true,
+    "enrichmentPulseVisible": true,
+    "survived404Polling": true,
+    "enrichmentCompletedWithoutRefresh": true,
+    "enrichedContentRendered": true,
+    "referenceCitationDisplayed": true,
+    "citationBadgeVerified": true,
+    "citationQuoteVerified": true,
+    "citationDidNotNavigate": true,
+    "persistsAcrossReload": true,
+    "directUrlLoadsWithoutFailure": true,
+    "noteSpaceIsolationVerified": true,
+    "classroomSubjectsRestored": true
+  },
+  "ocrText": [
+    "1Data Structures — Binary Search Trees",
+    "21. Definition & Properties",
+    "3• A BST is a binary tree where for every node x:",
+    "4All keys in left subtree < x.key < all keys in right subtree",
+    "5• Duplicate keys are typically not allowed or handled with counters.",
+    "62. Tree Traversals",
+    "7• Inorder traversal: Left subtree -> Root -> Right subtree",
+    "8Produces all keys in strictly ascending sorted order!",
+    "9• Preorder traversal: Root -> Left -> Right",
+    "103. Time Complexity Analysis",
+    "11• Average / Best case search & insert: O(log n)",
+    "12• Worst case (skewed degenerate tree): O(n)",
+    "134. Balanced Variants",
+    "14• Self-balancing trees guarantee O(log n) height using rotations.",
+    "15• Examples: AVL trees and Red-Black trees."
+  ],
+  "citationDetails": {
+    "header": "📖 Reference Textbook · Page 1",
+    "badge": "supported",
+    "quote": "\"A binary search tree (BST) is a node-based binary tree data structure where each node has at most two children. For any node, all keys in the left subtree are strictly less than the node's key, and all keys in the right subtree are strictly greater than the node's key.\nTree traversals visit each node in the tree systematically. Inorder traversal visits the left subtree, the root node, and then the right subtree, producing keys in monotonically ascending sorted order. Preorder traversal visits the root first, followed by the left and right subtrees. Postorder traversal visits both children before visiting the parent node.\""
+  },
+  "completedAt": "2026-09-22T10:36:07.773Z",
+  "status": "PASS",
+  "logs": {
+    "consoleLogsCount": 48,
+    "networkRequestsCount": 190,
+    "failedRequestsCount": 0,
+    "failedRequests": [],
+    "ocrProgression": [
+      {
+        "status": "Pending",
+        "elapsedMs": 0
+      },
+      {
+        "status": "Transcribed",
+        "elapsedMs": 11043,
+        "lines": 15
+      }
+    ],
+    "enrichmentProgression": [
+      {
+        "status": 200,
+        "time": "2026-09-22T10:34:17.349Z"
+      },
+      {
+        "status": 304,
+        "time": "2026-09-22T10:34:18.218Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:31.143Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:31.168Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:31.262Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:31.282Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:33.951Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:36.518Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:39.018Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:41.564Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:44.029Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:46.501Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:49.006Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:51.549Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:54.017Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:56.508Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:34:58.997Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:01.530Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:04.016Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:06.529Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:09.008Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:11.504Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:14.001Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:16.496Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:19.005Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:21.506Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:24.024Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:26.490Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:29.000Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:31.500Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:34.007Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:36.485Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:39.002Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:41.521Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:44.003Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:46.512Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:48.995Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:51.510Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:53.995Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:56.510Z"
+      },
+      {
+        "status": 404,
+        "time": "2026-09-22T10:35:59.000Z"
+      },
+      {
+        "status": 200,
+        "time": "2026-09-22T10:36:01.505Z"
+      },
+      {
+        "status": 304,
+        "time": "2026-09-22T10:36:03.015Z"
+      }
+    ]
+  }
+}
