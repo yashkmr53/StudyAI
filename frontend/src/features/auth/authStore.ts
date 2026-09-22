@@ -133,7 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         const lastProfileId = localStorage.getItem("studyai.profile");
         const lastModule =
           (localStorage.getItem("studyai.module") as ModuleId | null) ?? get().module;
-        const selectedIds = get().selectedProfileIds;
+        const selectedIds = loadSelectedProfileIds();
 
         const profile = resolveActiveProfile(allProfiles, selectedIds, lastProfileId, lastModule);
         if (profile) {
@@ -188,7 +188,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const allProfiles = await profilesApi.list();
       const lastProfileId = localStorage.getItem("studyai.profile");
       const lastModule = localStorage.getItem("studyai.module") as ModuleId | null;
-      const selectedIds = get().selectedProfileIds;
+      const selectedIds = loadSelectedProfileIds();
 
       const profile = resolveActiveProfile(allProfiles, selectedIds, lastProfileId, lastModule);
       if (profile) {
@@ -250,17 +250,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
       setActiveProfileId(null);
       setActiveModule(null);
       localStorage.removeItem("studyai.email");
-      localStorage.removeItem("studyai.module");
-      localStorage.removeItem("studyai.profile.NOTE_SPACE");
-      localStorage.removeItem("studyai.profile.AI_CLASSROOM");
-      localStorage.removeItem("studyai.profile");
       useWorkspaceStore.getState().resetWorkspace();
       set({
         email: null,
         profiles: [],
         profile: null,
-        module: "NOTE_SPACE",
-        selectedProfileIds: { NOTE_SPACE: null, AI_CLASSROOM: null },
       });
     },
 

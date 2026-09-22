@@ -123,12 +123,25 @@ export const enrichmentApi = {
   /** Kick off generation. Returns the job id when one was queued. */
   async generate(
     documentId: string,
-  ): Promise<{ queued: boolean; jobId: string | null }> {
+  ): Promise<{ queued: boolean; jobId: string | null; enrichedNote?: unknown }> {
     const payload = await apiRequest<Record<string, unknown>>(
       `/documents/${documentId}/enrich`,
       { method: "POST", body: {} },
     );
-    const job = payload.job as { id?: string } | null | undefined;
-    return { queued: payload !== null, jobId: job?.id ?? null };
+    const job = payload?.job as { id?: string } | null | undefined;
+    return {
+      queued: payload !== null,
+      jobId: job?.id ?? null,
+      enrichedNote: payload?.enriched_note,
+    };
+  },
+
+  /** Check job status by ID. */
+  async getJob(jobId: string): Promise<{ id: string; status: string; last_error?: string } | null> {
+    try {
+      return await apiRequest<{ id: string; status: string; last_error?: string }>(`/jobs/${jobId}`);
+    } catch {
+      return null;
+    }
   },
 };

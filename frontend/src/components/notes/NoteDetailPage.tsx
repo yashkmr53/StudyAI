@@ -28,15 +28,14 @@ export function NoteDetailPage() {
   const folders = useWorkspaceStore((s) => s.folders);
   const notes = useWorkspaceStore((s) => s.notes);
   const workspaceLoading = useWorkspaceStore((s) => s.loading);
-  const workspaceLoaded = useWorkspaceStore((s) => s.loaded);
 
   const { moduleId, services } = useSubjectModule(subjectId);
 
+  const storeNote = notes.find((n) => n.id === noteId || n.refId === noteId);
   const [remoteNote, setRemoteNote] = useState<NoteMeta | null>(null);
-  const [fetchingRemote, setFetchingRemote] = useState<boolean>(false);
+  const [fetchingRemote, setFetchingRemote] = useState<boolean>(!storeNote && !!noteId);
   const [fetchFailed, setFetchFailed] = useState<boolean>(false);
 
-  const storeNote = notes.find((n) => n.id === noteId || n.refId === noteId);
   const activeNote = storeNote || remoteNote;
 
   useEffect(() => {
@@ -44,6 +43,7 @@ export function NoteDetailPage() {
     const existing = notes.find((n) => n.id === noteId || n.refId === noteId);
     if (existing) {
       setRemoteNote(null);
+      setFetchingRemote(false);
       setFetchFailed(false);
       return;
     }
@@ -67,6 +67,7 @@ export function NoteDetailPage() {
         };
         setRemoteNote(meta);
         setFetchFailed(false);
+        void useWorkspaceStore.getState().upsertNote(meta).catch(() => undefined);
       })
       .catch(() => {
         if (!cancelled) setFetchFailed(true);
@@ -116,7 +117,7 @@ export function NoteDetailPage() {
     setHighlightToken((t) => t + 1);
   }
 
-  if ((workspaceLoading && !activeNote) || fetchingRemote) {
+  if (!activeNote && (fetchingRemote || (workspaceLoading && !fetchFailed))) {
     return (
       <div className="content__inner content__inner--wide">
         <div className="skeleton" style={{ height: 400, borderRadius: 14 }} />
@@ -124,7 +125,7 @@ export function NoteDetailPage() {
     );
   }
 
-  if (!activeNote && (fetchFailed || workspaceLoaded)) {
+  if (!activeNote && fetchFailed) {
     return (
       <div className="content__inner">
         <p className="muted">{t("notes.detail.loadFailed")}</p>

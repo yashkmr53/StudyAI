@@ -193,5 +193,95 @@ describe("Phase 9 Frontend Flow Fixes", () => {
       expect(res.queued).toBe(true);
       expect(res.jobId).toBe("job-12345");
     });
+
+    it("enrichmentApi.getJob returns job status from /jobs endpoint", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "job-12345",
+            status: "running",
+            attempt_count: 1,
+            last_error: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+      const job = await enrichmentApi.getJob("job-12345");
+      expect(job).not.toBeNull();
+      expect(job?.id).toBe("job-12345");
+      expect(job?.status).toBe("running");
+    });
+
+    it("enrichmentApi.getJob returns null on network/server error", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { message: "Job not found." } }),
+          { status: 404, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+      const job = await enrichmentApi.getJob("job-missing");
+      expect(job).toBeNull();
+    });
+  });
+
+  describe("Workspace Store Upsert & Normalization", () => {
+    it("upsertNote adds a new note and updates subject count", async () => {
+      useWorkspaceStore.setState({
+        profileId: "prof-1",
+        subjects: [{ id: "subj-1", name: "Biology", noteCount: 0, folderCount: 0, lastOpenedAt: null }],
+        notes: [],
+        folders: [],
+      });
+
+      await useWorkspaceStore.getState().upsertNote({
+        id: "doc-new-1",
+        refId: "doc-new-1",
+        profileId: "prof-1",
+        subjectId: "subj-1",
+        folderId: null as any,
+        title: "Fresh Note",
+        source: "upload",
+        createdAt: "2026-09-22T02:00:00Z",
+        updatedAt: "2026-09-22T02:00:00Z",
+      });
+
+      const state = useWorkspaceStore.getState();
+      expect(state.notes).toHaveLength(1);
+      expect(state.notes[0].folderId).toBe(UNFILED_FOLDER_ID);
+      expect(state.subjects[0].noteCount).toBe(1);
+    });
+
+    it("upsertNote updates existing note without duplicating", async () => {
+      await useWorkspaceStore.getState().upsertNote({
+        id: "doc-new-1",
+        refId: "doc-new-1",
+        profileId: "prof-1",
+        subjectId: "subj-1",
+        folderId: UNFILED_FOLDER_ID,
+        title: "Renamed Note",
+        source: "upload",
+        createdAt: "2026-09-22T02:00:00Z",
+        updatedAt: "2026-09-22T02:05:00Z",
+      });
+
+      const state = useWorkspaceStore.getState();
+      expect(state.notes).toHaveLength(1);
+      expect(state.notes[0].title).toBe("Renamed Note");
+      expect(state.subjects[0].noteCount).toBe(1);
+    });
+
+    it("registerCanvasNote defaults folderId to UNFILED_FOLDER_ID when null", async () => {
+      const canvasNote = await useWorkspaceStore.getState().registerCanvasNote({
+        sessionId: "session-canvas-1",
+        profileId: "prof-1",
+        subjectId: "subj-1",
+        folderId: null,
+        title: "Canvas Note 1",
+      });
+
+      expect(canvasNote.folderId).toBe(UNFILED_FOLDER_ID);
+    });
   });
 });

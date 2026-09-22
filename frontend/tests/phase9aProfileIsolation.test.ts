@@ -28,6 +28,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useAuthStore } from "../src/features/auth/authStore";
 import { useWorkspaceStore } from "../src/state/workspaceStore";
 import { profilesApi } from "../src/services/api/profiles";
+import { authApi } from "../src/services/api/auth";
 import { subjectsApi } from "../src/services/api/subjects";
 import { getActiveModule } from "../src/services/api/client";
 import { MODULE_SERVICE_MATRIX } from "../src/types/modules";
@@ -220,5 +221,85 @@ describe("Phase 9A — Profile / Module / Subject Isolation", () => {
     expect(nsServices.tests).toBe(false);
     expect(nsServices.qa).toBe(false);
     expect(nsServices.enrichment).toBe(true);
+  });
+
+  it("logout preserves active profile/module preference so login restores the exact workspace", async () => {
+    const aiProfile: Profile = {
+      id: "p-ai-1",
+      name: "Yash",
+      module: "AI_CLASSROOM",
+      created_at: "2026-09-22T00:00:00Z",
+      updated_at: "2026-09-22T00:00:00Z",
+    };
+    const nsProfile: Profile = {
+      id: "p-ns-2",
+      name: "Note Profile",
+      module: "NOTE_SPACE",
+      created_at: "2026-09-22T01:00:00Z",
+      updated_at: "2026-09-22T01:00:00Z",
+    };
+
+    // User is in NoteSpace
+    useAuthStore.getState().switchToProfile(nsProfile);
+    expect(useAuthStore.getState().module).toBe("NOTE_SPACE");
+    expect(useAuthStore.getState().profile?.id).toBe("p-ns-2");
+
+    // User logs out
+    vi.spyOn(authApi, "logout").mockResolvedValueOnce();
+    await useAuthStore.getState().logout();
+
+    expect(useAuthStore.getState().email).toBeNull();
+    expect(useAuthStore.getState().profile).toBeNull();
+    expect(localStorage.getItem("studyai.email")).toBeNull();
+
+    // User logs back in
+    vi.spyOn(authApi, "login").mockResolvedValueOnce({ access: "acc", refresh: "ref" });
+    // Database returns aiProfile first (profiles[0]), but user was in nsProfile
+    vi.spyOn(profilesApi, "list").mockResolvedValueOnce([aiProfile, nsProfile]);
+
+    await useAuthStore.getState().login("admin@studyai.dev", "password");
+
+    const state = useAuthStore.getState();
+    expect(state.profile?.id).toBe("p-ns-2");
+    expect(state.profile?.name).toBe("Note Profile");
+    expect(state.module).toBe("NOTE_SPACE");
+  });
+
+  it("logout from AI_CLASSROOM restores AI_CLASSROOM on next login even if NOTE_SPACE is first in list", async () => {
+    const nsProfile: Profile = {
+      id: "p-ns-1",
+      name: "Note Profile",
+      module: "NOTE_SPACE",
+      created_at: "2026-09-22T00:00:00Z",
+      updated_at: "2026-09-22T00:00:00Z",
+    };
+    const aiProfile: Profile = {
+      id: "p-ai-2",
+      name: "AI Profile",
+      module: "AI_CLASSROOM",
+      created_at: "2026-09-22T01:00:00Z",
+      updated_at: "2026-09-22T01:00:00Z",
+    };
+
+    // User is in AI Classroom
+    useAuthStore.getState().switchToProfile(aiProfile);
+    expect(useAuthStore.getState().module).toBe("AI_CLASSROOM");
+    expect(useAuthStore.getState().profile?.id).toBe("p-ai-2");
+
+    // User logs out
+    vi.spyOn(authApi, "logout").mockResolvedValueOnce();
+    await useAuthStore.getState().logout();
+
+    // User logs back in
+    vi.spyOn(authApi, "login").mockResolvedValueOnce({ access: "acc", refresh: "ref" });
+    // Database returns nsProfile first (profiles[0])
+    vi.spyOn(profilesApi, "list").mockResolvedValueOnce([nsProfile, aiProfile]);
+
+    await useAuthStore.getState().login("admin@studyai.dev", "password");
+
+    const state = useAuthStore.getState();
+    expect(state.profile?.id).toBe("p-ai-2");
+    expect(state.profile?.name).toBe("AI Profile");
+    expect(state.module).toBe("AI_CLASSROOM");
   });
 });
