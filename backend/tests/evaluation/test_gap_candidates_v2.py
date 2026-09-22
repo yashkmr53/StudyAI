@@ -24,7 +24,7 @@ from apps.ai_classroom.gap_candidates_v2 import (
     SINGLE_TOKEN_NOISE,
 )
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATASET_PATH = os.path.join(BASE_DIR, "tests/evaluation/datasets/golden_v2.json")
 METADATA_PATH = os.path.join(BASE_DIR, "tests/evaluation/datasets/golden_v2_metadata.json")
 PAIRS_PATH = os.path.join(BASE_DIR, "tests/evaluation/results/candidate_generation_v2/normalization_pairs.json")
@@ -204,7 +204,7 @@ def test_isolation():
 # 8. ARCHITECTURE ISOLATION
 def test_architecture_isolation():
     """Verify that gap_candidates_v2 does NOT import DOMAIN_CONCEPTS, TECHNICAL_PATTERN, or legacy dictionaries."""
-    v2_file_path = os.path.join(BASE_DIR, "backend/apps/ai_classroom/gap_candidates_v2.py")
+    v2_file_path = os.path.join(BASE_DIR, "apps/ai_classroom/gap_candidates_v2.py")
     with open(v2_file_path) as f:
         content = f.read()
 

@@ -42,9 +42,18 @@ class Qwen3EmbeddingProvider:
     ):
         dj = self._get_django_settings()
         dj_provider = getattr(dj, "EMBEDDING_PROVIDER", None)
+        env_provider = os.environ.get("EMBEDDING_PROVIDER")
+        is_qwen_provider = (env_provider or dj_provider) in (
+            None, "sentence_transformers", "qwen3", "qwen", "qwen3-embedding"
+        )
         dj_version = (
             getattr(dj, "EMBEDDING_MODEL_VERSION", None)
-            if dj_provider in (None, "sentence_transformers", "qwen3", "qwen", "qwen3-embedding")
+            if is_qwen_provider
+            else None
+        )
+        env_version = (
+            os.environ.get("EMBEDDING_MODEL_VERSION")
+            if is_qwen_provider
             else None
         )
         self._model_name = (
@@ -58,7 +67,7 @@ class Qwen3EmbeddingProvider:
         )
         self._model_version = (
             model_version
-            or os.environ.get("EMBEDDING_MODEL_VERSION")
+            or env_version
             or dj_version
             or DEFAULT_MODEL_VERSION
         )

@@ -184,7 +184,7 @@ services:
       <<: *backend-env
       DJANGO_SETTINGS_MODULE: config.settings.test
       EMBEDDING_PROVIDER: hashing
-      EMBEDDING_MODEL_VERSION: hashing-384-v1
+      EMBEDDING_MODEL_VERSION: hashing-1024-v1
       LANGSMITH_TRACING: "false"
     command: python -m pytest --tb=short
     volumes:

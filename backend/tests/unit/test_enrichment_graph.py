@@ -92,6 +92,9 @@ class TestEnrichmentGraphNodes(TestCase):
             mock_doc = MagicMock()
             mock_doc.pk = "doc-1"
             mock_doc.profile_id = "profile-1"
+            mock_doc.reference_book_id = None
+            mock_doc.profile = None
+            mock_doc.pages.exclude.return_value.exists.return_value = False
             mock_doc_qs.return_value.get.return_value = mock_doc
 
             mock_user_qs = MagicMock()

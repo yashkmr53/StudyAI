@@ -49,10 +49,11 @@ from providers.email import MailpitEmailProvider, SMTPEmailProvider
 def _get_env(name: str, default: Optional[str] = None) -> Optional[str]:
     """Get environment variable with Django settings fallback.
     
-from typing import Optional
     Handles both string and list formats from settings.
     """
-    value = getattr(settings, name, None) or os.environ.get(name, default)
+    value = getattr(settings, name, None)
+    if value is None:
+        value = os.environ.get(name, default)
     if isinstance(value, list):
         return ",".join(value)
     return value
@@ -188,7 +189,9 @@ def get_llm_provider() -> LLMChainProvider:
 def _flag(name: str, default: str = "false") -> bool:
     """Get a boolean environment setting."""
     from django.conf import settings as dj_settings
-    value = getattr(dj_settings, name, None) or os.environ.get(name, default)
+    value = getattr(dj_settings, name, None)
+    if value is None:
+        value = os.environ.get(name, default)
     return str(value).strip() in ("1", "true", "True", "TRUE")
 
 
