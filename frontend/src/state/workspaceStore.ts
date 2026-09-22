@@ -11,6 +11,7 @@ import {
 } from "../db/indexeddb/db";
 import { notebooksApi } from "../services/api/notebooks";
 import { subjectsApi } from "../services/api/subjects";
+import { documentsApi } from "../services/api/documents";
 import type { FolderNode, NoteMeta, SubjectSummary } from "../types/domain";
 import { UNFILED_FOLDER_ID } from "../types/domain";
 import { childrenOf } from "../utils/folderTree";
@@ -89,10 +90,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       // Local cache is best-effort: IndexedDB failures must never blank
       // remotely-served data.
-      const [remoteSubjects, remoteNotebooks, localFolders, localNotes] =
+      const [remoteSubjects, remoteNotebooks, remoteDocs, localFolders, localNotes] =
         await Promise.all([
           subjectsApi.list(profileId),
           notebooksApi.list().catch(() => []),
+          documentsApi.list().catch(() => ({ count: 0, results: [] })),
           allFolders().catch(() => []),
           allNotes().catch(() => []),
         ]);
@@ -130,10 +132,49 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         lastOpenedCache = {};
       }
 
+      // Reconcile remote documents with local notes
+      const remoteDocList = remoteDocs?.results ?? [];
+      const remoteNotes: NoteMeta[] = remoteDocList
+        .filter((d) => d.profile === profileId)
+        .map((d) => {
+          const localMatch = localNotes.find((ln) => ln.id === d.id || ln.refId === d.id);
+          const title = localMatch?.title || d.title || d.filename || `Note ${d.id.slice(0, 8)}`;
+          const folderId = localMatch?.folderId && localMatch.folderId !== null && localMatch.folderId !== "__unfiled__"
+            ? localMatch.folderId
+            : UNFILED_FOLDER_ID;
+          return {
+            id: d.id,
+            refId: d.id,
+            profileId: d.profile,
+            subjectId: d.subject || localMatch?.subjectId || "",
+            folderId,
+            title,
+            source: (d.source === "canvas" ? "canvas" : "upload"),
+            createdAt: localMatch?.createdAt || d.created_at,
+            updatedAt: localMatch?.updatedAt || d.created_at,
+          };
+        });
+
+      const remoteNoteIds = new Set(remoteNotes.map((n) => n.id));
+      const mergedNotes: NoteMeta[] = [
+        ...remoteNotes,
+        ...localNotes
+          .filter((ln) => !remoteNoteIds.has(ln.id) && !remoteNoteIds.has(ln.refId))
+          .map((ln) => ({
+            ...ln,
+            folderId: !ln.folderId || ln.folderId === null ? UNFILED_FOLDER_ID : ln.folderId,
+          })),
+      ];
+
+      // Update local storage in background for persistence
+      for (const n of remoteNotes) {
+        void putNote(n).catch(() => undefined);
+      }
+
       set({
-        subjects: subjects.map((s) => summarize(s, folders, localNotes, lastOpenedCache[s.id])),
+        subjects: subjects.map((s) => summarize(s, folders, mergedNotes, lastOpenedCache[s.id])),
         folders,
-        notes: localNotes.filter((n) => n.profileId === profileId && subjectIds.has(n.subjectId)),
+        notes: mergedNotes.filter((n) => n.profileId === profileId && (!n.subjectId || subjectIds.has(n.subjectId))),
         loaded: true,
         loading: false,
       });
@@ -252,7 +293,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       refId: input.documentId,
       profileId: input.profileId,
       subjectId: input.subjectId,
-      folderId: input.folderId,
+      folderId: input.folderId || UNFILED_FOLDER_ID,
       title: input.title || defaultNoteTitle(now),
       source: "upload",
       createdAt: now,

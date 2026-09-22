@@ -75,7 +75,7 @@ class OllamaLLMProvider:
             model_info = next((m for m in resp.json().get("models", []) if m["name"].startswith(model_base)), None)
             if model_info:
                 caps = model_info.get("capabilities", [])
-                self._supports_chat = "chat" in caps
+                self._supports_chat = "chat" in caps if "capabilities" in model_info else True
                 if not self._supports_chat:
                     logger.info("Model '%s' does not support chat endpoint, will use generate", self.model)
             else:

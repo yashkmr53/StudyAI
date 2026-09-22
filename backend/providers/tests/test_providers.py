@@ -70,10 +70,10 @@ class TestProviderContracts(TestCase):
         assert hasattr(provider, 'model_name')
         assert hasattr(provider, 'model_version')
         
-        embeddings = provider.embed(["test"], model_version="hashing-384-v1")
+        embeddings = provider.embed(["test"], model_version=provider.model_version)
         assert isinstance(embeddings, list)
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == 384
+        assert len(embeddings[0]) == provider.dimension
 
     def test_local_storage_implements_protocol(self):
         provider = LocalObjectStorage()
@@ -167,7 +167,7 @@ class TestProviderSelection(TestCase):
         assert isinstance(provider, HashingEmbeddingProvider)
 
     @override_settings(EMBEDDING_PROVIDER="sentence_transformers")
-    @patch("providers.embeddings.local.SentenceTransformerEmbeddingProvider")
+    @patch("providers.embeddings.qwen3.Qwen3EmbeddingProvider")
     def test_get_embedding_provider_sentence_transformers(self, mock_st):
         mock_instance = MagicMock()
         mock_st.return_value = mock_instance
@@ -206,9 +206,9 @@ class TestProviderSelection(TestCase):
             assert version == "sentence-transformers-test-model-v1"
 
     def test_embedding_dimension(self):
-        with override_settings(EMBEDDING_PROVIDER="hashing"):
+        with override_settings(EMBEDDING_PROVIDER="hashing", EMBEDDING_DIMENSIONS=1024):
             dim = embedding_dimension()
-            assert dim == 384
+            assert dim == 1024
 
 
 class TestLocalProviderStartup(TestCase):
@@ -221,9 +221,9 @@ class TestLocalProviderStartup(TestCase):
 
     def test_hashing_embedding_no_credentials_needed(self):
         provider = HashingEmbeddingProvider()
-        embeddings = provider.embed(["test"], model_version="hashing-384-v1")
+        embeddings = provider.embed(["test"], model_version=provider.model_version)
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == 384
+        assert len(embeddings[0]) == provider.dimension
 
     def test_local_storage_no_credentials_needed(self):
         provider = LocalObjectStorage()

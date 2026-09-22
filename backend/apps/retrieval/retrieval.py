@@ -79,7 +79,17 @@ def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: 
 
 class RetrievalService:
     @staticmethod
-    def search(user, query: str, *, subject=None, top_k: int = 8, include_reference: bool = True, reference_book_ids: list = None, reference_only: bool = False):
+    def search(
+        user,
+        query: str,
+        *,
+        subject=None,
+        subject_id=None,
+        top_k: int = 8,
+        include_reference: bool = True,
+        reference_book_ids: list = None,
+        reference_only: bool = False,
+    ):
         """Returns list[Evidence]. The dense leg runs on PostgreSQL only;
         SQLite unit runs degrade to keyword-only."""
         from apps.retrieval.models import NoteChunk
@@ -88,6 +98,13 @@ class RetrievalService:
         query = (query or "").strip()
         if not query:
             return []
+
+        if subject is None and subject_id is not None:
+            from apps.subjects.models import Subject
+            try:
+                subject = Subject.objects.filter(pk=subject_id).first()
+            except Exception:
+                subject = None
 
         base = _base_queryset(user, subject, reference_book_ids, reference_only=reference_only)
         if not include_reference:

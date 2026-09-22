@@ -12,8 +12,8 @@ os.environ["LLM_PROVIDER_CHAIN"] = "ollama"
 os.environ["LLM_DISABLE_FALLBACK"] = "1"
 
 # Setup Django - use evaluation settings for real LLM + PostgreSQL
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.evaluation")
-sys.path.insert(0, "/Users/yash/CV_Project/StudyAI/backend")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 django.setup()
 

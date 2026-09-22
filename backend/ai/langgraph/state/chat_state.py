@@ -22,3 +22,6 @@ class ChatState(BaseStudyAIState):
     retry_count: int
     cited_contents: list[str]
     current_date: Optional[str]  # runtime date/time for date/time queries
+    image: Optional[Any]  # image (bytes, base64 string, or path) for multimodal queries
+    model: Optional[str]
+    provider: Optional[str]

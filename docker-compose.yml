@@ -60,31 +60,16 @@ services:
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    # Optional: pre-pull models at build time
-    # command: sh -c "ollama serve & sleep 10 && ollama pull llama3.1:8b && wait"
-
   api:
     build: ./backend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
       minio: { condition: service_healthy }
       mailpit: { condition: service_healthy }
-      ollama: { condition: service_healthy }
     environment: &backend-env
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set in .env}
@@ -109,18 +94,34 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-studyai}
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_SECURE: "false"
-      OCR_PROVIDER_CHAIN: ${OCR_PROVIDER_CHAIN:-tesseract,mock}
+      OCR_PROVIDER_CHAIN: ${OCR_PROVIDER_CHAIN:-qwen35}
+      OCR_PIPELINE_VERSION: ${OCR_PIPELINE_VERSION:-qwen35-v1}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       LLM_PROVIDER_CHAIN: ${LLM_PROVIDER_CHAIN:-ollama}
       LLM_DISABLE_FALLBACK: ${LLM_DISABLE_FALLBACK:-1}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
-      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-Qwen/Qwen3-Embedding-0.6B}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      EMBEDDING_MODEL_VERSION: ${EMBEDDING_MODEL_VERSION:-qwen3-embedding-0.6b-v1}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-auto}
       EMAIL_BACKEND: ${EMAIL_BACKEND:-mailpit}
       MAILPIT_HOST: mailpit
       MAILPIT_PORT: 1025
       MAILPIT_API_URL: http://mailpit:8025
       EMAIL_FROM: ${EMAIL_FROM:-noreply@studyai.local}
-      OLLAMA_BASE_URL: http://ollama:11434
-      LLM_MODEL: ${LLM_MODEL:-llama3.1:8b}
+      OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3.5:4b}
+      ENRICHMENT_MODEL: ${ENRICHMENT_MODEL:-qwen3.5:4b}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-16384}
+      LLM_NUM_PREDICT: ${LLM_NUM_PREDICT:-4096}
+      LLM_THINK_DEFAULT: ${LLM_THINK_DEFAULT:-0}
+      LLM_THINK_OCR: ${LLM_THINK_OCR:-0}
+      LLM_THINK_ENRICHMENT: ${LLM_THINK_ENRICHMENT:-0}
+      LLM_THINK_GAP_DETECTION: ${LLM_THINK_GAP_DETECTION:-0}
+      LLM_THINK_QUESTION_GEN: ${LLM_THINK_QUESTION_GEN:-0}
+      LLM_THINK_CHAT: ${LLM_THINK_CHAT:-0}
+      LLM_THINK_TAGGING: ${LLM_THINK_TAGGING:-0}
+      LLM_THINK_VERIFICATION: ${LLM_THINK_VERIFICATION:-0}
       SIGNED_URL_TTL_SECONDS: ${SIGNED_URL_TTL_SECONDS:-300}
       # Phase 12: LangSmith tracing (backend only)
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
@@ -130,6 +131,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./backend:/app
       - objectstore:/app/var/objectstore
       - django_static:/app/var/static
     healthcheck:
@@ -142,15 +144,17 @@ services:
   worker:
     build: ./backend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
       minio: { condition: service_healthy }
       mailpit: { condition: service_healthy }
-      ollama: { condition: service_healthy }
     environment: *backend-env
     command: celery -A config worker -l info
     volumes:
+      - ./backend:/app
       - objectstore:/app/var/objectstore
 
   beat:
@@ -161,14 +165,17 @@ services:
       redis: { condition: service_started }
       minio: { condition: service_healthy }
       mailpit: { condition: service_healthy }
-      ollama: { condition: service_healthy }
     environment: *backend-env
     command: celery -A config beat -l info
     volumes:
+      - ./backend:/app
       - objectstore:/app/var/objectstore
 
   # Test runner service - uses test settings with hashing embedder and no LangSmith
+  # Only started on demand (e.g. docker compose run --rm test)
   test:
+    profiles:
+      - test
     build: ./backend
     depends_on:
       db: { condition: service_healthy }
@@ -181,30 +188,8 @@ services:
       LANGSMITH_TRACING: "false"
     command: python -m pytest --tb=short
     volumes:
+      - ./backend:/app
       - objectstore:/app/var/objectstore
-
-  # Test runner for CI - uses PostgreSQL service
-  test-ci:
-    build: ./backend
-    environment:
-      DJANGO_SETTINGS_MODULE: config.settings.test
-      EMBEDDING_PROVIDER: hashing
-      EMBEDDING_MODEL_VERSION: hashing-384-v1
-      LANGSMITH_TRACING: "false"
-      POSTGRES_DB: studyai
-      POSTGRES_USER: studyai
-      POSTGRES_PASSWORD: studyai
-      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      CELERY_BROKER_URL: redis://redis:6379/0
-      STORAGE_BACKEND: local
-      OCR_PROVIDER_CHAIN: mock,mock
-      LLM_PROVIDER_CHAIN: mock,mock
-      EMAIL_BACKEND: console
-    depends_on:
-      db: { condition: service_healthy }
-      redis: { condition: service_started }
-    command: python -m pytest --tb=short
 
   frontend:
     build: ./frontend
@@ -225,4 +210,3 @@ volumes:
   objectstore:
   django_static:
   minio_data:
-  ollama_data:

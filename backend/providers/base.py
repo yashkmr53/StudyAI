@@ -25,8 +25,8 @@ class Prompt:
 
 
 @dataclass
-class StructuredLLMResult:
-    data: dict
+class LLMResult:
+    text: str
     model: str = ""
     provider: str = ""
     prompt_name: str = ""
@@ -34,6 +34,22 @@ class StructuredLLMResult:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    latency_ms: int = 0
+    estimated_cost_usd: float = 0.0
+
+
+@dataclass
+class StructuredLLMResult:
+    data: dict
+    raw_text: str = ""
+    model: str = ""
+    provider: str = ""
+    prompt_name: str = ""
+    prompt_version: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    latency_ms: int = 0
     estimated_cost_usd: float = 0.0
 
 
@@ -44,7 +60,10 @@ class OCRProvider(Protocol):
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    def generate_structured(self, *, prompt: Prompt, schema: type, request_id: str) -> StructuredLLMResult: ...
+    def generate(self, *, prompt: Prompt, request_id: str, **kwargs) -> LLMResult: ...
+    def generate_structured(self, *, prompt: Prompt, schema: type, request_id: str, **kwargs) -> StructuredLLMResult: ...
+    def generate_with_image(self, *, prompt: Prompt, image: str | bytes, request_id: str, **kwargs) -> LLMResult: ...
+    def generate_structured_with_image(self, *, prompt: Prompt, image: str | bytes, schema: type, request_id: str, **kwargs) -> StructuredLLMResult: ...
 
 
 @runtime_checkable

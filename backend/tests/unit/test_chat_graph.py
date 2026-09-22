@@ -519,3 +519,47 @@ class TestRegressionConversationalHistory(TestCase):
             result = provider.generate_structured(prompt=prompt, schema=ChatAnswer, request_id="r")
             self.assertNotIn("could not find", result.data["answer"].lower(),
                              f"Mock should handle '{query}' conversationally")
+
+    def test_route_query_classifies_multimodal_image(self):
+        state = _blank_state(user_request="Can you explain this diagram?", image="base64dummyimage")
+        result = route_query_node(state)
+        self.assertEqual(result["route"], "material")
+
+    def test_answer_generation_multimodal_image(self):
+        evidence = [{"citation_id": "SRC-001", "chunk_id": "c1", "snippet": "Note diagram"}]
+        with patch("apps.chat.langgraph_nodes.get_llm_provider") as mock_get_llm, \
+             patch("apps.chat.langgraph_nodes.log_llm_call"):
+            mock_llm = MagicMock()
+            mock_llm.name = "ollama"
+            mock_llm.generate_structured_with_image.return_value = MagicMock(
+                data={"answer": "The diagram illustrates cell respiration.", "cited_ids": ["SRC-001"], "confidence": 0.95},
+                model="qwen3.5:4b",
+                provider="ollama",
+                input_tokens=150,
+                output_tokens=60,
+                total_tokens=210,
+            )
+            mock_get_llm.return_value = mock_llm
+
+            state = _blank_state(
+                user_request="Explain this diagram",
+                image="base64dummyimage",
+                selected_evidence=evidence,
+                route="material",
+            )
+            result = answer_generation_node(state)
+
+            self.assertEqual(result["answer"], "The diagram illustrates cell respiration.")
+            self.assertEqual(result["model"], "qwen3.5:4b")
+            self.assertEqual(result["provider"], "ollama")
+            mock_llm.generate_structured_with_image.assert_called_once()
+
+    def test_format_response_node_includes_model_provenance(self):
+        state = _blank_state(
+            answer="Here is the explanation.",
+            model="qwen3.5:4b",
+            provider="ollama",
+        )
+        res = format_response_node(state)
+        self.assertEqual(res["model"], "qwen3.5:4b")
+        self.assertEqual(res["provider"], "ollama")

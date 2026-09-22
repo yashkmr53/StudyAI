@@ -13,11 +13,11 @@ import { hasService, servicesFor } from "../src/state/moduleConfigStore";
  *   AI Classroom        ✓         ✓       ✓        ✓   ✓   ✓
  */
 describe("module service matrix", () => {
-  it("NoteSpace exposes only transcription + write", () => {
+  it("NoteSpace exposes transcription + write + enrichment (Phase 9)", () => {
     const ns = MODULE_SERVICE_MATRIX.NOTE_SPACE;
     expect(ns.transcription).toBe(true);
     expect(ns.write).toBe(true);
-    expect(ns.enrichment).toBe(false);
+    expect(ns.enrichment).toBe(true);
     expect(ns.tests).toBe(false);
     expect(ns.qa).toBe(false);
     expect(ns.chat).toBe(false);
@@ -33,7 +33,7 @@ describe("module service matrix", () => {
   it("selectors answer per-service questions without module branching", () => {
     const ns = MODULE_SERVICE_MATRIX.NOTE_SPACE;
     const ai = MODULE_SERVICE_MATRIX.AI_CLASSROOM;
-    expect(hasService(ns, "NOTE_SPACE", "enrichment")).toBe(false);
+    expect(hasService(ns, "NOTE_SPACE", "enrichment")).toBe(true);
     expect(hasService(ns, "NOTE_SPACE", "write")).toBe(true);
     expect(hasService(ai, "AI_CLASSROOM", "enrichment")).toBe(true);
     expect(servicesFor(ai, "AI_CLASSROOM").chat).toBe(true);

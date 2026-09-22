@@ -86,7 +86,11 @@ def generate_questions_node(state: AdaptiveTestState, config=None) -> dict:
     for doc_id in doc_ids:
         try:
             document = Document.objects.get(pk=doc_id, profile=profile)
-            questions = QuestionGenerationService.generate_for_document(document, max_questions=per_doc)
+            questions = QuestionGenerationService.generate_for_document(
+                document,
+                max_questions=per_doc,
+                difficulty=state.get("difficulty"),
+            )
             for q in questions:
                 all_questions.append({
                     "id": str(q.pk),
@@ -94,6 +98,8 @@ def generate_questions_node(state: AdaptiveTestState, config=None) -> dict:
                     "options": q.options,
                     "answer_index": q.answer_index,
                     "difficulty": q.difficulty,
+                    "question_type": getattr(q, "question_type", "mcq"),
+                    "explanation": getattr(q, "explanation", ""),
                     "source_chunk_id": str(q.source_chunk_id),
                 })
         except Document.DoesNotExist:

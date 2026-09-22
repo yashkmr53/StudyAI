@@ -10,7 +10,7 @@
 ## 1. Executive Summary
 
 1. **Root Cause of Baseline Noise (82.9%):**  
-   The baseline extractor [`extract_candidates_from_chunk`](file:///Users/yash/CV_Project/StudyAI/backend/apps/ai_classroom/gap_candidates.py#L107-L225) generates **1,191 candidates** across the 40 base cases. **1,186 of those 1,191 candidates (99.6%) come from the sliding n-gram fallback**. The n-gram generator yields **905 ungrounded noise phrases** (raw precision = 23.7%, unique-concept precision = **12.4%**).
+   The baseline extractor [`extract_candidates_from_chunk`](backend/apps/ai_classroom/gap_candidates.py#L107-L225) generates **1,191 candidates** across the 40 base cases. **1,186 of those 1,191 candidates (99.6%) come from the sliding n-gram fallback**. The n-gram generator yields **905 ungrounded noise phrases** (raw precision = 23.7%, unique-concept precision = **12.4%**).
 2. **Gold Extractive Recall Ceiling:**  
    Across the 40 base cases (242 gold concepts), the **extractive ceiling is 77.3% lenient** (where the concept's topic or an alias appears verbatim in its reference chunk) and **39.3% strict** (topic only). The theoretical maximum recall achievable by any purely extractive Stage 1 model without generative paraphrasing is 77.3%.
    - `gap`: 84.2% ceiling (96/114)
@@ -18,7 +18,7 @@
    - `covered`: 51.5% ceiling (35/68)
    - `off_scope`: 94.1% ceiling (48/51)
 3. **Dev / Test Split Established:**  
-   20 dev cases ($n \pmod 4 \in \{1, 2\}$) and 20 test cases ($n \pmod 4 \in \{0, 3\}$) frozen in [`split.json`](file:///Users/yash/CV_Project/StudyAI/tests/evaluation/results/candidate_generation_v2/split.json). Baseline unique-concept precision is **12.2% on Dev** and **12.6% on Test**.
+   20 dev cases ($n \pmod 4 \in \{1, 2\}$) and 20 test cases ($n \pmod 4 \in \{0, 3\}$) frozen in [`split.json`](tests/evaluation/results/candidate_generation_v2/split.json). Baseline unique-concept precision is **12.2% on Dev** and **12.6% on Test**.
 4. **Reference Chunk Structure:**  
    `golden_v2` corpus chunks contain **only `text`** (`base_id` and `subject` are evaluation fields stripped prior to extraction). No headings, sections, or chapter hierarchy exist in the dataset. Section-heading extraction paths are structurally unavailable on `golden_v2`.
 
@@ -26,7 +26,7 @@
 
 ## 2. A1. Audit of Baseline `gap_candidates.py`
 
-The baseline extractor in [`backend/apps/ai_classroom/gap_candidates.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/ai_classroom/gap_candidates.py) implements the following extraction sequence:
+The baseline extractor in [`backend/apps/ai_classroom/gap_candidates.py`](backend/apps/ai_classroom/gap_candidates.py) implements the following extraction sequence:
 
 1. **Domain Dictionary Matching (`DOMAIN_DICTIONARY`):**
    - Matches against a hardcoded set of ~60 strings in `DOMAIN_CONCEPTS` (e.g. `'time complexity'`, `'amortized analysis'`, `'chain rule'`, `'inertial frame'`).
@@ -90,7 +90,7 @@ Each chunk in `golden_v2.json["corpus"]` contains:
 - **Engineering Decision:** Section 4's heading extraction path is structurally unavailable on `golden_v2`. Extraction on `golden_v2` must rely strictly on chunk text content (definitional patterns, syntactic noun phrases, salience scoring). For production data where document headings exist, the heading path will be implemented as an optional ingestion-time enricher.
 
 ### B. Production `NoteChunk` Schema
-From [`backend/apps/retrieval/models.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/retrieval/models.py#L51-L91):
+From [`backend/apps/retrieval/models.py`](backend/apps/retrieval/models.py#L51-L91):
 - Fields: `id`, `document`, `profile`, `subject`, `revision_id`, `page_start`, `page_end`, `chunk_index`, `content`, `content_hash`, `source_type`, `reference_book`, `embedding`, `tsvector_content`, `stale`.
 - Production chunks store page spans (`page_start`, `page_end`) and index ordering (`chunk_index`), but do not store explicit markdown headings or section headers.
 
@@ -98,7 +98,7 @@ From [`backend/apps/retrieval/models.py`](file:///Users/yash/CV_Project/StudyAI/
 
 ## 5. A4. Frozen Match Function & Extractive Recall Ceiling
 
-The frozen match specification is committed to [`tests/evaluation/results/candidate_generation_v2/match_spec.md`](file:///Users/yash/CV_Project/StudyAI/tests/evaluation/results/candidate_generation_v2/match_spec.md).
+The frozen match specification is committed to [`tests/evaluation/results/candidate_generation_v2/match_spec.md`](tests/evaluation/results/candidate_generation_v2/match_spec.md).
 
 ### Match Rules Summary
 - **Normalization:** Lowercase, punctuation to space, safe plural stripping, whitespace collapsed.
@@ -160,6 +160,6 @@ D3  false-alarm rate, fully_covered + control  <= 10% of cases
 
 ## CHECKPOINT - Awaiting Review
 
-Phase A audit, frozen match specification ([match_spec.md](file:///Users/yash/CV_Project/StudyAI/tests/evaluation/results/candidate_generation_v2/match_spec.md)), split definitions ([split.json](file:///Users/yash/CV_Project/StudyAI/tests/evaluation/results/candidate_generation_v2/split.json)), and baseline measurements are complete and verified.
+Phase A audit, frozen match specification ([match_spec.md](tests/evaluation/results/candidate_generation_v2/match_spec.md)), split definitions ([split.json](tests/evaluation/results/candidate_generation_v2/split.json)), and baseline measurements are complete and verified.
 
 Please review this Phase A report and provide confirmation to proceed to Phase B (Implementation of the Reference-Structured Extractor).

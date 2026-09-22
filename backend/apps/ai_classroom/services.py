@@ -50,7 +50,7 @@ def _descriptor(document: Document) -> str:
         document.pages.exclude(current_revision_id=None).values_list("current_revision_id", flat=True)
     )
     prompt_versions = ",".join(sorted(QUALIFIED.values()))
-    model = getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
+    model = getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")
     payload = f"{document.pk}|{revision_ids}|{prompt_versions}|{model}"
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -336,7 +336,7 @@ def run_enrichment_job(job: Job) -> None:
     # Use actual provider/model from the enrichment execution, falling back
     # to the chain name / settings default only if not tracked in state.
     actual_provider = final_state.get("llm_provider", llm.name)
-    actual_model = final_state.get("llm_model") or getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
+    actual_model = final_state.get("llm_model") or getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")
 
     # ---- Persist atomically (§67-style boundary) --------------------------
     # Tagging and question generation are now inside the transaction (§53/§54):

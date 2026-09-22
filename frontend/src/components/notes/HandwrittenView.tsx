@@ -263,6 +263,14 @@ function UploadSource({ note, page, onPageChange, highlightToken }: Omit<Props, 
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [highlighted, setHighlighted] = useState(false);
+  const pollTimer = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -289,14 +297,35 @@ function UploadSource({ note, page, onPageChange, highlightToken }: Omit<Props, 
         loaded.push({ id: p.id, pageNumber: p.page_number, ocrStatus: p.ocr_status, imageUrl, revision });
       }
       setPages(loaded);
+      return loaded;
     } catch {
       setError(t("notes.detail.loadFailed"));
+      return null;
     }
-  }, [note.refId]);
+  }, [note.refId, t]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+    return stopPolling;
+  }, [load, stopPolling]);
+
+  // Poll while any page is pending or processing
+  useEffect(() => {
+    const hasPending = pages?.some((p) => p.ocrStatus === "pending" || p.ocrStatus === "processing");
+    if (!hasPending) {
+      stopPolling();
+      return;
+    }
+    stopPolling();
+    pollTimer.current = window.setInterval(async () => {
+      const updated = await load();
+      const stillPending = updated?.some((p) => p.ocrStatus === "pending" || p.ocrStatus === "processing");
+      if (!stillPending) {
+        stopPolling();
+      }
+    }, 2500);
+    return stopPolling;
+  }, [pages, load, stopPolling]);
 
   useEffect(() => {
     if (!highlightToken) return;

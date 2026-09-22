@@ -102,9 +102,7 @@ DATABASES = {
         "USER": "studyai_app",
         "HOST": "/tmp",
         "PORT": "5432",
-        "OPTIONS": {
-            "role": "studyai_app",  # enforce RLS context within transactions
-        },
+        "OPTIONS": {},
     }
 }
 
@@ -173,8 +171,8 @@ SIGNED_URL_TTL_SECONDS = 300
 CANVAS_LOCK_TTL_SECONDS = 90
 
 # Ingestion / OCR (architecture §6, §28, §47)
-OCR_PIPELINE_VERSION = "tesseract-v1"          # part of the OCR idempotency key (§20)
-OCR_PROVIDER_CHAIN = "tesseract,mock"     # primary, fallback — comma-separated string
+OCR_PIPELINE_VERSION = "qwen35-v1"          # part of the OCR idempotency key (§20)
+OCR_PROVIDER_CHAIN = "qwen35"               # StudyAI canonical OCR provider (qwen3.5:4b vision)
 OCR_REVIEW_THRESHOLD = 0.80               # avg confidence below → needs_review (§48)
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 UPLOAD_ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -192,23 +190,38 @@ AI_DAILY_BUDGET_PER_PROFILE = 500  # generous default; enforced when set
 # NoteSpace PDF renderer (architecture §7, §49)
 RENDERER_VERSION = "notespace-pdf-v1"
 
-# AI Classroom retrieval foundation (architecture §8, §10, §14)
-EMBEDDING_PROVIDER = "sentence_transformers"  # local embedder (MiniLM)
-EMBEDDING_DIMENSIONS = 384
-EMBEDDING_MODEL_VERSION = "sentence-transformers-all-MiniLM-L6-v2-v1"
+# AI Classroom retrieval foundation (StudyAI Target Stack: Qwen/Qwen3-Embedding-0.6B)
+EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "sentence_transformers")
+EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B")
+EMBEDDING_DIMENSIONS = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
+EMBEDDING_MODEL_VERSION = os.environ.get("EMBEDDING_MODEL_VERSION", "qwen3-embedding-0.6b-v1")
+EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE", "auto")
 CHUNKER_VERSION = "v1"
 CHUNK_WORDS = 120                       # target chunk size in words (§10)
 CHUNK_OVERLAP_WORDS = 30                # carried context window across chunk/page edges
 RETRIEVAL_RRF_K = 60                    # Reciprocal Rank Fusion constant
 RETRIEVAL_CANDIDATES = 50               # per-channel depth before fusion
 
-# LLM Provider Chain (Phase 11)
-# Primary LLM provider and optional fallback. Configured via environment variable
-# LLM_PROVIDER_CHAIN (comma-separated, e.g. "ollama" or "ollama,mock").
-# When LLM_DISABLE_FALLBACK is set, the chain will NOT fall back to secondary
-# providers on failure — this is the intended behavior for real enrichment.
-LLM_PROVIDER_CHAIN = os.environ.get("LLM_PROVIDER_CHAIN", "mock,mock")
-LLM_DISABLE_FALLBACK = os.environ.get("LLM_DISABLE_FALLBACK", "0").strip() in ("1", "true", "True")
+# LLM Provider Configuration (StudyAI Target Stack: qwen3.5:4b via Native Host Ollama)
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.5:4b")
+LLM_PROVIDER_CHAIN = os.environ.get("LLM_PROVIDER_CHAIN", "ollama")
+LLM_DISABLE_FALLBACK = os.environ.get("LLM_DISABLE_FALLBACK", "1").strip() in ("1", "true", "True")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.0"))
+LLM_NUM_CTX = int(os.environ.get("LLM_NUM_CTX", "16384"))
+LLM_NUM_PREDICT = int(os.environ.get("LLM_NUM_PREDICT", "4096"))
+ENRICHMENT_MODEL = os.environ.get("ENRICHMENT_MODEL", "qwen3.5:4b")
+
+# Thinking capability per stage (1 = on, 0 = off)
+LLM_THINK_DEFAULT = os.environ.get("LLM_THINK_DEFAULT", "0").strip() in ("1", "true", "True")
+LLM_THINK_OCR = os.environ.get("LLM_THINK_OCR", "0").strip() in ("1", "true", "True")
+LLM_THINK_ENRICHMENT = os.environ.get("LLM_THINK_ENRICHMENT", "0").strip() in ("1", "true", "True")
+LLM_THINK_GAP_DETECTION = os.environ.get("LLM_THINK_GAP_DETECTION", "0").strip() in ("1", "true", "True")
+LLM_THINK_QUESTION_GEN = os.environ.get("LLM_THINK_QUESTION_GEN", "0").strip() in ("1", "true", "True")
+LLM_THINK_CHAT = os.environ.get("LLM_THINK_CHAT", "0").strip() in ("1", "true", "True")
+LLM_THINK_TAGGING = os.environ.get("LLM_THINK_TAGGING", "0").strip() in ("1", "true", "True")
+LLM_THINK_VERIFICATION = os.environ.get("LLM_THINK_VERIFICATION", "0").strip() in ("1", "true", "True")
 
 # Web Search Provider (Phase 13: grounded RAG + web retrieval)
 WEB_SEARCH_PROVIDER = "duckduckgo"     # duckduckgo (real) | mock (tests)

@@ -76,7 +76,7 @@ class AgentViewSet(viewsets.GenericViewSet):
                 "verification_status": result.verification_status,
                 "verification_score": result.verification_score,
             }] if result.verification_status else result.citations,
-            model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+            model=getattr(settings, "LLM_MODEL", "qwen3.5:4b"),
             prompt_version=getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1"),
         )
 
@@ -183,7 +183,7 @@ def patch_chat_service():
                 role=ChatMessage.Role.ASSISTANT,
                 content=result.answer,
                 citations=result.citations,
-                model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+                model=getattr(settings, "LLM_MODEL", "qwen3.5:4b"),
                 prompt_version=getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1"),
             )
             return assistant_message

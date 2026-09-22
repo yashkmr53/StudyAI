@@ -151,6 +151,14 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
         .select_related("reference_book")
         .order_by("chunk_index")[:8]
     )
+    if not user_chunks and document.pages.exclude(current_revision_id=None).exists():
+        from apps.retrieval.services import index_document
+        index_document(document)
+        user_chunks = list(
+            NoteChunk.objects.filter(document=document, stale=False)
+            .select_related("reference_book")
+            .order_by("chunk_index")[:8]
+        )
 
     # Use RetrievalService to fetch reference chunks by relevance to document content
     # instead of non-deterministic order_by("?") (§51, G10).

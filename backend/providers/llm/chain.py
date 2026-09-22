@@ -12,7 +12,7 @@ import time
 from django.conf import settings
 from django.db import transaction
 
-from providers.base import LLMProvider, Prompt, StructuredLLMResult
+from providers.base import LLMProvider, LLMResult, Prompt, StructuredLLMResult
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +94,64 @@ class LLMChainProvider:
         self.providers = providers
         self.disable_fallback = False  # Set by get_llm_provider() based on env
 
-    def _timeouted_generate(self, provider, prompt, schema, request_id):
-        """Run provider.generate_structured with a timeout."""
+    @property
+    def model(self) -> str:
+        if self.providers and hasattr(self.providers[0], "model"):
+            return self.providers[0].model
+        from django.conf import settings
+        return getattr(settings, "LLM_MODEL", "qwen3.5:4b")
+
+    def _timeouted_generate(self, provider, prompt, schema, request_id, **kwargs):
+        """Run provider.generate_structured."""
         result = provider.generate_structured(
-            prompt=prompt, schema=schema, request_id=request_id
+            prompt=prompt, schema=schema, request_id=request_id, **kwargs
         )
         return result
 
-    def generate_structured(self, *, prompt: Prompt, schema=None, request_id: str, disable_fallback: bool = False) -> StructuredLLMResult:
+    def generate(self, prompt: Optional[Prompt] = None, *, request_id: str = "", **kwargs) -> LLMResult:
+        """Route plain text generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        if actual_prompt is None:
+            raise ValueError("Prompt is required for generate()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate"):
+            return primary.generate(prompt=actual_prompt, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate()")
+
+    def generate_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, *, request_id: str = "", **kwargs) -> LLMResult:
+        """Route multimodal image generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        actual_image = image if image is not None else kwargs.get("image")
+        if actual_prompt is None or actual_image is None:
+            raise ValueError("Prompt and image are required for generate_with_image()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate_with_image"):
+            return primary.generate_with_image(prompt=actual_prompt, image=actual_image, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate_with_image()")
+
+    def generate_structured_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, schema: Any = None, *, request_id: str = "", **kwargs) -> StructuredLLMResult:
+        """Route multimodal structured generation to primary provider."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        actual_image = image if image is not None else kwargs.get("image")
+        actual_schema = schema or kwargs.get("schema")
+        if actual_prompt is None or actual_image is None:
+            raise ValueError("Prompt and image are required for generate_structured_with_image()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        if hasattr(primary, "generate_structured_with_image"):
+            return primary.generate_structured_with_image(prompt=actual_prompt, image=actual_image, schema=actual_schema, request_id=request_id, **kwargs)
+        raise NotImplementedError(f"Primary provider {primary.name} does not support generate_structured_with_image()")
+
+    def generate_structured(self, prompt: Optional[Prompt] = None, *, schema=None, request_id: str = "", disable_fallback: bool = False, **kwargs) -> StructuredLLMResult:
+        actual_prompt = prompt or kwargs.get("prompt")
+        if actual_prompt is None:
+            raise ValueError("Prompt is required for generate_structured()")
+        prompt = actual_prompt
         # Combine instance-level setting with explicit parameter
         no_fallback = self.disable_fallback or disable_fallback
         attempted: list[str] = []
@@ -123,7 +173,7 @@ class LLMChainProvider:
                     user=sanitized_user,
                 )
                 
-                result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id)
+                result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id, **kwargs)
                 latency_ms = int((time.monotonic() - started) * 1000)
                 # Mock providers don't return token counts; real providers will populate these
                 input_tokens = getattr(result, "input_tokens", 0)

@@ -173,7 +173,7 @@ QUALIFIED = {p["prompt_name"]: f"{p['prompt_name']}:{p['version']}" for p in DEF
 def seed_prompt_versions() -> int:
     """Idempotent registry seeding; returns number of rows created/updated."""
     created = 0
-    model = getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")
+    model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
     for spec in DEFAULT_PROMPTS:
         obj, was_created = PromptVersion.objects.update_or_create(
             prompt_name=spec["prompt_name"],

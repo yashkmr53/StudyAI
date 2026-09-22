@@ -26,7 +26,7 @@ export const MODULE_SERVICE_MATRIX: Record<ModuleId, ModuleServiceConfig> = {
   NOTE_SPACE: {
     transcription: true,
     write: true,
-    enrichment: false,
+    enrichment: true,
     tests: false,
     qa: false,
     chat: false,

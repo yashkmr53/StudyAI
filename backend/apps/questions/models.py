@@ -18,14 +18,26 @@ class Question(models.Model):
         MEDIUM = "medium", "medium"
         HARD = "hard", "hard"
 
+    class QuestionType(models.TextChoices):
+        MCQ = "mcq", "Multiple Choice"
+        FLASHCARD = "flashcard", "Flashcard"
+        SHORT_ANSWER = "short_answer", "Short Answer"
+        EXPLANATION = "explanation", "Explanation"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="questions")
     source_revision_id = models.UUIDField()
     source_chunk_id = models.UUIDField()
+    question_type = models.CharField(
+        max_length=32,
+        choices=QuestionType.choices,
+        default=QuestionType.MCQ,
+    )
     difficulty = models.CharField(max_length=8, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     prompt = models.TextField()
     options = models.JSONField(default=list)  # list[str]
-    answer_index = models.PositiveIntegerField()
+    answer_index = models.PositiveIntegerField(default=0)
+    explanation = models.TextField(blank=True, default="")
     content_hash = models.CharField(max_length=64)
     question_key = models.CharField(max_length=64)  # stable identity within revision+hash
     generation_model = models.CharField(max_length=128)

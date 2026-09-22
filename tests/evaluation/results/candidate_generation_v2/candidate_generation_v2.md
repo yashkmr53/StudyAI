@@ -119,7 +119,7 @@ In the seeded random sample of 50 unmatched test candidates:
 
 ## 6. Regression Testing Verification
 
-All 10 mandatory regression dimensions in [`test_gap_candidates_v2.py`](file:///Users/yash/CV_Project/StudyAI/backend/tests/evaluation/test_gap_candidates_v2.py) passed:
+All 10 mandatory regression dimensions in [`test_gap_candidates_v2.py`](backend/tests/evaluation/test_gap_candidates_v2.py) passed:
 1. **Quality:** Multi-word preservation, boundary stopword stripping, single-token noise elimination.
 2. **Normalization & Deduplication:** 10/10 must-merge pairs merged, 10/10 must-not-merge pairs preserved distinct.
 3. **Determinism:** Byte-identical candidate output across repeated runs.

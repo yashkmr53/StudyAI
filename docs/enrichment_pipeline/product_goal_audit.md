@@ -161,19 +161,19 @@ A controlled end-to-end execution test was performed directly against the produc
 ### P0 Blockers (Preventing the End-to-End Product Flow Today)
 
 #### 1. OCR Initialization Crash
-* **File:** [`backend/providers/ocr/local.py`](file:///Users/yash/CV_Project/StudyAI/backend/providers/ocr/local.py#L34)
+* **File:** [`backend/providers/ocr/local.py`](backend/providers/ocr/local.py#L34)
 * **Root Cause:** Line 34 invokes `tesserocr.get_tesseract_version()`. The `tesserocr` C-extension module exports `tesserocr.tesseract_version()`.
 * **Symptom:** In `_check_tesseract()`, an `AttributeError` is caught, logging `"Tesseract initialization failed: module 'tesserocr' has no attribute 'get_tesseract_version'"`. `self._tesserocr` is set to `None`.
 * **Consequence:** `get_ocr_provider()` in `backend/providers/registry.py` detects that the local provider failed and falls back to `MockOCRProvider`. Every uploaded note image produces synthetic dummy text (`"line_0_..."`). Real handwriting never enters the database.
 
 #### 2. Missing Reference Corpus Ingestion
-* **File:** [`tests/evaluation/datasets/golden_v2.json`](file:///Users/yash/CV_Project/StudyAI/tests/evaluation/datasets/golden_v2.json)
+* **File:** [`tests/evaluation/datasets/golden_v2.json`](tests/evaluation/datasets/golden_v2.json)
 * **Root Cause:** `golden_v2.json` (40 base cases, 241 chunks across Biology, Chemistry, Physics, Economics, CS, and Mathematics) is stored only as an offline JSON test file. No ingestion command or database migration has inserted these records into the PostgreSQL `ReferenceBook` and `NoteChunk` tables.
 * **Symptom:** Live reference retrieval only searches the 558 legacy books / 768 chunks loaded during initial development (`eval_001`).
 * **Consequence:** If a student uploads notes on subjects from the golden dataset, the system cannot retrieve the corresponding textbook material.
 
 #### 3. Note Indexing Does Not Auto-Trigger Enrichment
-* **File:** [`backend/apps/retrieval/services.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/retrieval/services.py#L281-L285)
+* **File:** [`backend/apps/retrieval/services.py`](backend/apps/retrieval/services.py#L281-L285)
 * **Root Cause:** When `run_ocr_job` finishes, it enqueues `run_index_job`. When `run_index_job` completes, it only executes:
   ```python
   EnrichedNote.objects.filter(document=document).update(ai_stale=True)
@@ -187,7 +187,7 @@ A controlled end-to-end execution test was performed directly against the produc
 ### P1 Blockers (Degrading Product Quality and User Experience)
 
 #### 1. Frontend Citation UI Semantic Inversion
-* **File:** [`frontend/src/components/notes/EnrichedView.tsx`](file:///Users/yash/CV_Project/StudyAI/frontend/src/components/notes/EnrichedView.tsx#L196-L209)
+* **File:** [`frontend/src/components/notes/EnrichedView.tsx`](frontend/src/components/notes/EnrichedView.tsx#L196-L209)
 * **Root Cause:** The React component iterates over `block.citations` and renders:
   ```tsx
   <button className="citation-chip" onClick={() => onCitation(citation.page)}>
@@ -197,12 +197,12 @@ A controlled end-to-end execution test was performed directly against the produc
 * **Consequence:** Clicking the citation chip scrolls the user's viewer to page `X` of their *own uploaded handwritten note*. The UI provides no element showing the title of the reference book, the chapter, or the quoted passage from the textbook that grounded the enrichment.
 
 #### 2. LangGraph Gap Pipeline Uses Legacy v1 Candidate Generator
-* **File:** [`backend/apps/ai_classroom/enrichment_nodes.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/ai_classroom/enrichment_nodes.py#L255-L290)
+* **File:** [`backend/apps/ai_classroom/enrichment_nodes.py`](backend/apps/ai_classroom/enrichment_nodes.py#L255-L290)
 * **Root Cause:** The production graph imports `generate_candidates` from `gap_candidates.py` (sliding n-gram extraction, which was measured at 82.9% noise in Phase A/B).
 * **Consequence:** 8 out of 10 candidate gaps passed to Qwen 2.5:7B are sentence fragments or grammatical noise, unnecessarily increasing inference latency and causing valid gaps to be overlooked.
 
 #### 3. HuggingFace Cold-Start Network Dependency
-* **File:** [`backend/providers/embeddings/local.py`](file:///Users/yash/CV_Project/StudyAI/backend/providers/embeddings/local.py)
+* **File:** [`backend/providers/embeddings/local.py`](backend/providers/embeddings/local.py)
 * **Root Cause:** On the very first invocation in a fresh Docker container, `SentenceTransformer` attempts to make HTTPS HEAD calls to `huggingface.co` to check for remote configuration updates.
 * **Consequence:** When outbound internet access is restricted or delayed, it throws `[Errno 101] Network is unreachable` and triggers a 30–60 second retry loop before using the local disk cache. If this happens during `retrieve_chunks_node`, it triggers the `except Exception:` fallback branch.
 
@@ -213,7 +213,7 @@ A controlled end-to-end execution test was performed directly against the produc
 The following ordered sequence of 5 minimal fixes will deliver the complete end-to-end product flow without architectural overengineering:
 
 ### Step 1: Fix OCR Method Name & Validate Local Ingestion
-- In [`backend/providers/ocr/local.py`](file:///Users/yash/CV_Project/StudyAI/backend/providers/ocr/local.py#L34):
+- In [`backend/providers/ocr/local.py`](backend/providers/ocr/local.py#L34):
   - Change `version = tesserocr.get_tesseract_version()` to `version = tesserocr.tesseract_version()`.
 - Test that an uploaded sample note image successfully populates `DocumentLine` with recognized text instead of mock hash tokens.
 
@@ -226,7 +226,7 @@ The following ordered sequence of 5 minimal fixes will deliver the complete end-
 - Run `python manage.py ingest_golden_reference` inside `studyai-api-1`.
 
 ### Step 3: Connect Note Indexing Directly to Enrichment Dispatch
-- In [`backend/apps/retrieval/services.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/retrieval/services.py#L285):
+- In [`backend/apps/retrieval/services.py`](backend/apps/retrieval/services.py#L285):
   - At the completion of `run_index_job`, check if `document.source == Document.Source.UPLOAD`.
   - Automatically call:
     ```python
@@ -236,12 +236,12 @@ The following ordered sequence of 5 minimal fixes will deliver the complete end-
 - This ensures note upload triggers: `Upload -> OCR -> Indexing -> Enrichment` automatically.
 
 ### Step 4: Wire Structured Candidate Extractor into LangGraph
-- In [`backend/apps/ai_classroom/enrichment_nodes.py`](file:///Users/yash/CV_Project/StudyAI/backend/apps/ai_classroom/enrichment_nodes.py#L255):
+- In [`backend/apps/ai_classroom/enrichment_nodes.py`](backend/apps/ai_classroom/enrichment_nodes.py#L255):
   - Replace the sliding n-gram heuristic with the structured candidate extractor from Phase A/B.
   - Preserve `source_ref` links to the originating reference chunk IDs so that candidate gaps carry unambiguous provenance into gap filling.
 
 ### Step 5: Update Frontend `EnrichedView.tsx` to Render Reference Citations
-- In [`frontend/src/components/notes/EnrichedView.tsx`](file:///Users/yash/CV_Project/StudyAI/frontend/src/components/notes/EnrichedView.tsx#L196-L209):
+- In [`frontend/src/components/notes/EnrichedView.tsx`](frontend/src/components/notes/EnrichedView.tsx#L196-L209):
   - Update citation rendering to display:
     1. **Textbook Reference:** Book title and chapter badge with verification status badge (`Supported` / `Partially Supported`).
     2. **Evidence Popover / Tooltip:** Hover or click to view the reference quote snippet.

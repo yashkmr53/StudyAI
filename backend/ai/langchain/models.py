@@ -195,12 +195,12 @@ class LangChainEmbeddingAdapter(EmbeddingProvider):
     ):
         self.name = name
         self._model_name = model_name or os.environ.get(
-            "EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+            "EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B"
         )
         self.device = device or os.environ.get("EMBEDDING_DEVICE", "auto")
         self.batch_size = batch_size
         self._embeddings = None
-        self._dimension = 384
+        self._dimension = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
         self._model_version = f"{self._model_name.replace('/', '-')}-v1"
         self._init_embeddings()
 

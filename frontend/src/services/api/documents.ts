@@ -8,6 +8,8 @@ export interface DocumentInfo {
   source_type: string;
   schema_version: string;
   created_at: string;
+  title?: string;
+  filename?: string;
 }
 
 export interface PageStatus {
@@ -58,10 +60,12 @@ export interface DigitizedInfo {
 }
 
 export const documentsApi = {
-  create(profileId: string, filename: string, sourceType = "image") {
+  create(profileId: string, filename: string, sourceType = "image", subjectId?: string | null) {
+    const body: Record<string, unknown> = { profile: profileId, source_type: sourceType, filename };
+    if (subjectId) body.subject = subjectId;
     return apiRequest<{ document: DocumentInfo; page: PageStatus; upload: { url: string; key: string } }>(
       "/documents",
-      { method: "POST", body: { profile: profileId, source_type: sourceType, filename } },
+      { method: "POST", body },
     );
   },
 

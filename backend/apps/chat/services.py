@@ -9,7 +9,7 @@ Agent mode (Phase 1): When X-Agent-Mode header is present or AGENT_ENABLED,
 uses StudyAIAgent for multi-step tool-use orchestration.
 """
 import json
-from typing import Optional
+from typing import Optional, Union, Any
 import logging
 import re
 import time
@@ -58,7 +58,13 @@ def _tokenize(text: str) -> Iterator[str]:
 class ChatService:
     @staticmethod
     @transaction.atomic
-    def ask(session: ChatSession, content: str, *, use_agent: bool = False) -> ChatMessage:
+    def ask(
+        session: ChatSession,
+        content: str,
+        *,
+        image: Optional[Union[bytes, str]] = None,
+        use_agent: bool = False,
+    ) -> ChatMessage:
         content = (content or "").strip()
         if not content:
             from shared.exceptions import ValidationError
@@ -91,7 +97,7 @@ class ChatService:
             return ChatService._ask_agent(session, content)
 
         # Classic RAG mode (original implementation)
-        return ChatService._ask_classic(session, content, previous_messages=previous_messages)
+        return ChatService._ask_classic(session, content, previous_messages=previous_messages, image=image)
 
     @staticmethod
     def _generate_title(content: str) -> str:
@@ -108,7 +114,12 @@ class ChatService:
         return truncated
 
     @staticmethod
-    def _ask_classic(session: ChatSession, content: str, previous_messages: Optional[list[dict]] = None) -> ChatMessage:
+    def _ask_classic(
+        session: ChatSession,
+        content: str,
+        previous_messages: Optional[list[dict]] = None,
+        image: Optional[Union[bytes, str]] = None,
+    ) -> ChatMessage:
         """LangGraph-based RAG chatbot implementation."""
         from ai.langgraph.graphs.chat_graph import invoke_chat_graph
         from ai.langgraph.state.chat_state import ChatState
@@ -140,6 +151,9 @@ class ChatService:
             errors=[],
             execution_metadata={},
             current_date=None,
+            image=image,
+            model=None,
+            provider=None,
         )
 
         final_state = invoke_chat_graph(initial_state)
@@ -159,17 +173,18 @@ class ChatService:
         if route == "conversational" or not has_evidence:
             citations = []
 
+        canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
         message = ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
             content=answer,
             citations=citations,
-            model=final_state.get("model", getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")),
+            model=canonical_model,
             prompt_version=CHAT_PROMPT_VERSION,
             verification_status=verification_status,
             verification_score=verification_score,
         )
-        logger.info("Chat %s answered with %s citation(s) [%s] (route=%s)", session.pk, len(citations), verification_status, route)
+        logger.info("Chat %s answered with %s citation(s) [%s] (route=%s, model=%s)", session.pk, len(citations), verification_status, route, canonical_model)
         return message
 
     @staticmethod
@@ -180,18 +195,19 @@ class ChatService:
         agent = StudyAIAgent()
         result = agent.process_request(content, session.profile.user, session)
 
+        canonical_model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
         message = ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
             content=result.answer,
             citations=result.citations,
-            model=getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+            model=canonical_model,
             prompt_version=AGENT_PROMPT_VERSION,
         )
         logger.info(
-            "Agent chat %s answered with %s citation(s) [%s] (tools=%d, iterations=%d, outcome=%s)",
+            "Agent chat %s answered with %s citation(s) [%s] (tools=%d, iterations=%d, outcome=%s, model=%s)",
             session.pk, len(result.citations), result.verification_status,
-            len(result.tool_calls), result.iterations, result.outcome
+            len(result.tool_calls), result.iterations, result.outcome, canonical_model
         )
         return message
 
@@ -204,6 +220,7 @@ class ChatService:
         session: ChatSession,
         content: str,
         *,
+        image: Optional[Union[bytes, str]] = None,
         use_agent: bool = False,
     ) -> Iterator[str]:
         """Generator that yields Server-Sent Events for a chat turn.
@@ -267,7 +284,7 @@ class ChatService:
                 final_state = ChatService._run_agent_for_stream(session, content)
             else:
                 final_state = ChatService._run_classic_for_stream(
-                    session, content, previous_messages
+                    session, content, previous_messages, image=image
                 )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Chat stream failed")
@@ -299,6 +316,7 @@ class ChatService:
         if citations:
             yield _sse(EVT_CITATIONS, {"citations": citations})
 
+        canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
         try:
             with transaction.atomic():
                 persisted = ChatMessage.objects.create(
@@ -306,7 +324,7 @@ class ChatService:
                     role=ChatMessage.Role.ASSISTANT,
                     content=answer,
                     citations=citations,
-                    model=final_state.get("model", getattr(settings, "ENRICHMENT_MODEL", "mock-gpt")),
+                    model=canonical_model,
                     prompt_version=CHAT_PROMPT_VERSION,
                     verification_status=verification_status,
                     verification_score=verification_score,
@@ -331,6 +349,7 @@ class ChatService:
         session: ChatSession,
         content: str,
         previous_messages: list[dict],
+        image: Optional[Union[bytes, str]] = None,
     ) -> dict:
         from ai.langgraph.graphs.chat_graph import invoke_chat_graph
         from ai.langgraph.state.chat_state import ChatState
@@ -354,6 +373,9 @@ class ChatService:
             errors=[],
             execution_metadata={},
             current_date=None,
+            image=image,
+            model=None,
+            provider=None,
         )
         return invoke_chat_graph(initial_state)
 
@@ -368,5 +390,5 @@ class ChatService:
             "citations": result.citations,
             "verification_status": result.verification_status,
             "verification_score": result.verification_score,
-            "model": getattr(settings, "ENRICHMENT_MODEL", "mock-gpt"),
+            "model": getattr(settings, "LLM_MODEL", "qwen3.5:4b"),
         }

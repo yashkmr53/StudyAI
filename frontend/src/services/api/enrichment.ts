@@ -11,16 +11,26 @@ import { apiRequest } from "./client";
 import type { CitationRef, EnrichedBlock, EnrichmentState, EnrichmentSnapshot } from "../../types/domain";
 
 interface WireSourceRef {
+  source_type?: string;
+  chunk_id?: string;
+  document_id?: string;
   page_number?: number;
+  content?: string;
+  title?: string;
   bbox?: unknown;
+  retrieval_score?: number | null;
 }
 
 interface WireCitation {
   source_refs?: WireSourceRef[];
+  verification_status?: string;
+  verification_score?: number | null;
+  verifier_version?: string;
 }
 
 interface WireBlock {
   block_index?: number;
+  block_type?: string;
   title?: string;
   content?: string;
   citation?: WireCitation | null;
@@ -37,12 +47,23 @@ interface WireEnrichment {
 
 function normalizeCitations(block: WireBlock): CitationRef[] {
   const refs = block.citation?.source_refs ?? [];
-  return refs
-    .filter((r) => typeof r.page_number === "number")
-    .map((r) => ({
-      page: r.page_number as number,
+  const verificationStatus = block.citation?.verification_status;
+  const verificationScore = block.citation?.verification_score;
+
+  return refs.map((r) => {
+    const pageNum = typeof r.page_number === "number" ? r.page_number : 1;
+    return {
+      page: pageNum,
       bbox: Array.isArray(r.bbox) ? r.bbox.map(Number) : null,
-    }));
+      sourceType: r.source_type ?? "image",
+      content: r.content ?? "",
+      chunkId: r.chunk_id,
+      documentId: r.document_id,
+      title: r.title,
+      verificationStatus,
+      verificationScore,
+    };
+  });
 }
 
 function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
