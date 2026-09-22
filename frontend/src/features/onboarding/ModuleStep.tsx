@@ -60,10 +60,7 @@ export function ModuleStep() {
     if (profileId && choice) {
       try {
         const updated = await profilesApi.setModule(profileId, choice);
-        // Update local auth store with the new module
-        useAuthStore.setState((state) => ({
-          profile: state.profile ? { ...state.profile, module: updated.module } : null,
-        }));
+        useAuthStore.getState().switchToProfile(updated);
       } catch {
         // Ignore backend errors; local store will reflect choice on next init
       }

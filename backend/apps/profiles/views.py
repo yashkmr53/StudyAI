@@ -25,7 +25,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
         return obj
 
     def perform_create(self, serializer):
-        module = self.request.headers.get("X-Active-Module")
+        module = serializer.validated_data.get("module") or self.request.headers.get("X-Active-Module")
         if module not in dict(Profile.Module.choices):
             module = Profile.Module.NOTE_SPACE
         try:
