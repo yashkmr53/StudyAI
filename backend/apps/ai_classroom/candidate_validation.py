@@ -3,8 +3,11 @@
 This module provides a focused LLM prompt that asks Qwen to validate
 specific candidate concepts rather than discover gaps from scratch.
 """
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
 import json
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 from apps.ai_classroom.prompts import active_prompt
 from providers.base import Prompt
 from providers.registry import get_llm_provider
