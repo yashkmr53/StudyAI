@@ -1,13 +1,15 @@
 """LLM provider fallback chain (architecture §28).
-from typing import Optional
 
 Mirrors OCRChainProvider: primary attempt → fallback attempt(s) →
 ProviderUnavailable. Every attempt is recorded in ProviderCallLog for
 observability (§25).
 """
+from __future__ import annotations
+
 import logging
 import re
 import time
+from typing import Any, Optional
 
 from django.conf import settings
 from django.db import transaction
