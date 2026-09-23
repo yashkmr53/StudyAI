@@ -144,7 +144,13 @@ class NoteSpaceService:
         from providers.registry import get_object_storage
         from apps.documents.pdf_renderer import render_pdf
 
-        document = Document.objects.get(pk=job.resource_id)
+        try:
+            document = Document.objects.get(pk=job.resource_id)
+        except Document.DoesNotExist:
+            logger.info("PDF render job %s document %s no longer exists (deleted); skipping.", job.pk, job.resource_id)
+            job.status = Job.Status.CANCELLED
+            job.save(update_fields=("status",))
+            return
         layout = NoteSpaceService.build_layout_with_revisions(document)
         content_hash, pages = compute_descriptor_hash(layout)
 

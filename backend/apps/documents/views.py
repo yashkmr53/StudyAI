@@ -8,12 +8,17 @@ POST /api/v1/documents/{id}/revisions         finalize-upload OR user-edit revis
 POST /api/v1/documents/{id}/retry-processing
 POST /api/v1/documents/pages/{page_id}/finalize-upload   (explicit §46 step)
 """
+import logging
 from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
+
+logger = logging.getLogger(__name__)
 
 from apps.documents.models import (
     DigitizedDocument,
@@ -26,6 +31,7 @@ from apps.documents.serializers import (
     DocumentPageRevisionSerializer,
     DocumentPageSerializer,
     DocumentSerializer,
+    DocumentUpdateSerializer,
     RevisionCreateSerializer,
     RetryProcessingSerializer,
 )
@@ -44,14 +50,27 @@ class DocumentViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     serializer_class = DocumentSerializer
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     throttle_scope = "ai"
 
     def get_queryset(self):
-        return Document.objects.filter(profile__user=self.request.user)
+        qs = Document.objects.filter(profile__user=self.request.user)
+        active_profile_id = (
+            self.request.headers.get("X-Active-Profile")
+            or self.request.META.get("HTTP_X_ACTIVE_PROFILE")
+            or self.request.query_params.get("profile")
+        )
+        if active_profile_id:
+            profile = ProfileAuthorizationService.get_owned_profile(
+                self.request.user, active_profile_id
+            )
+            qs = qs.filter(profile=profile)
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = DocumentCreateSerializer(data=request.data)
@@ -60,6 +79,8 @@ class DocumentViewSet(
         ProfileAuthorizationService.ensure_profile_access(request.user, profile)
         if serializer.validated_data.get("subject"):
             ProfileAuthorizationService.ensure_subject_access(request.user, serializer.validated_data["subject"])
+        if serializer.validated_data.get("notebook"):
+            ProfileAuthorizationService.ensure_profile_access(request.user, serializer.validated_data["notebook"].profile)
 
         from providers.registry import get_object_storage
 
@@ -70,13 +91,15 @@ class DocumentViewSet(
             source=Document.Source.UPLOAD,
             source_type=serializer.validated_data["source_type"],
             subject=serializer.validated_data.get("subject"),
+            notebook=serializer.validated_data.get("notebook"),
+            title=serializer.validated_data.get("title", ""),
             filename=serializer.validated_data["filename"],
         )
         ext = ".jpg" if "jpeg" in (request.data.get("content_type") or "") else ".png"
         key = f"{profile.id}/{page.id}{ext}"
         page.image_ref = key
         page.save(update_fields=("image_ref",))
-        upload_url = storage.create_upload_url(key,content_type="application/octet-stream",ttl_seconds=settings.SIGNED_URL_TTL_SECONDS,)
+        upload_url = storage.create_upload_url(key, content_type="application/octet-stream", ttl_seconds=settings.SIGNED_URL_TTL_SECONDS)
         audit_event(actor=request.user, action="document.created", resource_type="document",
                     resource_id=document.pk, request=request)
         return Response(
@@ -87,6 +110,69 @@ class DocumentViewSet(
             },
             status=status.HTTP_201_CREATED,
         )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", True)
+        instance = self.get_object()
+        serializer = DocumentUpdateSerializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        audit_event(actor=request.user, action="document.updated", resource_type="document",
+                    resource_id=instance.pk, request=request)
+        return Response(DocumentSerializer(instance).data)
+
+    def perform_destroy(self, instance):
+        from providers.registry import get_object_storage
+        storage = get_object_storage()
+
+        # 1. Collect storage keys before deleting DB records
+        storage_keys = []
+        for page in instance.pages.all():
+            if page.image_ref:
+                storage_keys.append(page.image_ref)
+        for digitized in instance.digitized_documents.all():
+            if digitized.pdf_ref:
+                storage_keys.append(digitized.pdf_ref)
+
+        with transaction.atomic():
+            # 2. Cancel any pending or running jobs for this document
+            Job.objects.filter(
+                resource_type="document",
+                resource_id=str(instance.pk),
+                status__in=[Job.Status.QUEUED, Job.Status.RUNNING],
+            ).update(status=Job.Status.CANCELLED, finished_at=timezone.now())
+
+            revision_ids = [
+                str(r)
+                for r in DocumentPageRevision.objects.filter(
+                    page__document=instance
+                ).values_list("id", flat=True)
+            ]
+            if revision_ids:
+                Job.objects.filter(
+                    job_type="ocr",
+                    resource_type="document_page_revision",
+                    resource_id__in=revision_ids,
+                    status__in=[Job.Status.QUEUED, Job.Status.RUNNING],
+                ).update(status=Job.Status.CANCELLED, finished_at=timezone.now())
+
+            # 3. Audit and delete DB instance (cascades to pages, revisions, lines, chunks/vectors, enrichment, questions)
+            audit_event(
+                actor=self.request.user,
+                action="document.deleted",
+                resource_type="document",
+                resource_id=instance.pk,
+                request=self.request,
+            )
+            instance.delete()
+
+        # 4. Clean up storage objects
+        for key in storage_keys:
+            try:
+                if storage.exists(key):
+                    storage.delete(key)
+            except Exception as exc:
+                logger.warning("Failed to delete storage key %s on document deletion: %s", key, exc)
 
     @action(detail=True, methods=["get"])
     def pages(self, request, pk=None):

@@ -30,6 +30,14 @@ class Document(models.Model):
     # Nullable only for platform reference books (source="reference").
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, null=True, blank=True, related_name="documents")
     subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name="documents")
+    notebook = models.ForeignKey(
+        "notebooks.Notebook",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents",
+    )
+    title = models.CharField(max_length=255, default="Untitled Note")
     source = models.CharField(max_length=20, choices=Source.choices)
     source_type = models.CharField(max_length=20, choices=SourceType.choices)
     schema_version = models.CharField(max_length=16, default="1")

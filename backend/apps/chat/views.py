@@ -44,7 +44,11 @@ class ChatSessionViewSet(
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        return ChatSession.objects.filter(profile__user=self.request.user)
+        qs = ChatSession.objects.filter(profile__user=self.request.user)
+        profile = getattr(self.request, "profile", None)
+        if profile:
+            qs = qs.filter(profile=profile)
+        return qs
 
     def perform_content_negotiation(self, request):
         if getattr(self, "action", None) == "stream_message":
@@ -55,18 +59,24 @@ class ChatSessionViewSet(
     def create(self, request, *args, **kwargs):
         serializer = CreateSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        profile = getattr(request, "profile", None)
+        if not profile:
+            from shared.exceptions import ValidationError
+
+            raise ValidationError("No active profile found for this user.")
+
         subject = None
         if serializer.validated_data.get("subject"):
             try:
                 subject = Subject.objects.get(
-                    pk=serializer.validated_data["subject"], profile__user=request.user
+                    pk=serializer.validated_data["subject"], profile=profile
                 )
             except Subject.DoesNotExist:
                 from shared.exceptions import ValidationError
 
-                raise ValidationError("Unknown subject for this user.")
+                raise ValidationError("Unknown subject for this profile.")
         session = ChatSession.objects.create(
-            profile=Profile.objects.filter(user=request.user).first(),
+            profile=profile,
             subject=subject,
             title=serializer.validated_data.get("title", ""),
         )

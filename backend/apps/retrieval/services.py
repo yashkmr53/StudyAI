@@ -156,7 +156,13 @@ def enqueue_index_job(document: Document) -> tuple[Job, bool]:
 
 
 def run_index_job(job: Job) -> None:
-    document = Document.objects.select_related("profile").get(pk=job.resource_id)
+    try:
+        document = Document.objects.select_related("profile").get(pk=job.resource_id)
+    except Document.DoesNotExist:
+        logger.info("Index job %s document %s no longer exists (deleted); skipping.", job.pk, job.resource_id)
+        job.status = Job.Status.CANCELLED
+        job.save(update_fields=("status",))
+        return
     stats = index_document(document)
     logger.info(
         "Indexed document %s: kept=%s stale=%s created=%s embedded=%s",

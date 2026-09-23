@@ -257,7 +257,13 @@ def run_enrichment_job(job: Job) -> None:
     from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
     from ai.langgraph.state.enrichment_state import EnrichmentState
 
-    document = Document.objects.select_related("profile").get(pk=job.resource_id)
+    try:
+        document = Document.objects.select_related("profile").get(pk=job.resource_id)
+    except Document.DoesNotExist:
+        logger.info("Enrichment job %s document %s no longer exists (deleted); skipping.", job.pk, job.resource_id)
+        job.status = Job.Status.CANCELLED
+        job.save(update_fields=("status",))
+        return
 
     # --- Checkpoint recovery (§28/§52): resume from last completed node --
     last_checkpoint = JobExecutionState.objects.filter(job=job).order_by("-created_at").first()
@@ -344,6 +350,11 @@ def run_enrichment_job(job: Job) -> None:
     # is rolled back and retried, avoiding inconsistent state.
     try:
         with transaction.atomic():
+            if not Document.objects.filter(pk=document.pk).exists():
+                logger.info("Document %s was deleted during enrichment inference; aborting persistence.", document.pk)
+                job.status = Job.Status.CANCELLED
+                job.save(update_fields=("status",))
+                return
             EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
             note = EnrichedNote.objects.create(
                 document=document,
