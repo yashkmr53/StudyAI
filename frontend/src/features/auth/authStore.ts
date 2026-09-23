@@ -33,6 +33,8 @@ interface AuthState {
   switchProfile: (id: string) => void;
   switchToProfile: (profile: Profile) => void;
   addProfile: (name: string, module?: ModuleId) => Promise<Profile>;
+  renameProfile: (id: string, name: string) => Promise<Profile>;
+  deleteProfile: (id: string) => Promise<void>;
 }
 
 function loadSelectedProfileIds(): Record<ModuleId, string | null> {
@@ -349,6 +351,43 @@ export const useAuthStore = create<AuthState>((set, get) => {
         selectedProfileIds: { ...state.selectedProfileIds, [activeModule]: created.id },
       }));
       return created;
+    },
+
+    async renameProfile(id, name) {
+      const updated = await profilesApi.rename(id, name);
+      set((state) => ({
+        profiles: state.profiles.map((p) => (p.id === id ? updated : p)),
+        profile: state.profile?.id === id ? updated : state.profile,
+      }));
+      return updated;
+    },
+
+    async deleteProfile(id) {
+      await profilesApi.remove(id);
+      const wasActive = get().profile?.id === id;
+      if (typeof localStorage !== "undefined") {
+        if (wasActive) {
+          localStorage.removeItem("studyai.profile");
+        }
+        if (localStorage.getItem("studyai.profile.NOTE_SPACE") === id) {
+          saveSelectedProfileId("NOTE_SPACE", null);
+        }
+        if (localStorage.getItem("studyai.profile.AI_CLASSROOM") === id) {
+          saveSelectedProfileId("AI_CLASSROOM", null);
+        }
+      }
+      if (wasActive) {
+        useWorkspaceStore.getState().resetWorkspace();
+        await get().refreshProfiles();
+      } else {
+        set((state) => ({
+          profiles: state.profiles.filter((p) => p.id !== id),
+          selectedProfileIds: {
+            NOTE_SPACE: state.selectedProfileIds.NOTE_SPACE === id ? null : state.selectedProfileIds.NOTE_SPACE,
+            AI_CLASSROOM: state.selectedProfileIds.AI_CLASSROOM === id ? null : state.selectedProfileIds.AI_CLASSROOM,
+          },
+        }));
+      }
     },
   };
 });

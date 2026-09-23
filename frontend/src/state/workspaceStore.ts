@@ -3,6 +3,8 @@ import { appI18n } from "../i18n";
 import {
   allFolders,
   allNotes,
+  deleteFolderTree,
+  deleteNote,
   getNote,
   kvGet,
   kvSet,
@@ -51,8 +53,11 @@ interface WorkspaceState {
     name: string,
     parentId: string | null,
   ) => Promise<FolderNode>;
+  renameFolder: (id: string, name: string) => Promise<void>;
+  removeFolder: (id: string) => Promise<void>;
 
   placeNote: (noteId: string, folderId: string | null) => Promise<void>;
+  moveNote: (noteId: string, folderId: string | null) => Promise<void>;
   upsertNote: (note: NoteMeta) => Promise<void>;
   registerCanvasNote: (input: {
     sessionId: string;
@@ -69,6 +74,7 @@ interface WorkspaceState {
     title: string;
   }) => Promise<NoteMeta>;
   renameNote: (noteId: string, title: string) => Promise<void>;
+  removeNote: (noteId: string) => Promise<void>;
   noteById: (noteId: string) => NoteMeta | undefined;
 }
 
@@ -139,10 +145,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         .filter((d) => d.profile === profileId)
         .map((d) => {
           const localMatch = localNotes.find((ln) => ln.id === d.id || ln.refId === d.id);
-          const title = localMatch?.title || d.title || d.filename || `Note ${d.id.slice(0, 8)}`;
-          const folderId = localMatch?.folderId && localMatch.folderId !== null && localMatch.folderId !== "__unfiled__"
-            ? localMatch.folderId
-            : UNFILED_FOLDER_ID;
+          const title = d.title || localMatch?.title || d.filename || `Note ${d.id.slice(0, 8)}`;
+          const rawFolder = d.notebook !== undefined ? d.notebook : localMatch?.folderId;
+          const folderId = !rawFolder || rawFolder === UNFILED_FOLDER_ID ? UNFILED_FOLDER_ID : rawFolder;
           return {
             id: d.id,
             refId: d.id,
@@ -216,10 +221,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   async removeSubject(id) {
     await subjectsApi.remove(id);
+    const now = new Date().toISOString();
+    const affectedNotes = get().notes.filter((n) => n.subjectId === id);
+    for (const n of affectedNotes) {
+      void putNote({ ...n, subjectId: "", updatedAt: now }).catch(() => undefined);
+    }
+    const foldersToDelete = get().folders.filter((f) => f.subjectId === id);
+    for (const f of foldersToDelete) {
+      void deleteFolderTree({ ...f, key: f.id }).catch(() => undefined);
+    }
     set((s) => ({
       subjects: s.subjects.filter((x) => x.id !== id),
       folders: s.folders.filter((f) => f.subjectId !== id),
-      notes: s.notes.filter((n) => n.subjectId !== id),
+      notes: s.notes.map((n) => (n.subjectId === id ? { ...n, subjectId: "", updatedAt: now } : n)),
     }));
   },
 
@@ -258,15 +272,70 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return record;
   },
 
-  async placeNote(noteId, folderId) {
-    const existing = get().notes.find((n) => n.id === noteId);
+  async renameFolder(id, name) {
+    await notebooksApi.rename(id, name);
+    const now = new Date().toISOString();
+    const existing = get().folders.find((f) => f.id === id);
+    if (existing) {
+      const updated: FolderNode = { ...existing, name, updatedAt: now };
+      await putFolder({ ...updated, key: updated.id });
+      set((s) => ({
+        folders: s.folders.map((f) => (f.id === id ? updated : f)),
+      }));
+    }
+  },
+
+  async removeFolder(id) {
+    await notebooksApi.remove(id);
+    const folderRecord = get().folders.find((f) => f.id === id);
+    if (folderRecord) {
+      await deleteFolderTree({ ...folderRecord, key: folderRecord.id }).catch(() => undefined);
+    }
+    const now = new Date().toISOString();
+    const affectedNotes = get().notes.filter((n) => n.folderId === id);
+    for (const n of affectedNotes) {
+      void putNote({ ...n, folderId: UNFILED_FOLDER_ID, updatedAt: now }).catch(() => undefined);
+    }
+    set((s) => {
+      const updatedFolders = s.folders.filter((f) => f.id !== id);
+      const updatedNotes = s.notes.map((n) =>
+        n.folderId === id ? { ...n, folderId: UNFILED_FOLDER_ID, updatedAt: now } : n,
+      );
+      const subjectId = folderRecord?.subjectId;
+      return {
+        folders: updatedFolders,
+        notes: updatedNotes,
+        subjects: s.subjects.map((sub) => {
+          if (sub.id !== subjectId) return sub;
+          return {
+            ...sub,
+            folderCount: updatedFolders.filter((f) => f.subjectId === sub.id).length,
+          };
+        }),
+      };
+    });
+  },
+
+  async moveNote(noteId, folderId) {
+    const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
     if (!existing) return;
-    const normalizedFolderId = folderId || UNFILED_FOLDER_ID;
-    const updated = { ...existing, folderId: normalizedFolderId, updatedAt: new Date().toISOString() };
+    const normalizedFolderId = !folderId || folderId === UNFILED_FOLDER_ID ? UNFILED_FOLDER_ID : folderId;
+    const targetNotebook = normalizedFolderId === UNFILED_FOLDER_ID ? null : normalizedFolderId;
+
+    if (existing.source !== "canvas") {
+      await documentsApi.move(noteId, targetNotebook);
+    }
+
+    const now = new Date().toISOString();
+    const updated = { ...existing, folderId: normalizedFolderId, updatedAt: now };
     await putNote(updated);
     set((s) => ({
       notes: s.notes.map((n) => (n.id === noteId ? updated : n)),
     }));
+  },
+
+  async placeNote(noteId, folderId) {
+    return get().moveNote(noteId, folderId);
   },
 
   async upsertNote(note: NoteMeta) {
@@ -332,11 +401,46 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   async renameNote(noteId, title) {
-    const existing = await getNote(noteId);
-    if (!existing) return;
-    const updated = { ...existing, title, updatedAt: new Date().toISOString() };
+    const clean = title.trim();
+    if (!clean) return;
+    const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
+    if (!existing || existing.source !== "canvas") {
+      await documentsApi.rename(noteId, clean);
+    }
+    const now = new Date().toISOString();
+    const updated: NoteMeta = existing
+      ? { ...existing, title: clean, updatedAt: now }
+      : {
+          id: noteId,
+          refId: noteId,
+          profileId: get().profileId || "",
+          subjectId: "",
+          folderId: UNFILED_FOLDER_ID,
+          title: clean,
+          source: "upload",
+          createdAt: now,
+          updatedAt: now,
+        };
     await putNote(updated);
-    set((s) => ({ notes: s.notes.map((n) => (n.id === noteId ? updated : n)) }));
+    set((s) => ({
+      notes: s.notes.some((n) => n.id === noteId)
+        ? s.notes.map((n) => (n.id === noteId ? updated : n))
+        : [...s.notes, updated],
+    }));
+  },
+
+  async removeNote(noteId) {
+    const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
+    if (!existing || existing.source !== "canvas") {
+      await documentsApi.remove(noteId);
+    }
+    await deleteNote(noteId);
+    set((s) => ({
+      notes: s.notes.filter((n) => n.id !== noteId),
+    }));
+    if (existing?.subjectId) {
+      bumpSubjectCounters(set, existing.subjectId);
+    }
   },
 
   noteById(noteId) {
