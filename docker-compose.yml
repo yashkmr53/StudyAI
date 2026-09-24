@@ -28,7 +28,7 @@ services:
 
   # Local development services (Phase 11)
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -40,7 +40,7 @@ services:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Console UI
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9000"]
       interval: 10s
       timeout: 5s
       retries: 5
