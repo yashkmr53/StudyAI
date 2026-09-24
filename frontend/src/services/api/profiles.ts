@@ -38,4 +38,11 @@ export const profilesApi = {
       module: null,
     });
   },
+
+  remove(id: string): Promise<void> {
+    return apiRequest<void>(`/profiles/${id}`, {
+      method: "DELETE",
+      module: null,
+    });
+  },
 };

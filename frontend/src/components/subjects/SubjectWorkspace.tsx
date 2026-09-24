@@ -9,10 +9,12 @@ import { NewFolderDialog } from "../folders/NewFolderDialog";
 import { EmptyState, ErrorState } from "../ui/primitives";
 import {
   ClipboardIcon,
+  EditIcon,
   FolderIcon,
   PenIcon,
   PlusIcon,
   QuizIcon,
+  TrashIcon,
   UploadIcon,
 } from "../ui/icons";
 import { useAuthStore } from "../../features/auth/authStore";
@@ -22,6 +24,10 @@ import type { ModuleId } from "../../types/modules";
 import { MODULE_SERVICE_MATRIX } from "../../types/modules";
 import { UNFILED_FOLDER_ID } from "../../types/domain";
 import { childrenOf } from "../../utils/folderTree";
+import { ActionMenu } from "../ui/ActionMenu";
+import { RenameDialog } from "../ui/RenameDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useToast } from "../ui/Toast";
 
 /**
  * The central subject workspace (§8–§10). The active module is local UI
@@ -39,13 +45,45 @@ export function SubjectWorkspace() {
   const notes = useWorkspaceStore((s) => s.notes);
   const loading = useWorkspaceStore((s) => s.loading);
   const touchSubject = useWorkspaceStore((s) => s.touchSubject);
+  const renameSubject = useWorkspaceStore((s) => s.renameSubject);
+  const removeSubject = useWorkspaceStore((s) => s.removeSubject);
+  const toast = useToast();
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [renameSubjectOpen, setRenameSubjectOpen] = useState(false);
+  const [deleteSubjectOpen, setDeleteSubjectOpen] = useState(false);
+  const [deletingSubject, setDeletingSubject] = useState(false);
   const { t } = useTranslation();
 
   const subject = subjects.find((x) => x.id === subjectId);
+
+  async function handleRenameSubject(newName: string) {
+    if (!subject) return;
+    try {
+      await renameSubject(subject.id, newName);
+      toast.success(t("crud.success.subjectRenamed", "Subject renamed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameSubject", "Failed to rename subject"));
+      throw err;
+    }
+  }
+
+  async function handleDeleteSubject() {
+    if (!subject) return;
+    setDeletingSubject(true);
+    try {
+      await removeSubject(subject.id);
+      toast.success(t("crud.success.subjectDeleted", "Subject deleted"));
+      setDeleteSubjectOpen(false);
+      navigate("/subjects");
+    } catch (err) {
+      toast.error(t("crud.errors.deleteSubject", "Failed to delete subject"));
+    } finally {
+      setDeletingSubject(false);
+    }
+  }
 
   useEffect(() => {
     if (subjectId) void touchSubject(subjectId);
@@ -130,8 +168,26 @@ export function SubjectWorkspace() {
         />
 
         <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
-          <div>
-            <h1>{subject.name}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1 className="truncate" title={subject.name}>{subject.name}</h1>
+            <ActionMenu
+              ariaLabel={t("crud.subjectActions", { defaultValue: "Subject actions" })}
+              items={[
+                {
+                  key: "rename",
+                  label: t("crud.renameSubject", "Rename Subject"),
+                  icon: <EditIcon size={14} />,
+                  onClick: () => setRenameSubjectOpen(true),
+                },
+                {
+                  key: "delete",
+                  label: t("crud.deleteSubject", "Delete Subject"),
+                  icon: <TrashIcon size={14} />,
+                  danger: true,
+                  onClick: () => setDeleteSubjectOpen(true),
+                },
+              ]}
+            />
           </div>
         </div>
 
@@ -247,6 +303,34 @@ export function SubjectWorkspace() {
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
         subjectId={subject.id}
+      />
+
+      <RenameDialog
+        open={renameSubjectOpen}
+        title={t("crud.renameSubject", "Rename Subject")}
+        initialValue={subject.name}
+        label={t("crud.nameLabel", "Name")}
+        existingNames={subjects.filter((s) => s.id !== subject.id).map((s) => s.name)}
+        duplicateErrorMessage={t("crud.errors.duplicateSubject", "A subject with this name already exists in this profile")}
+        onSave={handleRenameSubject}
+        onClose={() => setRenameSubjectOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteSubjectOpen}
+        title={t("crud.deleteSubject", "Delete Subject")}
+        message={
+          <>
+            <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+              {t("crud.deleteSubjectConfirm", { name: subject.name })}
+            </p>
+            <p>{t("crud.deleteSubjectWarning")}</p>
+          </>
+        }
+        confirmLabel={t("common.actions.delete", "Delete")}
+        busy={deletingSubject}
+        onConfirm={() => void handleDeleteSubject()}
+        onClose={() => setDeleteSubjectOpen(false)}
       />
     </ModuleProvider>
   );

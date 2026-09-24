@@ -11,11 +11,58 @@ class NotebookCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
 
+    def validate_title(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Folder name cannot be blank.")
+        return cleaned
+
+    def validate(self, attrs):
+        profile = attrs.get("profile")
+        subject = attrs.get("subject")
+        title = attrs.get("title", "").strip()
+        attrs["title"] = title
+        if profile and title:
+            qs = Notebook.objects.filter(profile=profile, subject=subject, title__iexact=title)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"title": ["A folder with this name already exists in this subject."]}
+                )
+        return attrs
+
 
 class NotebookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notebook
         fields = ("id", "profile", "subject", "title", "description", "cover_image_ref", "created_at", "updated_at")
+
+    def validate_title(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Folder name cannot be blank.")
+        return cleaned
+
+    def validate(self, attrs):
+        profile = attrs.get("profile") or getattr(self.instance, "profile", None)
+        subject = attrs.get("subject") if "subject" in attrs else getattr(self.instance, "subject", None)
+        title = attrs.get("title")
+        if title is not None:
+            title = title.strip()
+            attrs["title"] = title
+            if not title:
+                raise serializers.ValidationError({"title": ["Folder name cannot be blank."]})
+        else:
+            title = (getattr(self.instance, "title", "") or "").strip()
+
+        if profile and title:
+            qs = Notebook.objects.filter(profile=profile, subject=subject, title__iexact=title)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"title": ["A folder with this name already exists in this subject."]}
+                )
+        return attrs
 
 
 class NotebookPageSerializer(serializers.ModelSerializer):

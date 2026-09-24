@@ -25,8 +25,9 @@ export function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    const cleanEmail = email.trim().toLowerCase();
     try {
-      await login(email, password);
+      await login(cleanEmail, password);
       navigate("/");
     } catch (err) {
       setError(

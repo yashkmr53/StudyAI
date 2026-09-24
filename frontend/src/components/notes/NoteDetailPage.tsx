@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import { ModuleProvider, useSubjectModule } from "../modules/ModuleContext";
 import { HandwrittenView } from "./HandwrittenView";
@@ -10,6 +10,12 @@ import { documentsApi } from "../../services/api/documents";
 import type { NoteMeta } from "../../types/domain";
 import { UNFILED_FOLDER_ID } from "../../types/domain";
 import { breadcrumbCrumbs } from "../../utils/folderTree";
+import { ActionMenu } from "../ui/ActionMenu";
+import { RenameDialog } from "../ui/RenameDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { MoveNoteDialog } from "./MoveNoteDialog";
+import { EditIcon, FolderIcon, TrashIcon } from "../ui/icons";
+import { useToast } from "../ui/Toast";
 
 /**
  * Note detail (§15–§20).
@@ -23,11 +29,20 @@ export function NoteDetailPage() {
     subjectId: string;
     noteId: string;
   }>();
+  const navigate = useNavigate();
+  const toast = useToast();
 
   const subjects = useWorkspaceStore((s) => s.subjects);
   const folders = useWorkspaceStore((s) => s.folders);
   const notes = useWorkspaceStore((s) => s.notes);
   const workspaceLoading = useWorkspaceStore((s) => s.loading);
+  const renameNote = useWorkspaceStore((s) => s.renameNote);
+  const removeNote = useWorkspaceStore((s) => s.removeNote);
+
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { moduleId, services } = useSubjectModule(subjectId);
 
@@ -138,20 +153,72 @@ export function NoteDetailPage() {
   const note = activeNote;
   const displaySubject = subject || { id: subjectId || "", name: "Subject" };
 
+  async function handleRename(newTitle: string) {
+    try {
+      await renameNote(note.id, newTitle);
+      toast.success(t("crud.success.noteRenamed", "Note renamed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameNote", "Failed to rename note"));
+      throw err;
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await removeNote(note.id);
+      toast.success(t("crud.success.noteDeleted", "Note deleted"));
+      setDeleteOpen(false);
+      navigate(displaySubject.id ? `/subjects/${displaySubject.id}` : "/subjects");
+    } catch (err) {
+      toast.error(t("crud.errors.deleteNote", "Failed to delete note"));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <ModuleProvider value={{ moduleId, services }}>
       <div className="content__inner content__inner--wide">
         <Breadcrumbs crumbs={crumbs} />
 
-        <div className="page-heading" style={{ marginTop: 14 }}>
-          <h1>{note.title}</h1>
-          <p className="subtitle" style={{ marginTop: 5 }}>
-            <Link to={`/subjects/${displaySubject.id}`}>{displaySubject.name}</Link>
-            {" · "}
-            {note.source === "canvas"
-              ? t("notes.source.canvas")
-              : t("notes.source.upload")}
-          </p>
+        <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 className="truncate" title={note.title}>{note.title}</h1>
+            <p className="subtitle" style={{ marginTop: 5 }}>
+              <Link to={`/subjects/${displaySubject.id}`} title={displaySubject.name}>{displaySubject.name}</Link>
+              {" · "}
+              {note.source === "canvas"
+                ? t("notes.source.canvas")
+                : t("notes.source.upload")}
+            </p>
+          </div>
+          <div className="page-heading__actions">
+            <ActionMenu
+              ariaLabel={t("crud.noteActions", { defaultValue: "Note actions" })}
+              items={[
+                {
+                  key: "rename",
+                  label: t("crud.rename", "Rename"),
+                  icon: <EditIcon size={14} />,
+                  onClick: () => setRenameOpen(true),
+                },
+                {
+                  key: "move",
+                  label: t("crud.moveToFolder", "Move to folder…"),
+                  icon: <FolderIcon size={14} />,
+                  onClick: () => setMoveOpen(true),
+                },
+                {
+                  key: "delete",
+                  label: t("crud.delete", "Delete"),
+                  icon: <TrashIcon size={14} />,
+                  danger: true,
+                  onClick: () => setDeleteOpen(true),
+                },
+              ]}
+            />
+          </div>
         </div>
 
         {/* Enriched tab is conditional on EnrichmentService alone */}
@@ -179,6 +246,55 @@ export function NoteDetailPage() {
           )}
         </div>
       </div>
+
+      <RenameDialog
+        open={renameOpen}
+        title={t("crud.renameNote", "Rename Note")}
+        initialValue={note.title}
+        label={t("crud.titleLabel", "Title")}
+        existingNames={notes
+          .filter(
+            (n) =>
+              n.id !== note.id &&
+              n.subjectId === note.subjectId &&
+              (n.folderId || UNFILED_FOLDER_ID) === (note.folderId || UNFILED_FOLDER_ID)
+          )
+          .map((n) => n.title)}
+        duplicateErrorMessage={
+          note.folderId && note.folderId !== UNFILED_FOLDER_ID
+            ? t("crud.errors.duplicateNoteInFolder", "A note with this name already exists in this folder")
+            : t("crud.errors.duplicateNoteInSubject", "A note with this name already exists in this subject")
+        }
+        onSave={handleRename}
+        onClose={() => setRenameOpen(false)}
+      />
+
+      <MoveNoteDialog
+        open={moveOpen}
+        noteId={note.id}
+        noteTitle={note.title}
+        currentFolderId={note.folderId}
+        subjectId={note.subjectId || displaySubject.id}
+        onMoved={() => toast.success(t("crud.success.noteMoved", "Note moved"))}
+        onClose={() => setMoveOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={t("crud.deleteNote", "Delete Note")}
+        message={
+          <>
+            <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+              {t("crud.deleteNoteConfirm", { title: note.title })}
+            </p>
+            <p>{t("crud.deleteNoteWarning")}</p>
+          </>
+        }
+        confirmLabel={t("common.actions.delete", "Delete")}
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onClose={() => setDeleteOpen(false)}
+      />
     </ModuleProvider>
   );
 }

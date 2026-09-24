@@ -16,11 +16,15 @@ class SubjectViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = SubjectSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         qs = Subject.objects.filter(profile__user=self.request.user)
-        profile_id = self.request.query_params.get("profile")
+        profile_id = (
+            self.request.query_params.get("profile")
+            or self.request.headers.get("X-Active-Profile")
+            or self.request.META.get("HTTP_X_ACTIVE_PROFILE")
+        )
         if profile_id:
             profile = ProfileAuthorizationService.get_owned_profile(
                 self.request.user, profile_id
@@ -35,6 +39,14 @@ class SubjectViewSet(viewsets.ModelViewSet):
             serializer.save()
         except IntegrityError:
             # Race against the DB constraint; keep the message student-friendly.
+            raise ValidationError(
+                {"name": ["You already have a subject with this name."]}
+            )
+
+    def perform_update(self, serializer):
+        try:
+            serializer.save()
+        except IntegrityError:
             raise ValidationError(
                 {"name": ["You already have a subject with this name."]}
             )

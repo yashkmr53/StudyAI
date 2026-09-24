@@ -40,5 +40,5 @@ class ProfileViewSet(viewsets.ModelViewSet):
             serializer.save()
         except IntegrityError:
             raise ValidationError(
-                {"name": ["You already have a profile with this name."]}
+                {"name": ["You already have a profile with this name in this module."]}
             )

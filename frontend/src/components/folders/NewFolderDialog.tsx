@@ -63,6 +63,13 @@ export function NewFolderDialog({ open, onClose, subjectId, defaultParentId = nu
     e?.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || !profileId || busy) return;
+    const isDuplicate = folders.some(
+      (f) => f.subjectId === subjectId && f.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (isDuplicate) {
+      setError(t("folders.dialog.duplicateError", "A folder with this name already exists in this subject."));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -107,7 +114,10 @@ export function NewFolderDialog({ open, onClose, subjectId, defaultParentId = nu
             placeholder={t("folders.dialog.namePlaceholder")}
             value={name}
             maxLength={255}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (error) setError(null);
+            }}
           />
         </div>
         <div className="field">

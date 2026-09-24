@@ -59,7 +59,69 @@
     "addSubject": "Add subject",
     "newSubjectAria": "New subject",
     "switchProfile": "Switch profile",
-    "newProfilePrompt": "Profile name"
+    "newProfilePrompt": "Profile name",
+    "collapseSidebar": "Collapse sidebar",
+    "collapseSidebarTooltip": "Collapse Sidebar (⌘/)",
+    "expandSidebar": "Expand sidebar",
+    "expandSidebarTooltip": "Expand Sidebar (⌘/)"
+  },
+  "crud": {
+    "rename": "Rename",
+    "move": "Move",
+    "moveToFolder": "Move to folder…",
+    "delete": "Delete",
+    "renameNote": "Rename Note",
+    "moveNote": "Move Note",
+    "moveNotePrompt": "Choose a folder for \"{{title}}\":",
+    "deleteNote": "Delete Note",
+    "deleteNoteConfirm": "Delete \"{{title}}\"?",
+    "deleteNoteWarning": "This will permanently remove the note, its transcription, enrichment, citations, and stored scan.",
+    "renameSubject": "Rename Subject",
+    "deleteSubject": "Delete Subject",
+    "deleteSubjectConfirm": "Delete subject \"{{name}}\"?",
+    "deleteSubjectWarning": "Deleting this subject will remove the subject and its folders, but your notes will be preserved and become unassigned/unfiled.",
+    "renameFolder": "Rename Folder",
+    "deleteFolder": "Delete Folder",
+    "deleteFolderConfirm": "Delete folder \"{{name}}\"?",
+    "deleteFolderWarning": "Deleting this folder will not delete your notes. Notes inside it will become unfiled.",
+    "renameProfile": "Rename Profile",
+    "deleteProfile": "Delete Profile",
+    "deleteProfileConfirm": "Delete profile \"{{name}}\"?",
+    "deleteProfileWarning": "This will permanently remove this profile and its associated subjects, notes, folders, enrichments, and other profile data.",
+    "cannotDeleteOnlyProfile": "You cannot delete your only profile. Create or select another profile first.",
+    "nameLabel": "Name",
+    "titleLabel": "Title",
+    "selectFolder": "Select folder",
+    "unfiled": "Unfiled",
+    "success": {
+      "noteRenamed": "Note renamed",
+      "noteMoved": "Note moved",
+      "noteDeleted": "Note deleted",
+      "subjectRenamed": "Subject renamed",
+      "subjectDeleted": "Subject deleted",
+      "folderRenamed": "Folder renamed",
+      "folderDeleted": "Folder deleted",
+      "profileRenamed": "Profile renamed",
+      "profileDeleted": "Profile deleted"
+    },
+    "errors": {
+      "renameNote": "Failed to rename note",
+      "moveNote": "Failed to move note",
+      "deleteNote": "Failed to delete note",
+      "renameSubject": "Failed to rename subject",
+      "deleteSubject": "Failed to delete subject",
+      "renameFolder": "Failed to rename folder",
+      "deleteFolder": "Failed to delete folder",
+      "renameProfile": "Failed to rename profile",
+      "deleteProfile": "Failed to delete profile",
+      "emptyName": "Name cannot be empty",
+      "duplicateName": "An item with this name already exists",
+      "duplicateSubject": "A subject with this name already exists in this profile",
+      "duplicateFolder": "A folder with this name already exists in this subject",
+      "duplicateNoteInFolder": "A note with this name already exists in this folder",
+      "duplicateNoteInSubject": "A note with this name already exists in this subject",
+      "duplicateProfile": "A profile with this name already exists in this module"
+    }
   },
   "auth": {
     "login": {
@@ -187,7 +249,8 @@
     "namePlaceholder": "e.g. Data Structures and Algorithms",
     "create": "Create subject",
     "creating": "Creating…",
-    "fallbackError": "We couldn't create this subject."
+    "fallbackError": "We couldn't create this subject.",
+    "duplicateError": "A subject with this name already exists in this profile."
   },
   "workspace": {
     "foldersTitle": "Folders",
@@ -213,7 +276,8 @@
       "topLevel": "Top level",
       "create": "Create folder",
       "creating": "Creating…",
-      "fallbackError": "We couldn't create this folder."
+      "fallbackError": "We couldn't create this folder.",
+      "duplicateError": "A folder with this name already exists in this subject."
     },
     "detail": {
       "notFoundTitle": "We couldn't find this folder.",

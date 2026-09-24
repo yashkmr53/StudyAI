@@ -4,7 +4,13 @@ from rest_framework.test import APIClient
 def authenticated_client(email: str, password: str) -> APIClient:
     """Register/login through the real API and attach the bearer token."""
     from apps.accounts.models import User
+    from django.core.cache import caches
 
+    for alias in ("default", "throttle"):
+        try:
+            caches[alias].clear()
+        except Exception:
+            pass
     if not User.objects.filter(email=email).exists():
         response = APIClient().post(
             "/api/v1/auth/register",

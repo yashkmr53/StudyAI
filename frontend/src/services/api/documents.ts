@@ -4,6 +4,7 @@ export interface DocumentInfo {
   id: string;
   profile: string;
   subject?: string | null;
+  notebook?: string | null;
   source: string;
   source_type: string;
   schema_version: string;
@@ -60,13 +61,50 @@ export interface DigitizedInfo {
 }
 
 export const documentsApi = {
-  create(profileId: string, filename: string, sourceType = "image", subjectId?: string | null) {
+  create(
+    profileId: string,
+    filename: string,
+    sourceType = "image",
+    subjectId?: string | null,
+    notebookId?: string | null,
+    title?: string,
+  ) {
     const body: Record<string, unknown> = { profile: profileId, source_type: sourceType, filename };
     if (subjectId) body.subject = subjectId;
+    if (notebookId) body.notebook = notebookId;
+    if (title) body.title = title;
     return apiRequest<{ document: DocumentInfo; page: PageStatus; upload: { url: string; key: string } }>(
       "/documents",
       { method: "POST", body },
     );
+  },
+
+  update(
+    id: string,
+    payload: {
+      title?: string;
+      subject?: string | null;
+      notebook?: string | null;
+    },
+  ) {
+    return apiRequest<DocumentInfo>(`/documents/${id}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  rename(id: string, title: string) {
+    return this.update(id, { title });
+  },
+
+  move(id: string, notebookId: string | null) {
+    return this.update(id, { notebook: notebookId });
+  },
+
+  remove(id: string) {
+    return apiRequest<void>(`/documents/${id}`, {
+      method: "DELETE",
+    });
   },
 
   uploadToSignedUrl(url: string, data: ArrayBuffer | Blob, contentType: string) {

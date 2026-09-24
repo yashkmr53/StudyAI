@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-09-24T06:00:27.063Z",
+  "steps": {},
+  "metrics": {
+    "ocrDurationMs": 5,
+    "enrichDurationMs": 64016
+  },
+  "checklist": {
+    "authenticatedClassroomProfile": true,
+    "subjectWorkspaceLoaded": true,
+    "noteRenamePersisted": true,
+    "folderCreated": true,
+    "noteMovedToFolder": true,
+    "folderRenamePersisted": true,
+    "folderDeletedChildNoteUnfiled": true,
+    "subjectCreated": true,
+    "subjectRenamePersisted": true,
+    "subjectDeleted": true,
+    "profileCreated": true,
+    "profileRenamed": true,
+    "profileDeleted": true,
+    "ocrCompleted": true,
+    "enrichmentRendered": true,
+    "noteDeleted": true
+  },
+  "finishedAt": "2026-09-24T06:01:52.308Z",
+  "success": true
+}

@@ -56,10 +56,22 @@ class IngestionService:
             raise ResourceNotFound("Document page not found.")
 
     @staticmethod
-    def create_document(user, *, profile, source: str, source_type: str, subject=None, filename: str = "") -> tuple[Document, DocumentPage]:
+    def create_document(
+        user,
+        *,
+        profile,
+        source: str,
+        source_type: str,
+        subject=None,
+        notebook=None,
+        title: str = "",
+        filename: str = "",
+    ) -> tuple[Document, DocumentPage]:
         document = Document.objects.create(
             profile=profile,
             subject=subject,
+            notebook=notebook,
+            title=title or filename or "Untitled Note",
             source=source,
             source_type=source_type,
         )
@@ -190,8 +202,20 @@ def run_ocr_job(job: Job) -> None:
     """Worker flow (§47). Runs inside the trusted RLS context established by the executor."""
     from providers.registry import get_object_storage, get_ocr_provider
 
-    revision = DocumentPageRevision.objects.select_related("page", "page__document").get(pk=job.resource_id)
+    try:
+        revision = DocumentPageRevision.objects.select_related("page", "page__document").get(pk=job.resource_id)
+    except (DocumentPageRevision.DoesNotExist, Document.DoesNotExist):
+        logger.info("OCR job %s target revision %s no longer exists (document deleted); skipping.", job.pk, job.resource_id)
+        job.status = Job.Status.CANCELLED
+        job.save(update_fields=("status",))
+        return
+
     page = revision.page
+    if not page or not page.document_id:
+        logger.info("OCR job %s page or document no longer exists; skipping.", job.pk)
+        job.status = Job.Status.CANCELLED
+        job.save(update_fields=("status",))
+        return
 
     # Idempotency inside the handler: completed revisions are not re-OCRed.
     if revision.ocr_status == DocumentPageRevision.OcrStatus.COMPLETED and revision.lines.exists():
@@ -244,6 +268,10 @@ def run_ocr_job(job: Job) -> None:
 
     # §47 downstream enqueue (Phase 5): chunk + embed + index the document.
     from apps.retrieval.services import enqueue_index_job
+
+    if not Document.objects.filter(pk=page.document_id).exists():
+        logger.info("Document %s was deleted during OCR; skipping index enqueue.", page.document_id)
+        return
 
     index_job, index_created = enqueue_index_job(page.document)
     logger.info(
