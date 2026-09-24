@@ -13,7 +13,11 @@ import { FolderCard } from "./FolderCard";
 import { NoteRow } from "../notes/NoteRow";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { EmptyState } from "../ui/primitives";
-import { FolderIcon, NoteIcon, PenIcon, PlusIcon } from "../ui/icons";
+import { FolderIcon, NoteIcon, PenIcon, PlusIcon, EditIcon, TrashIcon } from "../ui/icons";
+import { ActionMenu } from "../ui/ActionMenu";
+import { RenameDialog } from "../ui/RenameDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useToast } from "../ui/Toast";
 
 /**
  * Folder detail (§14): full-depth breadcrumbs, subfolders, notes.
@@ -26,12 +30,18 @@ export function FolderDetailPage() {
   }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
 
   const subjects = useWorkspaceStore((s) => s.subjects);
   const folders = useWorkspaceStore((s) => s.folders);
   const notes = useWorkspaceStore((s) => s.notes);
+  const renameFolder = useWorkspaceStore((s) => s.renameFolder);
+  const removeFolder = useWorkspaceStore((s) => s.removeFolder);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [renameFolderOpen, setRenameFolderOpen] = useState(false);
+  const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState(false);
   const { t } = useTranslation();
 
   const subject = subjects.find((x) => x.id === subjectId);
@@ -73,6 +83,37 @@ export function FolderDetailPage() {
   }
 
   const displayName = unfiled ? t("folders.detail.unfiled") : (folder?.name ?? "");
+
+  async function handleDeleteFolder() {
+    if (!folder) return;
+    setDeletingFolder(true);
+    try {
+      await removeFolder(folder.id);
+      toast.success(t("crud.success.folderDeleted", "Folder deleted"));
+      setDeleteFolderOpen(false);
+      if (folder.parentId) {
+        navigate(`/subjects/${subjectId}/folders/${folder.parentId}`);
+      } else {
+        navigate(`/subjects/${subjectId}`);
+      }
+    } catch (err) {
+      toast.error(t("crud.errors.deleteFolder", "Failed to delete folder"));
+    } finally {
+      setDeletingFolder(false);
+    }
+  }
+
+  async function handleRenameFolder(newName: string) {
+    if (!folder) return;
+    try {
+      await renameFolder(folder.id, newName);
+      toast.success(t("crud.success.folderRenamed", "Folder renamed"));
+    } catch (err) {
+      toast.error(t("crud.errors.renameFolder", "Failed to rename folder"));
+      throw err;
+    }
+  }
+
   const crumbs = breadcrumbCrumbs(
     subjectFolders,
     folderId ?? "",
@@ -92,7 +133,29 @@ export function FolderDetailPage() {
 
       <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
         <div>
-          <h1>{displayName}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1>{displayName}</h1>
+            {!unfiled && folder && (
+              <ActionMenu
+                ariaLabel={t("crud.folderActions", { defaultValue: "Folder actions" })}
+                items={[
+                  {
+                    key: "rename",
+                    label: t("crud.renameFolder", "Rename Folder"),
+                    icon: <EditIcon size={14} />,
+                    onClick: () => setRenameFolderOpen(true),
+                  },
+                  {
+                    key: "delete",
+                    label: t("crud.deleteFolder", "Delete Folder"),
+                    icon: <TrashIcon size={14} />,
+                    danger: true,
+                    onClick: () => setDeleteFolderOpen(true),
+                  },
+                ]}
+              />
+            )}
+          </div>
           {!unfiled && (
             <p className="subtitle" style={{ marginTop: 5 }}>
               {[
@@ -192,12 +255,42 @@ export function FolderDetailPage() {
       </section>
 
       {!unfiled && (
-        <NewFolderDialog
-          open={newFolderOpen}
-          onClose={() => setNewFolderOpen(false)}
-          subjectId={subject.id}
-          defaultParentId={folder?.id ?? null}
-        />
+        <>
+          <NewFolderDialog
+            open={newFolderOpen}
+            onClose={() => setNewFolderOpen(false)}
+            subjectId={subject.id}
+            defaultParentId={folder?.id ?? null}
+          />
+
+          {folder && (
+            <RenameDialog
+              open={renameFolderOpen}
+              title={t("crud.renameFolder", "Rename Folder")}
+              initialValue={folder.name}
+              label={t("crud.nameLabel", "Name")}
+              onSave={handleRenameFolder}
+              onClose={() => setRenameFolderOpen(false)}
+            />
+          )}
+
+          <ConfirmDialog
+            open={deleteFolderOpen}
+            title={t("crud.deleteFolder", "Delete Folder")}
+            message={
+              <>
+                <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                  {t("crud.deleteFolderConfirm", { name: folder?.name ?? "" })}
+                </p>
+                <p>{t("crud.deleteFolderWarning")}</p>
+              </>
+            }
+            confirmLabel={t("common.actions.delete", "Delete")}
+            busy={deletingFolder}
+            onConfirm={() => void handleDeleteFolder()}
+            onClose={() => setDeleteFolderOpen(false)}
+          />
+        </>
       )}
     </div>
   );

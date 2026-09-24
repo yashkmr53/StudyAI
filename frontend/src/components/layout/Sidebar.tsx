@@ -8,8 +8,14 @@ import {
   BookIcon,
   CheckIcon,
   ChevronDownIcon,
+  EditIcon,
   PlusIcon,
+  TrashIcon,
 } from "../ui/icons";
+import { ActionMenu } from "../ui/ActionMenu";
+import { RenameDialog } from "../ui/RenameDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useToast } from "../ui/Toast";
 import type { ModuleId } from "../../types/modules";
 import type { Profile } from "../../types/api";
 
@@ -38,13 +44,67 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
   const switchToProfile = useAuthStore((s) => s.switchToProfile);
   const addProfile = useAuthStore((s) => s.addProfile);
   const refreshProfiles = useAuthStore((s) => s.refreshProfiles);
+  const renameProfile = useAuthStore((s) => s.renameProfile);
+  const deleteProfile = useAuthStore((s) => s.deleteProfile);
   const logout = useAuthStore((s) => s.logout);
   const module = useAuthStore((s) => s.module);
+  const toast = useToast();
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
   const [dropdownModule, setDropdownModule] = useState<ModuleId>(module);
   const [dropdownProfiles, setDropdownProfiles] = useState<Profile[]>([]);
+
+  const [profileToRename, setProfileToRename] = useState<Profile | null>(null);
+  const [renameProfileOpen, setRenameProfileOpen] = useState(false);
+  const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
+  const [deleteProfileOpen, setDeleteProfileOpen] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState(false);
+
+  async function handleRenameProfile(newName: string) {
+    if (!profileToRename) return;
+    try {
+      const updated = await renameProfile(profileToRename.id, newName);
+      setDropdownProfiles((prev) =>
+        prev.map((p) => (p.id === updated.id ? { ...p, name: updated.name } : p)),
+      );
+      toast.success(t("crud.success.profileRenamed", "Profile renamed"));
+      setRenameProfileOpen(false);
+      setProfileToRename(null);
+    } catch (err) {
+      toast.error(t("crud.errors.renameProfile", "Failed to rename profile"));
+      throw err;
+    }
+  }
+
+  async function handleDeleteProfile() {
+    if (!profileToDelete) return;
+    setDeletingProfile(true);
+    try {
+      const all = await profilesApi.list();
+      if (all.length <= 1) {
+        toast.error(t("crud.cannotDeleteOnlyProfile", "You cannot delete your only profile. Create or select another profile first."));
+        setDeleteProfileOpen(false);
+        setProfileToDelete(null);
+        return;
+      }
+      const targetId = profileToDelete.id;
+      const wasActive = profile?.id === targetId;
+      await deleteProfile(targetId);
+      setDropdownProfiles((prev) => prev.filter((p) => p.id !== targetId));
+      toast.success(t("crud.success.profileDeleted", "Profile deleted"));
+      setDeleteProfileOpen(false);
+      setProfileToDelete(null);
+      if (wasActive) {
+        setSwitcherOpen(false);
+        navigate("/subjects");
+      }
+    } catch (err) {
+      toast.error(t("crud.errors.deleteProfile", "Failed to delete profile"));
+    } finally {
+      setDeletingProfile(false);
+    }
+  }
 
   useEffect(() => {
     void refreshProfiles().catch(() => undefined);
@@ -180,24 +240,73 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
             </div>
             <div className="popover__divider" />
             {dropdownProfiles.map((p) => (
-              <button
+              <div
                 key={p.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={profile?.id === p.id}
                 className={
                   profile?.id === p.id
                     ? "popover__item selected"
                     : "popover__item"
                 }
-                onClick={() => void onProfileClick(p)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "4px 8px",
+                  cursor: "default",
+                }}
               >
-                <span className="avatar">{initials(p.name)}</span>
-                <span className="grow nowrap">{p.name}</span>
-                <span className="check">
-                  <CheckIcon size={14} />
-                </span>
-              </button>
+                <div
+                  role="menuitemradio"
+                  aria-checked={profile?.id === p.id}
+                  tabIndex={0}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 9,
+                    flex: 1,
+                    minWidth: 0,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => void onProfileClick(p)}
+                >
+                  <span className="avatar">{initials(p.name)}</span>
+                  <span className="grow nowrap" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {p.name}
+                  </span>
+                  {profile?.id === p.id && (
+                    <span className="check" style={{ visibility: "visible", marginRight: 4 }}>
+                      <CheckIcon size={14} />
+                    </span>
+                  )}
+                </div>
+                <ActionMenu
+                  ariaLabel={t("crud.profileActions", { defaultValue: "Profile actions" })}
+                  size={13}
+                  items={[
+                    {
+                      key: "rename",
+                      label: t("crud.renameProfile", "Rename Profile"),
+                      icon: <EditIcon size={14} />,
+                      onClick: () => {
+                        setProfileToRename(p);
+                        setRenameProfileOpen(true);
+                        setSwitcherOpen(false);
+                      },
+                    },
+                    {
+                      key: "delete",
+                      label: t("crud.deleteProfile", "Delete Profile"),
+                      icon: <TrashIcon size={14} />,
+                      danger: true,
+                      onClick: () => {
+                        setProfileToDelete(p);
+                        setDeleteProfileOpen(true);
+                        setSwitcherOpen(false);
+                      },
+                    },
+                  ]}
+                />
+              </div>
             ))}
             <div className="popover__divider" />
             <button type="button" className="popover__item" onClick={() => void onAddProfile()}>
@@ -226,6 +335,42 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
           <ChevronDownIcon size={14} className="faint" />
         </button>
       </div>
+
+      {profileToRename && (
+        <RenameDialog
+          open={renameProfileOpen}
+          title={t("crud.renameProfile", "Rename Profile")}
+          initialValue={profileToRename.name}
+          label={t("crud.nameLabel", "Name")}
+          onSave={handleRenameProfile}
+          onClose={() => {
+            setRenameProfileOpen(false);
+            setProfileToRename(null);
+          }}
+        />
+      )}
+
+      {profileToDelete && (
+        <ConfirmDialog
+          open={deleteProfileOpen}
+          title={t("crud.deleteProfile", "Delete Profile")}
+          message={
+            <>
+              <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                {t("crud.deleteProfileConfirm", { name: profileToDelete.name })}
+              </p>
+              <p>{t("crud.deleteProfileWarning")}</p>
+            </>
+          }
+          confirmLabel={t("common.actions.delete", "Delete Profile")}
+          busy={deletingProfile}
+          onConfirm={() => void handleDeleteProfile()}
+          onClose={() => {
+            setDeleteProfileOpen(false);
+            setProfileToDelete(null);
+          }}
+        />
+      )}
     </aside>
   );
 }
