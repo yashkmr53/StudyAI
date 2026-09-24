@@ -44,6 +44,7 @@ export function MoveNoteDialog({
   onClose,
 }: MoveNoteDialogProps) {
   const { t } = useTranslation();
+  const notes = useWorkspaceStore((s) => s.notes);
   const folders = useWorkspaceStore((s) => s.folders);
   const moveNote = useWorkspaceStore((s) => s.moveNote);
 
@@ -66,6 +67,21 @@ export function MoveNoteDialog({
     if (busy) return;
     if (selectedFolderId === (currentFolderId || UNFILED_FOLDER_ID)) {
       onClose();
+      return;
+    }
+    const isDuplicate = notes.some(
+      (n) =>
+        n.id !== noteId &&
+        n.subjectId === subjectId &&
+        (n.folderId || UNFILED_FOLDER_ID) === selectedFolderId &&
+        n.title.trim().toLowerCase() === noteTitle.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      setError(
+        selectedFolderId === UNFILED_FOLDER_ID
+          ? t("crud.errors.duplicateNoteInSubject", "A note with this name already exists in this subject")
+          : t("crud.errors.duplicateNoteInFolder", "A note with this name already exists in this folder")
+      );
       return;
     }
     setBusy(true);
@@ -129,7 +145,10 @@ export function MoveNoteDialog({
                   color: isSelected ? "var(--accent)" : undefined,
                   fontWeight: isSelected ? 600 : 400,
                 }}
-                onClick={() => setSelectedFolderId(opt.id)}
+                onClick={() => {
+                  setSelectedFolderId(opt.id);
+                  if (error) setError(null);
+                }}
               >
                 <FolderIcon size={15} />
                 <span className="grow nowrap">{opt.label}</span>

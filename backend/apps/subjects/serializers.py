@@ -18,7 +18,15 @@ class SubjectSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         profile = attrs.get("profile") or getattr(self.instance, "profile", None)
-        name = (attrs.get("name") or getattr(self.instance, "name", "") or "").strip()
+        name = attrs.get("name")
+        if name is not None:
+            name = name.strip()
+            attrs["name"] = name
+            if not name:
+                raise serializers.ValidationError({"name": ["Subject name cannot be blank."]})
+        else:
+            name = (getattr(self.instance, "name", "") or "").strip()
+
         if profile and name:
             duplicate = Subject.objects.filter(profile=profile, name__iexact=name)
             if self.instance is not None:

@@ -42,3 +42,11 @@ class SubjectViewSet(viewsets.ModelViewSet):
             raise ValidationError(
                 {"name": ["You already have a subject with this name."]}
             )
+
+    def perform_update(self, serializer):
+        try:
+            serializer.save()
+        except IntegrityError:
+            raise ValidationError(
+                {"name": ["You already have a subject with this name."]}
+            )

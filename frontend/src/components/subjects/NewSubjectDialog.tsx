@@ -14,6 +14,7 @@ interface Props {
 
 export function NewSubjectDialog({ open, onClose, openAfterCreate }: Props) {
   const profileId = useAuthStore((s) => s.profile?.id ?? null);
+  const subjects = useWorkspaceStore((s) => s.subjects);
   const createSubject = useWorkspaceStore((s) => s.createSubject);
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -31,6 +32,10 @@ export function NewSubjectDialog({ open, onClose, openAfterCreate }: Props) {
     e?.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || !profileId || busy) return;
+    if (subjects.some((s) => s.name.trim().toLowerCase() === trimmed.toLowerCase())) {
+      setError(t("newSubjectDialog.duplicateError", "A subject with this name already exists in this profile."));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -75,7 +80,10 @@ export function NewSubjectDialog({ open, onClose, openAfterCreate }: Props) {
             placeholder={t("newSubjectDialog.namePlaceholder")}
             value={name}
             maxLength={200}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (error) setError(null);
+            }}
           />
         </div>
         {error && <p className="form-error">{error}</p>}

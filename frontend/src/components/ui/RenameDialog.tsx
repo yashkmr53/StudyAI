@@ -7,6 +7,8 @@ interface RenameDialogProps {
   title: string;
   initialValue: string;
   label?: string;
+  existingNames?: string[];
+  duplicateErrorMessage?: string;
   onSave: (newName: string) => Promise<void>;
   onClose: () => void;
 }
@@ -16,6 +18,8 @@ export function RenameDialog({
   title,
   initialValue,
   label,
+  existingNames,
+  duplicateErrorMessage,
   onSave,
   onClose,
 }: RenameDialogProps) {
@@ -37,6 +41,14 @@ export function RenameDialog({
     const clean = value.trim();
     if (!clean) {
       setError(t("crud.errors.emptyName", "Name cannot be empty"));
+      return;
+    }
+    if (
+      existingNames &&
+      clean.toLowerCase() !== initialValue.trim().toLowerCase() &&
+      existingNames.some((name) => name.trim().toLowerCase() === clean.toLowerCase())
+    ) {
+      setError(duplicateErrorMessage || t("crud.errors.duplicateName", "An item with this name already exists"));
       return;
     }
     if (busy) return;

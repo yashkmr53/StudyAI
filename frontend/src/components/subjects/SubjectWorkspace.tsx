@@ -65,7 +65,7 @@ export function SubjectWorkspace() {
       await renameSubject(subject.id, newName);
       toast.success(t("crud.success.subjectRenamed", "Subject renamed"));
     } catch (err) {
-      toast.error(t("crud.errors.renameSubject", "Failed to rename subject"));
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameSubject", "Failed to rename subject"));
       throw err;
     }
   }
@@ -169,7 +169,7 @@ export function SubjectWorkspace() {
 
         <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <h1>{subject.name}</h1>
+            <h1 className="truncate" title={subject.name}>{subject.name}</h1>
             <ActionMenu
               ariaLabel={t("crud.subjectActions", { defaultValue: "Subject actions" })}
               items={[
@@ -310,6 +310,8 @@ export function SubjectWorkspace() {
         title={t("crud.renameSubject", "Rename Subject")}
         initialValue={subject.name}
         label={t("crud.nameLabel", "Name")}
+        existingNames={subjects.filter((s) => s.id !== subject.id).map((s) => s.name)}
+        duplicateErrorMessage={t("crud.errors.duplicateSubject", "A subject with this name already exists in this profile")}
         onSave={handleRenameSubject}
         onClose={() => setRenameSubjectOpen(false)}
       />

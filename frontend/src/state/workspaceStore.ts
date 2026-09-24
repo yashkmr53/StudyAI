@@ -320,6 +320,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
     if (!existing) return;
     const normalizedFolderId = !folderId || folderId === UNFILED_FOLDER_ID ? UNFILED_FOLDER_ID : folderId;
+    const isDuplicate = get().notes.some(
+      (n) =>
+        n.id !== noteId &&
+        n.subjectId === existing.subjectId &&
+        (n.folderId || UNFILED_FOLDER_ID) === normalizedFolderId &&
+        n.title.trim().toLowerCase() === existing.title.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      const inFolder = normalizedFolderId !== UNFILED_FOLDER_ID;
+      throw new Error(
+        inFolder
+          ? "A note with this name already exists in the target folder."
+          : "A note with this name already exists in this subject."
+      );
+    }
     const targetNotebook = normalizedFolderId === UNFILED_FOLDER_ID ? null : normalizedFolderId;
 
     if (existing.source !== "canvas") {
@@ -404,6 +419,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const clean = title.trim();
     if (!clean) return;
     const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
+    if (existing) {
+      const isDuplicate = get().notes.some(
+        (n) =>
+          n.id !== noteId &&
+          n.subjectId === existing.subjectId &&
+          (n.folderId || UNFILED_FOLDER_ID) === (existing.folderId || UNFILED_FOLDER_ID) &&
+          n.title.trim().toLowerCase() === clean.toLowerCase()
+      );
+      if (isDuplicate) {
+        const inFolder = existing.folderId && existing.folderId !== UNFILED_FOLDER_ID;
+        throw new Error(
+          inFolder
+            ? "A note with this name already exists in this folder."
+            : "A note with this name already exists in this subject."
+        );
+      }
+    }
     if (!existing || existing.source !== "canvas") {
       await documentsApi.rename(noteId, clean);
     }

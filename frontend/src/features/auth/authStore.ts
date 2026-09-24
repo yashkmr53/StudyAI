@@ -331,7 +331,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     async addProfile(name, module?: ModuleId) {
       const targetModule = module ?? get().module;
-      const created = await profilesApi.create(name, targetModule);
+      const clean = name.trim();
+      if (!clean) throw new Error("Profile name cannot be blank.");
+      const isDuplicate = get().profiles.some(
+        (p) => p.module === targetModule && p.name.trim().toLowerCase() === clean.toLowerCase()
+      );
+      if (isDuplicate) {
+        throw new Error("A profile with this name already exists in this module.");
+      }
+      const created = await profilesApi.create(clean, targetModule);
       const activeModule = (created.module as ModuleId) ?? targetModule;
       saveSelectedProfileId(activeModule, created.id);
       localStorage.setItem("studyai.profile", created.id);
@@ -354,7 +362,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     async renameProfile(id, name) {
-      const updated = await profilesApi.rename(id, name);
+      const clean = name.trim();
+      if (!clean) throw new Error("Profile name cannot be blank.");
+      const current = get().profiles.find((p) => p.id === id);
+      const targetModule = current?.module ?? get().module;
+      const isDuplicate = get().profiles.some(
+        (p) => p.id !== id && p.module === targetModule && p.name.trim().toLowerCase() === clean.toLowerCase()
+      );
+      if (isDuplicate) {
+        throw new Error("A profile with this name already exists in this module.");
+      }
+      const updated = await profilesApi.rename(id, clean);
       set((state) => ({
         profiles: state.profiles.map((p) => (p.id === id ? updated : p)),
         profile: state.profile?.id === id ? updated : state.profile,

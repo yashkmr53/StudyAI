@@ -59,7 +59,11 @@
     "addSubject": "Add subject",
     "newSubjectAria": "New subject",
     "switchProfile": "Switch profile",
-    "newProfilePrompt": "Profile name"
+    "newProfilePrompt": "Profile name",
+    "collapseSidebar": "Collapse sidebar",
+    "collapseSidebarTooltip": "Collapse Sidebar (⌘/)",
+    "expandSidebar": "Expand sidebar",
+    "expandSidebarTooltip": "Expand Sidebar (⌘/)"
   },
   "crud": {
     "rename": "Rename",
@@ -110,7 +114,13 @@
       "deleteFolder": "Failed to delete folder",
       "renameProfile": "Failed to rename profile",
       "deleteProfile": "Failed to delete profile",
-      "emptyName": "Name cannot be empty"
+      "emptyName": "Name cannot be empty",
+      "duplicateName": "An item with this name already exists",
+      "duplicateSubject": "A subject with this name already exists in this profile",
+      "duplicateFolder": "A folder with this name already exists in this subject",
+      "duplicateNoteInFolder": "A note with this name already exists in this folder",
+      "duplicateNoteInSubject": "A note with this name already exists in this subject",
+      "duplicateProfile": "A profile with this name already exists in this module"
     }
   },
   "auth": {
@@ -239,7 +249,8 @@
     "namePlaceholder": "e.g. Data Structures and Algorithms",
     "create": "Create subject",
     "creating": "Creating…",
-    "fallbackError": "We couldn't create this subject."
+    "fallbackError": "We couldn't create this subject.",
+    "duplicateError": "A subject with this name already exists in this profile."
   },
   "workspace": {
     "foldersTitle": "Folders",
@@ -265,7 +276,8 @@
       "topLevel": "Top level",
       "create": "Create folder",
       "creating": "Creating…",
-      "fallbackError": "We couldn't create this folder."
+      "fallbackError": "We couldn't create this folder.",
+      "duplicateError": "A folder with this name already exists in this subject."
     },
     "detail": {
       "notFoundTitle": "We couldn't find this folder.",

@@ -109,7 +109,7 @@ export function FolderDetailPage() {
       await renameFolder(folder.id, newName);
       toast.success(t("crud.success.folderRenamed", "Folder renamed"));
     } catch (err) {
-      toast.error(t("crud.errors.renameFolder", "Failed to rename folder"));
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameFolder", "Failed to rename folder"));
       throw err;
     }
   }
@@ -134,7 +134,7 @@ export function FolderDetailPage() {
       <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <h1>{displayName}</h1>
+            <h1 className="truncate" title={displayName}>{displayName}</h1>
             {!unfiled && folder && (
               <ActionMenu
                 ariaLabel={t("crud.folderActions", { defaultValue: "Folder actions" })}
@@ -269,6 +269,8 @@ export function FolderDetailPage() {
               title={t("crud.renameFolder", "Rename Folder")}
               initialValue={folder.name}
               label={t("crud.nameLabel", "Name")}
+              existingNames={folders.filter((f) => f.subjectId === folder.subjectId && f.id !== folder.id).map((f) => f.name)}
+              duplicateErrorMessage={t("crud.errors.duplicateFolder", "A folder with this name already exists in this subject")}
               onSave={handleRenameFolder}
               onClose={() => setRenameFolderOpen(false)}
             />

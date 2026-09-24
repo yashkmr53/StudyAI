@@ -12,6 +12,7 @@ DELETE /api/v1/notebooks/{id}/pages/{page_id}  delete page
 POST   /api/v1/notebooks/{id}/pages/{page_id}/lines  append strokes
 GET    /api/v1/notebooks/{id}/pages/{page_id}/lines  list lines
 """
+from django.db import IntegrityError
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -59,12 +60,17 @@ class NotebookViewSet(
         if serializer.validated_data.get("subject"):
             ProfileAuthorizationService.ensure_subject_access(request.user, serializer.validated_data["subject"])
 
-        notebook = Notebook.objects.create(
-            profile=profile,
-            subject=serializer.validated_data.get("subject"),
-            title=serializer.validated_data["title"],
-            description=serializer.validated_data.get("description", ""),
-        )
+        try:
+            notebook = Notebook.objects.create(
+                profile=profile,
+                subject=serializer.validated_data.get("subject"),
+                title=serializer.validated_data["title"],
+                description=serializer.validated_data.get("description", ""),
+            )
+        except IntegrityError:
+            raise ValidationError(
+                {"title": ["A folder with this name already exists in this subject."]}
+            )
         return Response(NotebookSerializer(notebook).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -72,7 +78,12 @@ class NotebookViewSet(
         instance = self.get_object()
         serializer = NotebookSerializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        try:
+            serializer.save()
+        except IntegrityError:
+            raise ValidationError(
+                {"title": ["A folder with this name already exists in this subject."]}
+            )
         return Response(serializer.data)
 
 

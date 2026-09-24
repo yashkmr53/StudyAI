@@ -30,6 +30,22 @@ class DocumentCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError({"notebook": "Notebook subject does not match document subject."})
                 elif subject is None:
                     attrs["subject"] = notebook.subject
+                    subject = notebook.subject
+
+        # Check duplicate note title in (profile, subject, notebook) if title is provided
+        title_val = (attrs.get("title") or attrs.get("filename") or "").strip()
+        if title_val and title_val.lower() != "untitled note":
+            duplicate = Document.objects.filter(
+                profile=profile,
+                subject=attrs.get("subject"),
+                notebook=notebook,
+                title__iexact=title_val,
+            )
+            if duplicate.exists():
+                scope_desc = "this folder" if notebook else "this subject"
+                raise serializers.ValidationError(
+                    {"title": [f"A note with this name already exists in {scope_desc}."]}
+                )
 
         return attrs
 
@@ -71,6 +87,7 @@ class DocumentUpdateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"notebook": "Notebook subject does not match document subject."})
                 elif target_subject is None:
                     attrs["subject"] = target_notebook.subject
+                    target_subject = target_notebook.subject
 
         # Validate title not empty if provided
         if "title" in attrs:
@@ -79,6 +96,21 @@ class DocumentUpdateSerializer(serializers.ModelSerializer):
                 attrs["title"] = "Untitled Note"
             else:
                 attrs["title"] = cleaned_title
+
+        # Check duplicate note title in the target folder / subject
+        effective_title = attrs.get("title", document.title).strip()
+        if effective_title and effective_title.lower() != "untitled note":
+            duplicate = Document.objects.filter(
+                profile=profile,
+                subject=target_subject,
+                notebook=target_notebook,
+                title__iexact=effective_title,
+            ).exclude(pk=document.pk)
+            if duplicate.exists():
+                scope_desc = "this folder" if target_notebook else "this subject"
+                raise serializers.ValidationError(
+                    {"title": [f"A note with this name already exists in {scope_desc}."]}
+                )
 
         return attrs
 

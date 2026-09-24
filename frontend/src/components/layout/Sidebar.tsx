@@ -9,6 +9,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   EditIcon,
+  PanelLeftCloseIcon,
   PlusIcon,
   TrashIcon,
 } from "../ui/icons";
@@ -16,6 +17,7 @@ import { ActionMenu } from "../ui/ActionMenu";
 import { RenameDialog } from "../ui/RenameDialog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
+import { useUiStore } from "../../state/uiStore";
 import type { ModuleId } from "../../types/modules";
 import type { Profile } from "../../types/api";
 
@@ -34,7 +36,15 @@ export function subjectGlyph(name: string): { background: string; color: string;
 }
 
 /** Left navigation: brand, subjects, add-subject — nothing else (§5). */
-export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
+export function Sidebar({
+  onNewSubject,
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  onNewSubject: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const subjects = useWorkspaceStore((s) => s.subjects);
@@ -72,7 +82,7 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
       setRenameProfileOpen(false);
       setProfileToRename(null);
     } catch (err) {
-      toast.error(t("crud.errors.renameProfile", "Failed to rename profile"));
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameProfile", "Failed to rename profile"));
       throw err;
     }
   }
@@ -144,12 +154,17 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
   async function onAddProfile() {
     const name = window.prompt(t("nav.newProfilePrompt"));
     if (!name?.trim()) return;
+    const clean = name.trim();
+    if (dropdownProfiles.some((p) => p.name.trim().toLowerCase() === clean.toLowerCase())) {
+      toast.error(t("crud.errors.duplicateProfile", "A profile with this name already exists in this module"));
+      return;
+    }
     try {
-      await addProfile(name.trim(), dropdownModule);
+      await addProfile(clean, dropdownModule);
       setSwitcherOpen(false);
       navigate("/subjects");
-    } catch {
-      /* surfaced via global error handling later */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("crud.errors.createProfile", "Failed to create profile"));
     }
   }
 
@@ -166,10 +181,24 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
   }
 
   return (
-    <aside className="sidebar">
+    <aside
+      className={`sidebar ${collapsed ? "sidebar--collapsed" : ""}`}
+      aria-hidden={collapsed}
+    >
       <div className="sidebar__brand">
         <div className="sidebar__brand-mark">S</div>
         <div className="sidebar__brand-name">{t("app.name")}</div>
+        {onToggleCollapse && (
+          <button
+            type="button"
+            className="icon-btn sidebar-collapse-btn"
+            onClick={onToggleCollapse}
+            aria-label={t("nav.collapseSidebar", "Collapse sidebar")}
+            data-tip={t("nav.collapseSidebarTooltip", "Collapse Sidebar (⌘/)")}
+          >
+            <PanelLeftCloseIcon size={16} />
+          </button>
+        )}
       </div>
 
       <div className="sidebar__section-label">
@@ -191,6 +220,7 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
           <NavLink
             key={subject.id}
             to={`/subjects/${subject.id}`}
+            onClick={() => useUiStore.getState().closeMobileSidebar()}
             className={({ isActive }) =>
               isActive ? "sidebar__item active" : "sidebar__item"
             }
@@ -198,7 +228,11 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
             <span className="sidebar__item-icon">
               <BookIcon size={15} />
             </span>
-            <span className="grow nowrap" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span
+              className="grow nowrap"
+              style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+              title={subject.name}
+            >
               {subject.name}
             </span>
             <span className="sidebar__item-count">{subject.noteCount}</span>
@@ -270,7 +304,11 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
                   onClick={() => void onProfileClick(p)}
                 >
                   <span className="avatar">{initials(p.name)}</span>
-                  <span className="grow nowrap" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <span
+                    className="grow nowrap"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                    title={p.name}
+                  >
                     {p.name}
                   </span>
                   {profile?.id === p.id && (
@@ -326,10 +364,13 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
           onClick={() => setSwitcherOpen((v) => !v)}
           aria-haspopup="menu"
           aria-expanded={switcherOpen}
+          title={`${profile?.name ?? "Profile"} (${t("nav.switchProfile")})`}
         >
           <span className="avatar">{profile ? initials(profile.name) : "?"}</span>
           <span className="profile-button__meta">
-            <span className="profile-button__name">{profile?.name ?? "Profile"}</span>
+            <span className="profile-button__name" title={profile?.name ?? "Profile"}>
+              {profile?.name ?? "Profile"}
+            </span>
             <span className="profile-button__hint">{t("nav.switchProfile")}</span>
           </span>
           <ChevronDownIcon size={14} className="faint" />
@@ -342,6 +383,8 @@ export function Sidebar({ onNewSubject }: { onNewSubject: () => void }) {
           title={t("crud.renameProfile", "Rename Profile")}
           initialValue={profileToRename.name}
           label={t("crud.nameLabel", "Name")}
+          existingNames={dropdownProfiles.filter((p) => p.id !== profileToRename.id).map((p) => p.name)}
+          duplicateErrorMessage={t("crud.errors.duplicateProfile", "A profile with this name already exists in this module")}
           onSave={handleRenameProfile}
           onClose={() => {
             setRenameProfileOpen(false);

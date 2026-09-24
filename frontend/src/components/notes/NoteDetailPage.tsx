@@ -158,7 +158,7 @@ export function NoteDetailPage() {
       await renameNote(note.id, newTitle);
       toast.success(t("crud.success.noteRenamed", "Note renamed"));
     } catch (err) {
-      toast.error(t("crud.errors.renameNote", "Failed to rename note"));
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameNote", "Failed to rename note"));
       throw err;
     }
   }
@@ -183,10 +183,10 @@ export function NoteDetailPage() {
         <Breadcrumbs crumbs={crumbs} />
 
         <div className="page-heading page-heading__row" style={{ marginTop: 14 }}>
-          <div>
-            <h1>{note.title}</h1>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 className="truncate" title={note.title}>{note.title}</h1>
             <p className="subtitle" style={{ marginTop: 5 }}>
-              <Link to={`/subjects/${displaySubject.id}`}>{displaySubject.name}</Link>
+              <Link to={`/subjects/${displaySubject.id}`} title={displaySubject.name}>{displaySubject.name}</Link>
               {" · "}
               {note.source === "canvas"
                 ? t("notes.source.canvas")
@@ -252,6 +252,19 @@ export function NoteDetailPage() {
         title={t("crud.renameNote", "Rename Note")}
         initialValue={note.title}
         label={t("crud.titleLabel", "Title")}
+        existingNames={notes
+          .filter(
+            (n) =>
+              n.id !== note.id &&
+              n.subjectId === note.subjectId &&
+              (n.folderId || UNFILED_FOLDER_ID) === (note.folderId || UNFILED_FOLDER_ID)
+          )
+          .map((n) => n.title)}
+        duplicateErrorMessage={
+          note.folderId && note.folderId !== UNFILED_FOLDER_ID
+            ? t("crud.errors.duplicateNoteInFolder", "A note with this name already exists in this folder")
+            : t("crud.errors.duplicateNoteInSubject", "A note with this name already exists in this subject")
+        }
         onSave={handleRename}
         onClose={() => setRenameOpen(false)}
       />

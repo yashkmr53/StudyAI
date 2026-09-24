@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import type { NoteMeta } from "../../types/domain";
+import { UNFILED_FOLDER_ID, type NoteMeta } from "../../types/domain";
 import { EnrichmentChip, timeAgo, TranscriptionChip } from "../ui/primitives";
 import { useServices } from "../modules/ModuleContext";
 import { NoteIcon, EditIcon, FolderIcon, TrashIcon } from "../ui/icons";
@@ -23,6 +23,7 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
   const services = useServices();
   const { t } = useTranslation();
   const toast = useToast();
+  const notes = useWorkspaceStore((s) => s.notes);
   const renameNote = useWorkspaceStore((s) => s.renameNote);
   const removeNote = useWorkspaceStore((s) => s.removeNote);
 
@@ -38,7 +39,7 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
       await renameNote(note.id, newTitle);
       toast.success(t("crud.success.noteRenamed", "Note renamed"));
     } catch (err) {
-      toast.error(t("crud.errors.renameNote", "Failed to rename note"));
+      toast.error(err instanceof Error ? err.message : t("crud.errors.renameNote", "Failed to rename note"));
       throw err;
     }
   }
@@ -63,7 +64,11 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
           <NoteIcon size={16} />
         </span>
         <span className="grow" style={{ minWidth: 0 }}>
-          <span className="note-row__title" style={{ display: "block", color: "var(--text)" }}>
+          <span
+            className="note-row__title"
+            style={{ display: "block", color: "var(--text)" }}
+            title={note.title}
+          >
             {note.title}
           </span>
           <span className="note-row__meta">
@@ -111,6 +116,19 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
         title={t("crud.renameNote", "Rename Note")}
         initialValue={note.title}
         label={t("crud.titleLabel", "Title")}
+        existingNames={notes
+          .filter(
+            (n) =>
+              n.id !== note.id &&
+              n.subjectId === note.subjectId &&
+              (n.folderId || UNFILED_FOLDER_ID) === (note.folderId || UNFILED_FOLDER_ID)
+          )
+          .map((n) => n.title)}
+        duplicateErrorMessage={
+          note.folderId && note.folderId !== UNFILED_FOLDER_ID
+            ? t("crud.errors.duplicateNoteInFolder", "A note with this name already exists in this folder")
+            : t("crud.errors.duplicateNoteInSubject", "A note with this name already exists in this subject")
+        }
         onSave={handleRename}
         onClose={() => setRenameOpen(false)}
       />

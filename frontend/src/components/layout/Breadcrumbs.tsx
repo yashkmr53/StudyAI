@@ -15,12 +15,16 @@ export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
         return (
           <span key={`${crumb.label}-${i}`} className="breadcrumbs__crumb">
             {last || !crumb.to ? (
-              <span className="breadcrumbs__current" aria-current={last ? "page" : undefined}>
+              <span
+                className="breadcrumbs__current"
+                aria-current={last ? "page" : undefined}
+                title={crumb.label}
+              >
                 {crumb.label}
               </span>
             ) : (
               <span className="breadcrumbs__crumb">
-                <a className="breadcrumbs__link" href={crumb.to}>
+                <a className="breadcrumbs__link" href={crumb.to} title={crumb.label}>
                   {crumb.label}
                 </a>
               </span>

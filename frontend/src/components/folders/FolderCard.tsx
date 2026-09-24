@@ -25,7 +25,9 @@ export function FolderCard({ folder, subjectId, noteCount, variant = "folder" }:
         <span className="folder-card__icon">
           {variant === "unfiled" ? <InboxGlyph /> : <FolderIcon size={16} />}
         </span>
-        <span className="folder-card__name">{folder.name}</span>
+        <span className="folder-card__name" title={folder.name}>
+          {folder.name}
+        </span>
       </span>
       <span className="folder-card__meta">
         {t("folders.card.notes", { count: noteCount })}

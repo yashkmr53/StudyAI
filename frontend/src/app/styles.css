@@ -150,19 +150,34 @@ select {
    ============================================================ */
 
 .shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+  width: 100vw;
 }
 
 .sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   user-select: none;
+  flex-shrink: 0;
+  transition: margin-left 220ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms ease;
+  will-change: margin-left, opacity;
+}
+
+.shell--collapsed .sidebar {
+  margin-left: calc(-1 * var(--sidebar-width));
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .sidebar__brand {
@@ -320,11 +335,15 @@ select {
 }
 
 .profile-button__meta {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   flex: 1;
+  text-align: left;
 }
 
 .profile-button__name {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -334,11 +353,13 @@ select {
 }
 
 .profile-button__hint {
+  display: block;
   font-size: 11.5px;
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
 .popover {
@@ -397,10 +418,74 @@ select {
 }
 
 .main {
-  display: flex;
-  flex-direction: column;
+  flex: 1;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Sidebar collapse button (in sidebar brand header) */
+.sidebar-collapse-btn {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: color var(--transition), background var(--transition);
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--text);
+  background: rgba(15, 20, 40, 0.06);
+}
+
+/* Sidebar expand button (floating in top-left when collapsed) */
+.sidebar-expand-btn {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 95;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.sidebar-expand-btn:hover {
+  background: var(--surface-hover, #f8f9fc);
+  color: var(--text);
+  border-color: var(--border-hover, #cbd2e0);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.04);
+}
+
+.sidebar-expand-btn:active {
+  transform: scale(0.96);
+}
+
+.sidebar-collapse-btn:focus-visible,
+.sidebar-expand-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Give top-left space for the expand button when collapsed */
+.shell--collapsed .content__inner {
+  padding-left: 56px;
 }
 
 .topbar {
@@ -421,6 +506,7 @@ select {
 .content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
 }
 
@@ -805,6 +891,9 @@ select {
 .note-row__title {
   font-size: 14px;
   font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-row__meta {
@@ -1290,7 +1379,7 @@ textarea.input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: 18px;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
@@ -1306,10 +1395,19 @@ textarea.input {
   gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
+  border-top-left-radius: calc(var(--radius-lg) - 1px);
+  border-top-right-radius: calc(var(--radius-lg) - 1px);
   background: var(--surface-2);
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-secondary);
+  position: relative;
+  z-index: 10;
+}
+
+.source-page > :last-child {
+  border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+  border-bottom-right-radius: calc(var(--radius-lg) - 1px);
 }
 
 .source-page__canvas-wrap {
@@ -2274,19 +2372,18 @@ textarea.input {
 }
 
 /* ============================================================
-   Tooltips (CSS-only via data-tip)
+   Shared Floating Tooltips (Viewport Collision-Aware)
    ============================================================ */
 
-[data-tip] {
-  position: relative;
+@keyframes tooltip-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 7px);
-  left: 50%;
-  transform: translateX(-50%);
+.floating-tooltip {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
   background: #23262d;
   color: #f4f5f7;
   font-size: 11.5px;
@@ -2294,21 +2391,16 @@ textarea.input {
   padding: 4px 9px;
   border-radius: 6px;
   white-space: nowrap;
-  z-index: 90;
-  pointer-events: none;
-  animation: pop-in 100ms ease-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  line-height: 1.3;
+  animation: tooltip-fade-in 80ms ease-out;
 }
 
-[data-tip]:hover::before {
-  content: "";
+.floating-tooltip__arrow {
   position: absolute;
-  bottom: calc(100% + 3px);
-  left: 50%;
-  transform: translateX(-50%) rotate(45deg);
   width: 8px;
   height: 8px;
   background: #23262d;
-  z-index: 89;
   pointer-events: none;
 }
 
@@ -2333,6 +2425,11 @@ textarea.input {
 .faint { color: var(--text-tertiary); }
 .small { font-size: 12.5px; }
 .nowrap { white-space: nowrap; }
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .section-title {
   font-size: 15px;
@@ -2375,10 +2472,8 @@ kbd {
 
 .action-menu__dropdown {
   position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  min-width: 160px;
+  min-width: min(160px, calc(100vw - 24px));
+  max-width: min(280px, calc(100vw - 24px));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2386,6 +2481,32 @@ kbd {
   padding: 4px;
   z-index: 100;
   animation: pop-in 100ms ease-out;
+}
+
+/* Horizontal alignment */
+.action-menu__dropdown--align-left {
+  left: 0;
+  right: auto;
+}
+
+.action-menu__dropdown--align-right {
+  right: 0;
+  left: auto;
+}
+
+/* Vertical placement */
+.action-menu__dropdown--placement-bottom {
+  top: 100%;
+  bottom: auto;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.action-menu__dropdown--placement-top {
+  bottom: 100%;
+  top: auto;
+  margin-bottom: 4px;
+  margin-top: 0;
 }
 
 .action-menu__item {
@@ -2421,6 +2542,15 @@ kbd {
 .action-menu__item--danger:hover:not(:disabled) {
   background: var(--danger-subtle);
   color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  .action-menu__item {
+    white-space: normal;
+    word-break: break-word;
+    font-size: 12px;
+    padding: 6px 8px;
+  }
 }
 
 /* ============================================================
@@ -2487,4 +2617,65 @@ kbd {
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Dynamic Sidebar & Mobile Drawer
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .content__inner {
+    padding: 24px 20px 64px;
+  }
+  .shell--collapsed .content__inner {
+    padding-left: 52px;
+  }
+  .page-heading__row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+    width: 280px;
+    min-width: 280px;
+    max-width: 85vw;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    margin-left: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transition: transform 240ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .shell--mobile-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 999;
+    animation: fade-in 150ms ease;
+  }
+
+  .sidebar-expand-btn {
+    display: flex !important;
+    top: 12px;
+    left: 12px;
+  }
+
+  .content__inner {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-top: 56px !important;
+  }
 }
