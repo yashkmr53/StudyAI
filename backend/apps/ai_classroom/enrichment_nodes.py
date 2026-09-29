@@ -160,91 +160,105 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
             .order_by("chunk_index")[:8]
         )
 
-    # Use RetrievalService to fetch reference chunks by relevance to document content
-    # instead of non-deterministic order_by("?") (§51, G10).
-    # We embed extracted key concepts from the document to find the most relevant reference chunks.
-    from_provider = get_llm_provider()  # placeholder - not used, kept for import context
-    
-    # Get the user from the document's profile
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
+    # Use shared Reference Retrieval Service (Phase 11 §7, §9) to fetch relevant textbook/reference chunks
+    from apps.references.services import retrieve_reference_context
+
     profile = document.profile
     user = profile.user if profile else None
-    
-    # Get reference book IDs for scoping (only the document's reference book)
+
+    # Get reference book IDs for scoping (only the document's reference book if present)
     reference_book_ids = None
     if document.reference_book_id:
         reference_book_ids = [str(document.reference_book_id)]
-    
+
     # Extract key concepts from user note chunks for focused retrieval
     user_note_content = " ".join([c.content for c in user_chunks])
     query = extract_query_terms(user_note_content) if user_chunks else ""
-    
-    try:
-        if user and query:
-            # Use RetrievalService with extracted key concepts as query
+
+    reference_chunk_items = []
+    # 1. Primary path: Shared Reference Retrieval Service across textbooks and reference materials
+    if query:
+        try:
+            shared_ref = retrieve_reference_context(
+                query,
+                profile=profile,
+                subject=document.subject,
+                top_k=6,
+            )
+            for ref in shared_ref:
+                reference_chunk_items.append({
+                    "chunk_id": ref["chunk_id"],
+                    "content": ref["text"],
+                    "source_type": ref.get("source_type", "TEXTBOOK"),
+                    "source_title": ref.get("source_title", "Textbook"),
+                    "document_id": ref.get("document_id"),
+                    "page_start": ref.get("page_start", 1) or 1,
+                    "page_end": ref.get("page_end", 1) or 1,
+                    "chapter": ref.get("chapter", ""),
+                    "section": ref.get("section", ""),
+                    "revision_ids": [],
+                })
+        except Exception as exc:
+            logger.warning("retrieve_reference_context failed in enrichment: %s", exc)
+
+    # 2. Legacy fallback for curated ReferenceBook instances if no shared references found
+    if not reference_chunk_items and user and query and reference_book_ids:
+        try:
             ref_evidence = RetrievalService.search(
-                user, 
-                query, 
-                top_k=6, 
+                user,
+                query,
+                top_k=6,
                 include_reference=True,
                 reference_book_ids=reference_book_ids,
-                reference_only=True
+                reference_only=True,
             )
-            reference_chunks = [NoteChunk.objects.get(pk=ev.chunk_id) for ev in ref_evidence if ev.chunk_id]
-        else:
-            # Fallback: scoped to document's reference book only
-            reference_chunks = list(
-                NoteChunk.objects.filter(
-                    source_type="reference",
-                    stale=False,
-                    reference_book__status="ready",
-                    reference_book_id__in=reference_book_ids if reference_book_ids else [],
-                ).exclude(reference_book__isnull=True)
-                .select_related("reference_book")
-                .order_by("-chunk_index")[:6]
-            )
-    except Exception:
-        # Fallback to scoped selection if retrieval fails
-        reference_chunks = list(
-            NoteChunk.objects.filter(
-                source_type="reference",
-                stale=False,
-                reference_book__status="ready",
-                reference_book_id__in=reference_book_ids if reference_book_ids else [],
-            ).exclude(reference_book__isnull=True)
-            .select_related("reference_book")
-            .order_by("-chunk_index")[:6]
-        )
-
-    # Neighbor expansion: include adjacent chunks for better context coverage
-    if reference_book_ids and reference_chunks:
-        anchor_ids = [str(c.pk) for c in reference_chunks]
-        neighbor_chunks = _expand_neighbors(reference_book_ids[0], anchor_ids, window=2)
-        # Merge, preserving order and deduplicating
-        seen = set()
-        merged_chunks = []
-        for c in reference_chunks + neighbor_chunks:
-            if c.pk not in seen:
-                seen.add(c.pk)
-                merged_chunks.append(c)
-        reference_chunks = merged_chunks
-
-    def as_evidence(chunks):
-        return [{"chunk_id": str(c.pk), "content": c.content} for c in chunks]
+            for ev in ref_evidence:
+                reference_chunk_items.append({
+                    "chunk_id": ev.chunk_id,
+                    "content": ev.content or ev.content_snippet,
+                    "source_type": ev.source_type,
+                    "source_title": ev.document_title or "Reference",
+                    "document_id": ev.document_id,
+                    "page_start": ev.page_start,
+                    "page_end": ev.page_end,
+                    "chapter": getattr(ev, "chapter", ""),
+                    "section": getattr(ev, "section", ""),
+                    "revision_ids": [],
+                })
+        except Exception:
+            pass
 
     evidence_payload = {
-        "user_chunks": as_evidence(user_chunks),
-        "reference_chunks": as_evidence(reference_chunks),
+        "user_chunks": [{"chunk_id": str(c.pk), "content": c.content} for c in user_chunks],
+        "reference_chunks": [
+            {
+                "chunk_id": r["chunk_id"],
+                "content": r["content"],
+                "source_title": r.get("source_title", "Textbook"),
+                "source_type": r.get("source_type", "TEXTBOOK"),
+                "page": r.get("page_start", 1),
+                "chapter": r.get("chapter", ""),
+                "section": r.get("section", ""),
+            }
+            for r in reference_chunk_items
+        ],
+        "has_reference_material": len(reference_chunk_items) > 0,
     }
 
     return {
-        "user_chunks": [{"chunk_id": str(c.pk), "content": c.content, "source_type": c.source_type,
-                         "document_id": str(c.document_id), "page_start": c.page_start,
-                         "page_end": c.page_end, "revision_ids": c.revision_ids} for c in user_chunks],
-        "reference_chunks": [{"chunk_id": str(c.pk), "content": c.content, "source_type": c.source_type,
-                              "document_id": str(c.document_id), "page_start": c.page_start,
-                              "page_end": c.page_end, "revision_ids": c.revision_ids} for c in reference_chunks],
+        "user_chunks": [
+            {
+                "chunk_id": str(c.pk),
+                "content": c.content,
+                "source_type": c.source_type,
+                "document_id": str(c.document_id),
+                "page_start": c.page_start,
+                "page_end": c.page_end,
+                "revision_ids": c.revision_ids,
+            }
+            for c in user_chunks
+        ],
+        "reference_chunks": reference_chunk_items,
         "evidence_payload": evidence_payload,
     }
 
@@ -255,10 +269,24 @@ def draft_node(state: EnrichmentState, config=None) -> dict:
     prompt_template = active_prompt("enrichment_draft")
     evidence_payload = state["evidence_payload"]
 
+    has_ref = evidence_payload.get("has_reference_material", False)
+    if has_ref:
+        grounding_guidance = (
+            "\n\nGROUNDING INSTRUCTION:\n"
+            "REFERENCE MATERIAL is provided in 'reference_chunks'. Use it as the primary grounding source for "
+            "definitions, explanations, and key concepts, and cite their source_chunk_ids.\n"
+        )
+    else:
+        grounding_guidance = (
+            "\n\nGROUNDING INSTRUCTION:\n"
+            "NOTE: No textbook or reference material is available. Ground the enrichment ONLY in the user note chunks. "
+            "Do NOT fabricate or cite any textbook references, external books, or page numbers.\n"
+        )
+
     prompt = Prompt(
         name="enrichment_draft",
         version=prompt_template.version,
-        user=prompt_template.template + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
+        user=prompt_template.template + grounding_guidance + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
     )
 
     started = time.monotonic()

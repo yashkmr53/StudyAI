@@ -30,6 +30,9 @@ class Evidence:
     rrf_score: float
     document_title: Optional[str] = None
     subject_name: Optional[str] = None
+    content: Optional[str] = None
+    chapter: Optional[str] = None
+    section: Optional[str] = None
 
     def as_dict(self) -> dict:
         return {
@@ -39,8 +42,11 @@ class Evidence:
             "page_start": self.page_start,
             "page_end": self.page_end,
             "snippet": self.content_snippet,
+            "content": self.content or self.content_snippet,
             "document_title": self.document_title,
             "subject_name": self.subject_name,
+            "chapter": self.chapter,
+            "section": self.section,
             "scores": {
                 "dense": self.dense_rank,
                 "keyword": self.keyword_rank,
@@ -187,6 +193,7 @@ class RetrievalService:
                     page_start=r.page_start,
                     page_end=r.page_end,
                     content_snippet=r.content[:280],
+                    content=r.content,
                     dense_rank=dense_ids.get(cid),
                     keyword_rank=keyword_ids.get(cid),
                     rrf_score=fused[cid],
@@ -194,4 +201,40 @@ class RetrievalService:
                     subject_name=r.subject.name if r.subject else None,
                 )
             )
-        return evidence
+
+        # Include Phase 11 ReferenceChunks if reference material is requested
+        if include_reference:
+            from apps.references.services import retrieve_reference_context
+            from apps.profiles.models import Profile
+
+            user_profile = None
+            if user:
+                user_profile = Profile.objects.filter(user=user).first()
+            ref_results = retrieve_reference_context(
+                query,
+                profile=user_profile,
+                subject=subject,
+                top_k=top_k,
+            )
+            for ref in ref_results:
+                evidence.append(
+                    Evidence(
+                        chunk_id=ref["chunk_id"],
+                        document_id=ref["document_id"],
+                        source_type=ref.get("source_type", "TEXTBOOK"),
+                        page_start=ref["page_start"],
+                        page_end=ref["page_end"],
+                        content_snippet=ref["snippet"],
+                        content=ref["text"],
+                        dense_rank=None,
+                        keyword_rank=None,
+                        rrf_score=ref["score"],
+                        document_title=ref["source_title"],
+                        subject_name=ref.get("subject_name"),
+                        chapter=ref.get("chapter"),
+                        section=ref.get("section"),
+                    )
+                )
+
+        evidence.sort(key=lambda e: e.rrf_score, reverse=True)
+        return evidence[:top_k]

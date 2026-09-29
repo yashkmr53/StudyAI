@@ -8,6 +8,7 @@ import { FolderCard } from "../folders/FolderCard";
 import { NewFolderDialog } from "../folders/NewFolderDialog";
 import { EmptyState, ErrorState } from "../ui/primitives";
 import {
+  BookIcon,
   ClipboardIcon,
   EditIcon,
   FolderIcon,
@@ -192,7 +193,7 @@ export function SubjectWorkspace() {
         </div>
 
         {/* AI Classroom capability cards — each gated by its own service */}
-        {services.tests || services.qa ? (
+        {services.tests || services.qa || services.enrichment ? (
           <section className="ai-banner" aria-label={t("modules.classroomBanner")}>
             <div className="ai-banner__label">{t("modules.classroomBanner")}</div>
             <div className="card-grid">
@@ -214,6 +215,13 @@ export function SubjectWorkspace() {
                   to={`/subjects/${subjectId}/tests`}
                 />
               </ServiceGate>
+              <ServiceCard
+                title="Reference Library"
+                description="Textbooks and reference material indexed for grounded enrichment and chat"
+                icon={<BookIcon size={17} />}
+                iconColor={{ bg: "#eef0fc", fg: "#4f5bd5" }}
+                to={`/subjects/${subjectId}/references`}
+              />
             </div>
           </section>
         ) : null}
@@ -228,6 +236,14 @@ export function SubjectWorkspace() {
           <div className="panel-section__header">
             <h2 className="panel-section__title">{t("workspace.foldersTitle")}</h2>
             <span className="panel-section__spacer" />
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => navigate(`/subjects/${subjectId}/references`)}
+            >
+              <BookIcon size={13} />
+              Reference Library
+            </button>
             <button type="button" className="btn btn--secondary btn--sm" onClick={() => setNewFolderOpen(true)}>
               <PlusIcon size={13} />
               {t("workspace.newFolder")}

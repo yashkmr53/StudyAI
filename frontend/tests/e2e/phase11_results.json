@@ -1,0 +1,18 @@
+{
+  "startedAt": "2026-09-29T16:36:13.185Z",
+  "checklist": {
+    "authenticated": true,
+    "subjectWorkspaceLoaded": true,
+    "referenceLibraryNavigated": true,
+    "uploadDialogOpen": true,
+    "documentUploaded": true,
+    "ingestionCompletedReady": true,
+    "provenanceMetadataDisplayed": true,
+    "askStudyAIGroundedAnswer": true,
+    "multiTurnContextPreserved": true,
+    "documentDeletedSuccessfully": true
+  },
+  "metrics": {},
+  "completedAt": "2026-09-29T16:36:50.164Z",
+  "success": true
+}
