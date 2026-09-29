@@ -113,14 +113,7 @@ class Qwen3EmbeddingProvider:
             else:
                 self._device = self.device_setting
 
-            try:
-                self._model = SentenceTransformer(
-                    self._model_name,
-                    device=self._device,
-                    local_files_only=True,
-                )
-            except Exception:
-                self._model = SentenceTransformer(self._model_name, device=self._device)
+            self._model = SentenceTransformer(self._model_name, device=self._device)
             # Verify dimension
             test_vec = self._model.encode(["probe"], normalize_embeddings=True)
             self._dimension = int(test_vec.shape[1])
