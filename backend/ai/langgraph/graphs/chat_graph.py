@@ -54,6 +54,9 @@ def _branch_after_verification(state: ChatState) -> str:
     route = state.get("route")
     if route in ("conversational", "date_time"):
         return "format_response"
+    # When no evidence exists, verification cannot be supported; avoid empty-evidence retry loop
+    if not state.get("selected_evidence") and not state.get("retrieved_evidence") and not state.get("web_evidence"):
+        return "format_response"
     if state.get("verification_status") in ("supported", "partially_supported"):
         return "format_response"
     retry = state.get("retry_count", 0)

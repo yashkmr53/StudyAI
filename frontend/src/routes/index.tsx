@@ -18,6 +18,7 @@ import { WritingPage } from "../features/writing/WritingPage";
 import { TestsPage } from "../components/tests/TestsPage";
 import { PracticePage } from "../components/practice/PracticePage";
 import { ChatPage } from "../components/chat/ChatPage";
+import { ReferenceLibraryPage } from "../components/references/ReferenceLibraryPage";
 
 /** Restores the session and loads the workspace once authenticated. */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -175,6 +176,9 @@ export function AppRoutes() {
             </ServiceRoute>
           }
         />
+        <Route path="references" element={<ReferenceLibraryPage />} />
+        <Route path="subjects/:subjectId/references" element={<ReferenceLibraryPage />} />
+        <Route path="ai-classroom/references" element={<ReferenceLibraryPage />} />
       </Route>
 
       {/* legacy paths from earlier phases */}

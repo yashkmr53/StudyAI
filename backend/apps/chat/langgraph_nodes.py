@@ -333,13 +333,15 @@ def answer_generation_node(state: ChatState) -> dict:
         "evidence": [
             {
                 "citation_id": e.get("citation_id", f"SRC-{i + 1:03d}"),
-                "content": e.get("snippet", "") or e.get("content", ""),
+                "content": e.get("content", "") or e.get("snippet", ""),
                 "source_type": e.get("source_type", "database"),
                 "document_title": e.get("document_title"),
                 "title": e.get("title"),
                 "url": e.get("url"),
                 "page_start": e.get("page_start"),
                 "page_end": e.get("page_end"),
+                "chapter": e.get("chapter"),
+                "section": e.get("section"),
             }
             for i, e in enumerate(evidence)
         ]
