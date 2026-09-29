@@ -63,7 +63,19 @@ paths:
   /api/v1/auth/password-reset:
     post:
       operationId: api_v1_auth_password_reset_create
-      description: Always returns 202; never reveals whether an email exists.
+      description: 'Initiate password reset: create token + dispatch email (§23).'
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/password-reset-confirm:
+    post:
+      operationId: api_v1_auth_password_reset_confirm_create
+      description: Confirm password reset with token (§23).
       tags:
       - api
       security:
@@ -348,6 +360,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/CanvasSession'
           description: ''
+  /api/v1/chat/:
+    post:
+      operationId: api_v1_chat_create
+      description: Process a user message through the StudyAI Agent.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/chat/sessions:
     get:
       operationId: api_v1_chat_sessions_list
@@ -435,6 +458,41 @@ paths:
           description: ''
     post:
       operationId: api_v1_chat_sessions_messages_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChatSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatSession'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+          description: ''
+  /api/v1/chat/sessions/{id}/messages/stream:
+    post:
+      operationId: api_v1_chat_sessions_messages_stream_create
+      description: |-
+        Stream the assistant answer for a user message via SSE.
+
+        Emits: `title`, `token` (multiple), `citations`, `done`, `error`.
       parameters:
       - in: path
         name: id
@@ -563,7 +621,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -621,6 +678,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/Document'
           description: ''
+    patch:
+      operationId: api_v1_documents_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDocument'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDocument'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDocument'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          description: ''
+    delete:
+      operationId: api_v1_documents_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/documents/{id}/enrich:
     post:
       operationId: api_v1_documents_enrich_create
@@ -644,7 +746,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -719,7 +820,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -752,7 +852,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -784,7 +883,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -797,6 +895,8 @@ paths:
   /api/v1/documents/{id}/revisions:
     get:
       operationId: api_v1_documents_revisions_retrieve
+      description: 'GET: list revisions for document/page. POST: finalize-upload (no
+        lines) or user-edited revision (with lines).'
       parameters:
       - in: path
         name: id
@@ -816,8 +916,8 @@ paths:
           description: ''
     post:
       operationId: api_v1_documents_revisions_create
-      description: 'Two modes: finalize-upload (no lines) or user-edited revision
-        (with lines).'
+      description: 'GET: list revisions for document/page. POST: finalize-upload (no
+        lines) or user-edited revision (with lines).'
       parameters:
       - in: path
         name: id
@@ -837,7 +937,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/Document'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -868,6 +967,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Document'
           description: ''
+  /api/v1/documents/pages/{page_id}/download:
+    get:
+      operationId: api_v1_documents_pages_download_retrieve
+      description: GET /api/v1/documents/pages/{page_id}/download — signed URL for
+        a page scan.
+      parameters:
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/documents/pages/{page_id}/finalize-upload:
     post:
       operationId: api_v1_documents_pages_finalize_upload_create
@@ -878,6 +996,23 @@ paths:
         schema:
           type: string
           format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/executions/{request_id}/:
+    get:
+      operationId: api_v1_executions_retrieve
+      description: Get execution trace for a specific agent request.
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
         required: true
       tags:
       - api
@@ -1362,6 +1497,130 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/references/:
+    get:
+      operationId: api_v1_references_list
+      description: API for managing reference library documents.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReferenceDocumentList'
+          description: ''
+    post:
+      operationId: api_v1_references_create
+      description: Upload a new reference PDF and trigger automatic background indexing.
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReferenceDocument'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReferenceDocument'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceDocument'
+          description: ''
+  /api/v1/references/{id}/:
+    get:
+      operationId: api_v1_references_retrieve
+      description: API for managing reference library documents.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceDocument'
+          description: ''
+    delete:
+      operationId: api_v1_references_destroy
+      description: Delete reference document, cleaning up storage, chunks, and embeddings.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/references/{id}/chunks/:
+    get:
+      operationId: api_v1_references_chunks_retrieve
+      description: List chunks for this reference document.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceDocument'
+          description: ''
+  /api/v1/references/{id}/status/:
+    get:
+      operationId: api_v1_references_status_retrieve
+      description: Get live processing status and statistics.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceDocument'
+          description: ''
   /api/v1/revision/goals:
     get:
       operationId: api_v1_revision_goals_retrieve
@@ -1461,7 +1720,12 @@ paths:
   /api/v1/subjects:
     get:
       operationId: api_v1_subjects_list
-      description: Subjects scoped to profiles owned by the authenticated user (§60).
+      description: |-
+        Subjects scoped to profiles owned by the authenticated user (§60).
+
+        GET /subjects                 → every subject across the user's profiles
+        GET /subjects?profile={id}    → only that profile's subjects (ownership
+                                        enforced; foreign/unknown ids → 404)
       parameters:
       - name: page
         required: false
@@ -1482,7 +1746,12 @@ paths:
           description: ''
     post:
       operationId: api_v1_subjects_create
-      description: Subjects scoped to profiles owned by the authenticated user (§60).
+      description: |-
+        Subjects scoped to profiles owned by the authenticated user (§60).
+
+        GET /subjects                 → every subject across the user's profiles
+        GET /subjects?profile={id}    → only that profile's subjects (ownership
+                                        enforced; foreign/unknown ids → 404)
       tags:
       - api
       requestBody:
@@ -1509,7 +1778,12 @@ paths:
   /api/v1/subjects/{id}:
     get:
       operationId: api_v1_subjects_retrieve
-      description: Subjects scoped to profiles owned by the authenticated user (§60).
+      description: |-
+        Subjects scoped to profiles owned by the authenticated user (§60).
+
+        GET /subjects                 → every subject across the user's profiles
+        GET /subjects?profile={id}    → only that profile's subjects (ownership
+                                        enforced; foreign/unknown ids → 404)
       parameters:
       - in: path
         name: id
@@ -1529,7 +1803,12 @@ paths:
           description: ''
     patch:
       operationId: api_v1_subjects_partial_update
-      description: Subjects scoped to profiles owned by the authenticated user (§60).
+      description: |-
+        Subjects scoped to profiles owned by the authenticated user (§60).
+
+        GET /subjects                 → every subject across the user's profiles
+        GET /subjects?profile={id}    → only that profile's subjects (ownership
+                                        enforced; foreign/unknown ids → 404)
       parameters:
       - in: path
         name: id
@@ -1558,6 +1837,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/Subject'
           description: ''
+    delete:
+      operationId: api_v1_subjects_destroy
+      description: |-
+        Subjects scoped to profiles owned by the authenticated user (§60).
+
+        GET /subjects                 → every subject across the user's profiles
+        GET /subjects?profile={id}    → only that profile's subjects (ownership
+                                        enforced; foreign/unknown ids → 404)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/tags:
     get:
       operationId: api_v1_tags_list
@@ -1689,6 +1989,17 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/tools/:
+    get:
+      operationId: api_v1_tools_retrieve
+      description: List all available agent tools with schemas.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /healthz:
     get:
       operationId: healthz_retrieve
@@ -1813,6 +2124,10 @@ components:
           type: array
           items: {}
           readOnly: true
+        document:
+          type: string
+          format: uuid
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -1913,18 +2228,30 @@ components:
         profile:
           type: string
           format: uuid
+          readOnly: true
           nullable: true
         subject:
           type: string
           format: uuid
           nullable: true
+        notebook:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          maxLength: 255
         source:
-          $ref: '#/components/schemas/SourceEnum'
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
         source_type:
-          $ref: '#/components/schemas/SourceTypeEnum'
+          allOf:
+          - $ref: '#/components/schemas/DocumentSourceTypeEnum'
+          readOnly: true
         schema_version:
           type: string
-          maxLength: 16
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1932,8 +2259,22 @@ components:
       required:
       - created_at
       - id
+      - profile
+      - schema_version
       - source
       - source_type
+    DocumentSourceTypeEnum:
+      enum:
+      - image
+      - pdf
+      - canvas_page
+      - reference
+      type: string
+      description: |-
+        * `image` - image
+        * `pdf` - pdf
+        * `canvas_page` - canvas_page
+        * `reference` - reference
     Job:
       type: object
       properties:
@@ -1963,6 +2304,14 @@ components:
       - resource_id
       - resource_type
       - status
+    ModuleEnum:
+      enum:
+      - NOTE_SPACE
+      - AI_CLASSROOM
+      type: string
+      description: |-
+        * `NOTE_SPACE` - NoteSpace
+        * `AI_CLASSROOM` - AI Classroom
     Notebook:
       type: object
       properties:
@@ -2275,6 +2624,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Question'
+    PaginatedReferenceDocumentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceDocument'
     PaginatedSubjectList:
       type: object
       required:
@@ -2321,6 +2693,44 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tag'
+    PatchedDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        profile:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        subject:
+          type: string
+          format: uuid
+          nullable: true
+        notebook:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          maxLength: 255
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/DocumentSourceTypeEnum'
+          readOnly: true
+        schema_version:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedNotebook:
       type: object
       properties:
@@ -2370,6 +2780,8 @@ components:
         name:
           type: string
           maxLength: 120
+        module:
+          $ref: '#/components/schemas/ModuleEnum'
         created_at:
           type: string
           format: date-time
@@ -2405,6 +2817,8 @@ components:
         name:
           type: string
           maxLength: 120
+        module:
+          $ref: '#/components/schemas/ModuleEnum'
         created_at:
           type: string
           format: date-time
@@ -2434,6 +2848,8 @@ components:
         source_chunk_id:
           type: string
           format: uuid
+        question_type:
+          $ref: '#/components/schemas/QuestionTypeEnum'
         difficulty:
           $ref: '#/components/schemas/DifficultyEnum'
         prompt:
@@ -2446,6 +2862,8 @@ components:
         answer_text:
           type: string
           readOnly: true
+        explanation:
+          type: string
         content_hash:
           type: string
           maxLength: 64
@@ -2465,7 +2883,6 @@ components:
           format: date-time
           readOnly: true
       required:
-      - answer_index
       - answer_text
       - content_hash
       - created_at
@@ -2477,6 +2894,91 @@ components:
       - question_key
       - source_chunk_id
       - source_revision_id
+    QuestionTypeEnum:
+      enum:
+      - mcq
+      - flashcard
+      - short_answer
+      - explanation
+      type: string
+      description: |-
+        * `mcq` - Multiple Choice
+        * `flashcard` - Flashcard
+        * `short_answer` - Short Answer
+        * `explanation` - Explanation
+    ReferenceDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        source_type:
+          $ref: '#/components/schemas/ReferenceDocumentSourceTypeEnum'
+        subject:
+          type: string
+          format: uuid
+          nullable: true
+        subject_name:
+          type: string
+          nullable: true
+          readOnly: true
+        profile:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        scope:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        page_count:
+          type: integer
+          readOnly: true
+          nullable: true
+        chunk_count:
+          type: integer
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        metadata: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - chunk_count
+      - created_at
+      - error_message
+      - id
+      - page_count
+      - profile
+      - scope
+      - status
+      - subject_name
+      - title
+      - updated_at
+    ReferenceDocumentSourceTypeEnum:
+      enum:
+      - TEXTBOOK
+      - REFERENCE_PDF
+      - LECTURE_MATERIAL
+      type: string
+      description: |-
+        * `TEXTBOOK` - Textbook
+        * `REFERENCE_PDF` - Reference PDF
+        * `LECTURE_MATERIAL` - Lecture Material
     SourceEnum:
       enum:
       - upload
@@ -2487,18 +2989,18 @@ components:
         * `upload` - upload
         * `canvas` - canvas
         * `reference` - reference
-    SourceTypeEnum:
+    StatusEnum:
       enum:
-      - image
-      - pdf
-      - canvas_page
-      - reference
+      - PENDING
+      - PROCESSING
+      - READY
+      - FAILED
       type: string
       description: |-
-        * `image` - image
-        * `pdf` - pdf
-        * `canvas_page` - canvas_page
-        * `reference` - reference
+        * `PENDING` - Pending
+        * `PROCESSING` - Processing
+        * `READY` - Ready
+        * `FAILED` - Failed
     Subject:
       type: object
       properties:
