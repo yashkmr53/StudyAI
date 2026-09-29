@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 import datetime as _dt
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from providers.base import LLMResult, Prompt, StructuredLLMResult
 
