@@ -12,11 +12,15 @@ import type { CitationRef, EnrichedBlock, EnrichmentState, EnrichmentSnapshot } 
 
 interface WireSourceRef {
   source_type?: string;
+  source_title?: string;
+  title?: string;
   chunk_id?: string;
   document_id?: string;
   page_number?: number;
+  page?: number;
+  chapter?: string;
+  section?: string;
   content?: string;
-  title?: string;
   bbox?: unknown;
   retrieval_score?: number | null;
 }
@@ -51,15 +55,18 @@ function normalizeCitations(block: WireBlock): CitationRef[] {
   const verificationScore = block.citation?.verification_score;
 
   return refs.map((r) => {
-    const pageNum = typeof r.page_number === "number" ? r.page_number : 1;
+    const pageNum = typeof r.page_number === "number" ? r.page_number : (typeof r.page === "number" ? r.page : 1);
+    const isReference = ["reference", "TEXTBOOK", "REFERENCE_PDF", "LECTURE_MATERIAL"].includes(r.source_type ?? "");
     return {
       page: pageNum,
       bbox: Array.isArray(r.bbox) ? r.bbox.map(Number) : null,
-      sourceType: r.source_type ?? "image",
+      sourceType: isReference ? "reference" : (r.source_type ?? "image"),
       content: r.content ?? "",
       chunkId: r.chunk_id,
       documentId: r.document_id,
-      title: r.title,
+      title: r.source_title || r.title,
+      chapter: r.chapter,
+      section: r.section,
       verificationStatus,
       verificationScore,
     };
