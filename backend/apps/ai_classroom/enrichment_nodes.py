@@ -542,8 +542,15 @@ def citation_stitch_node(state: EnrichmentState, config=None) -> dict:
     reference_chunks = state.get("reference_chunks", [])
     all_chunks = {c["chunk_id"]: c for c in user_chunks + reference_chunks}
     
-    # Also build index-based lookup for reference chunks (1-based indexing from LLM output)
-    reference_chunks_by_index = {str(i + 1): c for i, c in enumerate(reference_chunks)}
+    # Build index-based lookup for reference chunks (1-based and labeled indexing from LLM output)
+    reference_chunks_by_index = {}
+    for i, c in enumerate(reference_chunks):
+        idx_str = str(i + 1)
+        reference_chunks_by_index[idx_str] = c
+        reference_chunks_by_index[f"chunk_{idx_str}"] = c
+        reference_chunks_by_index[f"chunk{idx_str}"] = c
+        reference_chunks_by_index[f"ref_{idx_str}"] = c
+        reference_chunks_by_index[f"ref{idx_str}"] = c
 
     draft_blocks = state.get("draft_result", {}).get("blocks", [])
     fill_blocks = state.get("fill_result", {}).get("blocks", [])
@@ -554,21 +561,55 @@ def citation_stitch_node(state: EnrichmentState, config=None) -> dict:
         refs = []
         for cid in block.get("source_chunk_ids", []):
             chunk = all_chunks.get(cid)
-            # If not found by UUID, try 1-based index into reference_chunks
-            if chunk is None and cid in reference_chunks_by_index:
-                chunk = reference_chunks_by_index[cid]
+            # If not found by exact ID, try index lookup into reference_chunks
+            cid_clean = str(cid).strip().lower()
+            if chunk is None and cid_clean in reference_chunks_by_index:
+                chunk = reference_chunks_by_index[cid_clean]
             if chunk is None:
                 continue
             revision_id = chunk.get("revision_ids", [None])[0] if chunk.get("revision_ids") else None
             refs.append({
-                "source_type": chunk["source_type"],
+                "source_type": chunk.get("source_type", "TEXTBOOK"),
+                "source_title": chunk.get("source_title", "") or chunk.get("title", ""),
+                "title": chunk.get("source_title", "") or chunk.get("title", ""),
                 "chunk_id": chunk["chunk_id"],
                 "document_id": chunk["document_id"],
-                "page_number": chunk["page_start"],
+                "page_number": chunk.get("page_start") or chunk.get("page", 1),
+                "page": chunk.get("page_start") or chunk.get("page", 1),
+                "chapter": chunk.get("chapter", ""),
+                "section": chunk.get("section", ""),
                 "revision_id": revision_id,
                 "retrieval_score": None,
                 "content": chunk.get("content", ""),
             })
+
+        # If block cited no chunks but reference material was available, check lexical overlap
+        if not refs and reference_chunks:
+            from apps.ai_classroom.services import EvidenceVerifier
+            block_content = block.get("content", "")
+            best_chunk = None
+            best_overlap = 0.0
+            for r_chunk in reference_chunks:
+                overlap = EvidenceVerifier._lexical_support(block_content, [r_chunk.get("content", "")])
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_chunk = r_chunk
+            if best_chunk and best_overlap >= 0.20:
+                refs.append({
+                    "source_type": best_chunk.get("source_type", "TEXTBOOK"),
+                    "source_title": best_chunk.get("source_title", "") or best_chunk.get("title", ""),
+                    "title": best_chunk.get("source_title", "") or best_chunk.get("title", ""),
+                    "chunk_id": best_chunk["chunk_id"],
+                    "document_id": best_chunk["document_id"],
+                    "page_number": best_chunk.get("page_start") or best_chunk.get("page", 1),
+                    "page": best_chunk.get("page_start") or best_chunk.get("page", 1),
+                    "chapter": best_chunk.get("chapter", ""),
+                    "section": best_chunk.get("section", ""),
+                    "revision_id": None,
+                    "retrieval_score": round(best_overlap, 4),
+                    "content": best_chunk.get("content", ""),
+                })
+
         stitched.append({"index": i, **block, "refs": refs})
 
     return {"all_blocks": all_blocks, "stitched_blocks": stitched}
@@ -599,4 +640,6 @@ def format_output_node(state: EnrichmentState, config=None) -> dict:
         "fill_result": state.get("fill_result", {}),
         "llm_provider": state.get("llm_provider", ""),
         "llm_model": state.get("llm_model", ""),
+        "reference_chunks": state.get("reference_chunks", []),
+        "evidence_payload": state.get("evidence_payload", {}),
     }

@@ -362,7 +362,7 @@ export function EnrichedView({ note, onCitation }: Props) {
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <span style={{ fontWeight: 600, color: "#1f2937" }}>
-                          📖 Reference Textbook {activeCitation.page ? `· Page ${activeCitation.page}` : ""}
+                          📖 {activeCitation.title || "Reference Textbook"} {activeCitation.page ? `· Page ${activeCitation.page}` : ""}
                         </span>
                         {activeCitation.verificationStatus && (
                           <span
