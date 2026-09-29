@@ -55,6 +55,32 @@ def _tokenize(text: str) -> Iterator[str]:
     return iter(parts)
 
 
+def get_bounded_history(session: ChatSession, exclude_msg_id: Optional[Any] = None) -> list[dict]:
+    """Retrieve chronological conversation history for session, bounded by count and characters."""
+    max_messages = int(getattr(settings, "CHAT_MAX_HISTORY_MESSAGES", 20))
+    max_chars = int(getattr(settings, "CHAT_MAX_HISTORY_CHARS", 12000))
+
+    qs = ChatMessage.objects.filter(session=session)
+    if exclude_msg_id:
+        qs = qs.exclude(pk=exclude_msg_id)
+
+    # Fetch most recent N messages
+    recent_messages = list(
+        qs.order_by("-created_at")[:max_messages]
+        .values("role", "content")
+    )
+    # Order chronologically
+    chronological = list(reversed(recent_messages))
+
+    # Bound by total characters if needed, keeping most recent
+    total_chars = sum(len(m.get("content", "")) for m in chronological)
+    while total_chars > max_chars and len(chronological) > 1:
+        removed = chronological.pop(0)
+        total_chars -= len(removed.get("content", ""))
+
+    return chronological
+
+
 class ChatService:
     @staticmethod
     @transaction.atomic
@@ -75,20 +101,14 @@ class ChatService:
 
         assert_within_budget(session.profile_id)
 
-        # Load conversation history BEFORE creating the user message
-        # so the current message is not duplicated in the prompt.
-        previous_messages = list(
-            ChatMessage.objects.filter(session=session)
-            .order_by("-created_at")[:20]
-            .values("role", "content")
-        )
-        previous_messages = list(reversed(previous_messages))
+        # 1. Persist user message first
+        user_msg = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
 
-        # Create user message
-        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
+        # 2. Retrieve bounded conversation history (excluding the current user message)
+        previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk)
 
-        # Generate title from first message if this is a new thread
-        if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
+        # 3. Generate title from first message if this is a new thread
+        if not session.title and ChatMessage.objects.filter(session=session).count() <= 2:
             session.title = ChatService._generate_title(content)
             session.save(update_fields=["title"])
 
@@ -125,12 +145,7 @@ class ChatService:
         from ai.langgraph.state.chat_state import ChatState
 
         if previous_messages is None:
-            previous_messages = list(
-                ChatMessage.objects.filter(session=session)
-                .order_by("-created_at")[:20]
-                .values("role", "content")
-            )
-            previous_messages = list(reversed(previous_messages))
+            previous_messages = get_bounded_history(session)
 
         initial_state = ChatState(
             user_request=content,
@@ -250,20 +265,14 @@ class ChatService:
             yield _sse(EVT_ERROR, {"message": str(exc) or "Budget exceeded."})
             return
 
-        previous_messages = list(
-            ChatMessage.objects.filter(session=session)
-            .order_by("-created_at")[:20]
-            .values("role", "content")
-        )
-        previous_messages = list(reversed(previous_messages))
-
+        user_msg = None
         try:
             with transaction.atomic():
-                ChatMessage.objects.create(
+                user_msg = ChatMessage.objects.create(
                     session=session, role=ChatMessage.Role.USER, content=content
                 )
                 generated_title: Optional[str] = None
-                if not session.title and ChatMessage.objects.filter(session=session).count() <= 1:
+                if not session.title and ChatMessage.objects.filter(session=session).count() <= 2:
                     session.title = ChatService._generate_title(content)
                     session.save(update_fields=["title"])
                     generated_title = session.title
@@ -274,6 +283,8 @@ class ChatService:
 
         if generated_title:
             yield _sse(EVT_TITLE, {"title": generated_title, "session_id": str(session.pk)})
+
+        previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk if user_msg else None)
 
         # Run the graph in non-streaming mode but stream the answer text
         # by chunking the final answer through the wire. This works for

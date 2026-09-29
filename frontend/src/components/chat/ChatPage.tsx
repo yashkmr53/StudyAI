@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "../layout/Breadcrumbs";
 import { ModuleProvider, useSubjectModule } from "../modules/ModuleContext";
 import { EmptyState, ErrorState } from "../ui/primitives";
@@ -16,6 +16,7 @@ import type { AgentMessage } from "../../types/agent";
 /** Ask StudyAI (§25) — module-scoped chat with optional agent mode (Phase 2). */
 export function ChatPage() {
   const { subjectId } = useParams<{ subjectId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const subjects = useWorkspaceStore((s) => s.subjects);
   const subjectName = subjects.find((s) => s.id === subjectId)?.name ?? "";
   const { moduleId, services } = useSubjectModule(subjectId);
@@ -32,6 +33,29 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+
+  const selectThread = useCallback((id: string | null) => {
+    setActiveThreadId(id);
+    const storageKey = `active_chat_${subjectId || "global"}`;
+    if (id) {
+      sessionStorage.setItem(storageKey, id);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get("session") !== id) {
+          next.set("session", id);
+          return next;
+        }
+        return prev;
+      }, { replace: true });
+    } else {
+      sessionStorage.removeItem(storageKey);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("session");
+        return next;
+      }, { replace: true });
+    }
+  }, [subjectId, setSearchParams]);
 
   const {
     sendMessage: sendAgentMessage,
@@ -56,7 +80,28 @@ export function ChatPage() {
         if (cancelled) return;
         const mine = all.filter((t) => !subjectId ? t.subjectId === null : t.subjectId === null || t.subjectId === subjectId);
         setThreads(mine);
-        setActiveThreadId(mine[0]?.id ?? null);
+
+        const storageKey = `active_chat_${subjectId || "global"}`;
+        const querySessionId = searchParams.get("session");
+        const savedSessionId = sessionStorage.getItem(storageKey);
+
+        let targetId: string | null = null;
+        if (querySessionId && mine.some((t) => t.id === querySessionId)) {
+          targetId = querySessionId;
+        } else if (savedSessionId && mine.some((t) => t.id === savedSessionId)) {
+          targetId = savedSessionId;
+        } else if (mine.length > 0) {
+          targetId = mine[0].id;
+        }
+
+        setActiveThreadId(targetId);
+        if (targetId && querySessionId !== targetId) {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("session", targetId!);
+            return next;
+          }, { replace: true });
+        }
       })
       .catch(() => !cancelled && setError(t("chat.loadSessionsFailed")));
     return () => {
@@ -106,7 +151,7 @@ export function ChatPage() {
         "",
       );
       setThreads((prev) => [thread, ...(prev ?? [])]);
-      setActiveThreadId(thread.id);
+      selectThread(thread.id);
       setMessages([]);
       setSidebarOpen(true);
     } catch {
@@ -308,8 +353,9 @@ export function ChatPage() {
                 <button
                   key={thread.id}
                   type="button"
+                  data-session-id={thread.id}
                   className={thread.id === activeThreadId ? "chat-thread-item active" : "chat-thread-item"}
-                  onClick={() => setActiveThreadId(thread.id)}
+                  onClick={() => selectThread(thread.id)}
                 >
                   <span className="chat-thread-item__title">
                     {thread.title || t("modules.classroomBanner", { defaultValue: "AI Classroom" })}

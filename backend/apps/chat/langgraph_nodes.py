@@ -65,6 +65,32 @@ _CONVERSATIONAL_PATTERNS = [
     r"^who are you\b", r"^tell me about yourself\b",
 ]
 
+# Patterns indicating a contextual continuation, affirmation, or referential follow-up
+_CONTINUATION_PATTERNS = [
+    # Affirmations & confirmations
+    r"^(yes|yep|yeah|sure|ok|okay|please|definitely|certainly|absolutely|proceed|sounds good|let's do it)(\b.*)?$",
+    r"^(go ahead|continue|proceed|keep going|tell me more|more details|elaborate|dive deeper|explain more)(\b.*)?$",
+    # Negations & alternatives
+    r"^(no|nope|neither|both|all of them|all|none)(\b.*)?$",
+    r"^(the )?(first|second|third|last)( one| option)?$",
+    # Referential anaphora (pronouns/demonstratives referring to prior context)
+    r"^why does (it|this|that)\b",
+    r"^how does (it|this|that)\b",
+    r"^what does (it|this|that)\b",
+    r"^why is (it|this|that)\b",
+    r"^where is (it|this|that)\b",
+    r"^how is (it|this|that)\b",
+    r"^what does the \w+ mean\b",
+    r"^(can you |could you )?(give|show|provide)( me)? an example\b",
+    r"^an example\b",
+    r"^for example\b",
+    r"^why\?*$",
+    r"^how so\?*$",
+    r"^how come\?*$",
+    r"^what about (it|this|that)\b",
+    r"^(tell me |explain )?(more about that|more on that)\b",
+]
+
 
 @traced_node("studyai.chat.route", feature="chat")
 def route_query_node(state: ChatState) -> dict:
@@ -73,8 +99,8 @@ def route_query_node(state: ChatState) -> dict:
     Routing:
       - date_time: date/time questions → use runtime date/time, no retrieval
       - material: user asks about their own notes/materials → retrieve from DB
-      - conversational: greetings, personal statements, thanks → no retrieval
-      - general_knowledge: everything else → retrieve from web
+      - conversational: greetings, personal statements, thanks, or contextual continuations → no retrieval
+      - general_knowledge: standalone questions → retrieve from web
     """
     query = (state.get("user_request") or "").strip().lower().rstrip("!?.,;:")
 
@@ -97,7 +123,22 @@ def route_query_node(state: ChatState) -> dict:
         if re.match(pat, query):
             return {"route": "conversational"}
 
-    # 4. General knowledge: use web retrieval
+    # 4. Contextual follow-up in existing conversation
+    messages = state.get("messages", [])
+    if messages:
+        # Match generic continuation, affirmation, or referential anaphora
+        for pat in _CONTINUATION_PATTERNS:
+            if re.match(pat, query):
+                return {"route": "conversational"}
+
+        # If previous assistant message asked a question/offered options, and user message is a brief reply
+        last_asst = next((m for m in reversed(messages) if m.get("role") in ("assistant", "ai")), None)
+        if last_asst:
+            last_content = (last_asst.get("content") or "").strip()
+            if ("?" in last_content or "would you like" in last_content.lower()) and len(query.split()) <= 6:
+                return {"route": "conversational"}
+
+    # 5. General knowledge: use web retrieval
     return {"route": "general_knowledge"}
 
 
@@ -326,15 +367,28 @@ def answer_generation_node(state: ChatState) -> dict:
     # hallucinate that no information is available, even when the
     # conversation history contains the answer.
     if evidence:
-        user = f"{date_str}{history_str}QUESTION: {query}\n\nEVIDENCE_JSON:" + json.dumps(payload)
+        user_content = f"{date_str}QUESTION: {query}\n\nEVIDENCE_JSON:" + json.dumps(payload)
+        user_prompt_text = f"{date_str}{history_str}QUESTION: {query}\n\nEVIDENCE_JSON:" + json.dumps(payload)
     else:
-        user = f"{date_str}{history_str}QUESTION: {query}"
+        user_content = f"{date_str}QUESTION: {query}"
+        user_prompt_text = f"{date_str}{history_str}QUESTION: {query}"
+
+    # Build structured messages preserving turn-by-turn history for chat models
+    structured_messages = []
+    if messages:
+        for msg in messages:
+            r = msg.get("role", "user")
+            c = msg.get("content", "")
+            if c:
+                structured_messages.append({"role": r, "content": c})
+    structured_messages.append({"role": "user", "content": user_content})
 
     prompt = Prompt(
         name="chat",
         version="v1",
         system=CHAT_SYSTEM_PROMPT,
-        user=user,
+        user=user_prompt_text,
+        messages=structured_messages,
     )
 
     image = state.get("image")
@@ -435,11 +489,22 @@ def retry_answer_node(state: ChatState) -> dict:
             "Answer conversationally using conversation history only."
         )
 
+    messages = state.get("messages", [])
+    structured_messages = []
+    if messages:
+        for msg in messages:
+            r = msg.get("role", "user")
+            c = msg.get("content", "")
+            if c:
+                structured_messages.append({"role": r, "content": c})
+    structured_messages.append({"role": "user", "content": user})
+
     prompt = Prompt(
         name="chat",
         version="v1",
         system=CHAT_SYSTEM_PROMPT,
         user=user,
+        messages=structured_messages,
     )
 
     image = state.get("image")

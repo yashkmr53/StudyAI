@@ -131,12 +131,19 @@ class OllamaLLMProvider:
         max_retries = 3
         last_error = None
         for attempt in range(1, max_retries + 1):
+            chat_messages = []
+            if system_prompt:
+                chat_messages.append({"role": "system", "content": system_prompt})
+            prompt_msgs = getattr(prompt, "messages", None) if isinstance(prompt, Prompt) else None
+            if prompt_msgs:
+                for m in prompt_msgs:
+                    chat_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+            else:
+                chat_messages.append({"role": "user", "content": user_prompt})
+
             payload = {
                 "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                "messages": chat_messages,
                 "stream": False,
                 "format": format_value,
                 "options": {

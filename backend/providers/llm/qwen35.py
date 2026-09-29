@@ -18,7 +18,7 @@ import time
 from typing import Any, Optional, Union
 
 import requests
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
 from providers.base import LLMResult, Prompt, StructuredLLMResult
@@ -268,7 +268,19 @@ class Qwen35Provider:
         messages = []
         if sys_text:
             messages.append(SystemMessage(content=sys_text))
-        messages.append(HumanMessage(content=user_text))
+        prompt_msgs = getattr(prompt, "messages", None) if isinstance(prompt, Prompt) else None
+        if prompt_msgs:
+            for m in prompt_msgs:
+                r = m.get("role")
+                c = m.get("content", "")
+                if r == "user":
+                    messages.append(HumanMessage(content=c))
+                elif r in ("assistant", "ai"):
+                    messages.append(AIMessage(content=c))
+                elif r == "system":
+                    messages.append(SystemMessage(content=c))
+        else:
+            messages.append(HumanMessage(content=user_text))
 
         started = time.monotonic()
         res = client.invoke(messages)
@@ -320,7 +332,19 @@ class Qwen35Provider:
         messages = []
         if sys_text:
             messages.append(SystemMessage(content=sys_text))
-        messages.append(HumanMessage(content=user_text))
+        prompt_msgs = getattr(prompt, "messages", None) if isinstance(prompt, Prompt) else None
+        if prompt_msgs:
+            for m in prompt_msgs:
+                r = m.get("role")
+                c = m.get("content", "")
+                if r == "user":
+                    messages.append(HumanMessage(content=c))
+                elif r in ("assistant", "ai"):
+                    messages.append(AIMessage(content=c))
+                elif r == "system":
+                    messages.append(SystemMessage(content=c))
+        else:
+            messages.append(HumanMessage(content=user_text))
 
         max_attempts = (retries if retries is not None else self.max_retries) + 1
         last_err = None
@@ -459,14 +483,32 @@ class Qwen35Provider:
         method = "json_schema" if is_pydantic else "json_mode"
         structured_llm = client.with_structured_output(target_schema, method=method, include_raw=True)
 
-        human_content = [
-            {"type": "text", "text": user_text},
-            {"type": "image_url", "image_url": f"data:image/png;base64,{b64}"},
-        ]
         messages = []
         if sys_text:
             messages.append(SystemMessage(content=sys_text))
-        messages.append(HumanMessage(content=human_content))
+        prompt_msgs = getattr(prompt, "messages", None) if isinstance(prompt, Prompt) else None
+        if prompt_msgs:
+            for i, m in enumerate(prompt_msgs):
+                r = m.get("role")
+                c = m.get("content", "")
+                if i == len(prompt_msgs) - 1:
+                    last_content = [
+                        {"type": "text", "text": c},
+                        {"type": "image_url", "image_url": f"data:image/png;base64,{b64}"},
+                    ]
+                    messages.append(HumanMessage(content=last_content))
+                elif r == "user":
+                    messages.append(HumanMessage(content=c))
+                elif r in ("assistant", "ai"):
+                    messages.append(AIMessage(content=c))
+                elif r == "system":
+                    messages.append(SystemMessage(content=c))
+        else:
+            human_content = [
+                {"type": "text", "text": user_text},
+                {"type": "image_url", "image_url": f"data:image/png;base64,{b64}"},
+            ]
+            messages.append(HumanMessage(content=human_content))
 
         max_attempts = (retries if retries is not None else self.max_retries) + 1
         last_err = None
