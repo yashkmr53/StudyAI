@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 import datetime as _dt
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from providers.base import LLMResult, Prompt, StructuredLLMResult
 
@@ -193,7 +193,7 @@ class MockLLMProvider:
         elif prompt.name == "question_generation":
             data = self._question(evidence)
         elif prompt.name == "chat":
-            data = self._chat(evidence, _question_from(prompt))
+            data = self._chat(evidence, _question_from(prompt), prompt=prompt)
         elif prompt.name == "gap_candidate_validation":
             data = self._validate_candidate(prompt)
         else:
@@ -336,15 +336,64 @@ class MockLLMProvider:
         }
 
     @staticmethod
-    def _chat(evidence: dict, question: str = "") -> dict:
+    def _chat(evidence: dict, question: str = "", prompt: Optional[Prompt] = None) -> dict:
         """Simulate a grounded chat LLM response.
 
         Distinguishes conversational queries (no retrieval needed) from
-        material-seeking questions.  For material questions with evidence,
+        material-seeking questions. For material questions with evidence,
         extracts the key sentence from the top chunk and reformulates a
         grounded answer (never echoing a raw chunk verbatim).
+        Supports multi-turn contextual responses when previous conversation exists.
         """
         chunks = evidence.get("evidence", [])
+        q_lower = (question or "").lower().strip()
+
+        # Check for multi-turn history in prompt
+        history_text = ""
+        if prompt and getattr(prompt, "messages", None) and len(prompt.messages) > 1:
+            history_text = " ".join(str(m.get("content", "")) for m in prompt.messages[:-1]).lower()
+        elif prompt and prompt.user and "CONVERSATION HISTORY:" in prompt.user:
+            history_text = prompt.user.split("CONVERSATION HISTORY:")[1].split("QUESTION:")[0].lower()
+
+        if history_text:
+            if "backpropagation" in history_text:
+                if q_lower in ("yes", "yep", "sure", "ok", "please", "dive deeper") or "math" in q_lower or "activation" in q_lower:
+                    return {
+                        "answer": "Diving deeper into backpropagation: activation functions like ReLU or sigmoid introduce non-linearity, while the math involves calculating partial derivatives using the calculus chain rule.",
+                        "cited_ids": [],
+                        "cited_chunk_ids": [],
+                        "confidence": 0.95,
+                    }
+            if "dropout" in history_text:
+                if "overfitting" in q_lower or "why" in q_lower or "help" in q_lower:
+                    return {
+                        "answer": "Dropout prevents overfitting by randomly zeroing out neuron activations during training, reducing co-adaptation between feature detectors.",
+                        "cited_ids": [],
+                        "cited_chunk_ids": [],
+                        "confidence": 0.95,
+                    }
+            if "cnn" in history_text or "convolutional" in history_text:
+                if "filter" in q_lower or "kernel" in q_lower:
+                    return {
+                        "answer": "In CNNs, a filter (kernel) is a learnable matrix of weights that convolves across the input to extract localized spatial features like edges and textures.",
+                        "cited_ids": [],
+                        "cited_chunk_ids": [],
+                        "confidence": 0.95,
+                    }
+                if "example" in q_lower:
+                    return {
+                        "answer": "For example, a 3x3 Sobel filter computing horizontal gradient approximations detects vertical edges in image inputs.",
+                        "cited_ids": [],
+                        "cited_chunk_ids": [],
+                        "confidence": 0.95,
+                    }
+            if q_lower in ("yes", "yep", "sure", "ok", "please", "continue", "go ahead") or len(q_lower.split()) <= 4:
+                return {
+                    "answer": f"Continuing our discussion based on previous context regarding '{question}'.",
+                    "cited_ids": [],
+                    "cited_chunk_ids": [],
+                    "confidence": 0.9,
+                }
 
         if _is_conversational(question):
             return {

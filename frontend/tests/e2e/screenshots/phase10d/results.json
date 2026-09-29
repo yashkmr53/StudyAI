@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-09-29T09:17:46.289Z",
+  "steps": {
+    "turn1": {
+      "sent": "Explain backpropagation.",
+      "replyLength": 455
+    },
+    "turn2": {
+      "sent": "yes",
+      "replyLength": 370
+    },
+    "turn3": {
+      "sent": "Can you give a concrete example with numbers?",
+      "replyLength": 365
+    },
+    "turn4": {
+      "sent": "What about vanishing gradients?",
+      "replyLength": 605
+    },
+    "chatB": {
+      "sent": "What is a SQL JOIN?",
+      "replyLength": 371
+    }
+  },
+  "checklist": {
+    "authenticated": true,
+    "chatPageLoaded": true,
+    "chatACreated": true,
+    "turn1Replied": true,
+    "turn2IsContextual": true,
+    "turn3Replied": true,
+    "allBubblesVisible": true,
+    "messagesPersistedAfterReload": true,
+    "sessionIdPreserved": true,
+    "turn4AfterReloadReplied": true,
+    "chatBCreated": true,
+    "chatBStartsEmpty": true,
+    "chatBReplied": true,
+    "chatAHistoryIntact": true,
+    "correctSessionIds": true
+  },
+  "completedAt": "2026-09-29T09:19:20.933Z",
+  "networkRequestCount": 16,
+  "consoleErrorCount": 0
+}

@@ -22,6 +22,7 @@ class Prompt:
     version: str
     system: str = ""
     user: str = ""
+    messages: list[dict] = field(default_factory=list)
 
 
 @dataclass
