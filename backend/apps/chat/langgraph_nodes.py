@@ -184,6 +184,7 @@ def retrieve_node(state: ChatState) -> dict:
     evidence = RetrievalService.search(
         user,
         query,
+        profile=session.profile,
         subject=subject,
         top_k=getattr(settings, "CHAT_RETRIEVAL_TOP_K", 4),
         include_reference=True,

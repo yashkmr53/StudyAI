@@ -42,6 +42,7 @@ class SearchView(APIView):
         evidence = RetrievalService.search(
             request.user,
             data["query"],
+            profile=request.profile,
             subject=subject,
             top_k=data["top_k"],
             include_reference=data["include_reference"],

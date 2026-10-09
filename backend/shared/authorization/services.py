@@ -57,10 +57,23 @@ class ProfileAuthorizationService:
                 profile = Profile.objects.get(pk=profile_id, user=user)
             except (Profile.DoesNotExist, ValueError, TypeError):
                 profile = None
-        if not profile:
-            profile = Profile.objects.filter(user=user).first()
+        if not profile and not profile_id:
+            # If no profile ID was explicitly specified, resolve only if user has exactly one profile
+            user_profiles = list(Profile.objects.filter(user=user)[:2])
+            if len(user_profiles) == 1:
+                profile = user_profiles[0]
+            else:
+                profile = None
 
         request._cached_active_profile = profile
+        return profile
+
+    @staticmethod
+    def require_active_profile(request):
+        profile = ProfileAuthorizationService.get_active_profile(request)
+        if not profile:
+            from shared.exceptions import ValidationError
+            raise ValidationError("Active profile context is required. Please provide a valid X-Active-Profile header.")
         return profile
 
 

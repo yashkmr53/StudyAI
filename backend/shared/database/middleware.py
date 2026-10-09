@@ -19,16 +19,39 @@ from shared.database.rls import set_profile_context
 class RlsContextMiddleware(MiddlewareMixin):
     """Bind the active profile to the RLS GUC for the current transaction."""
 
-    def process_request(self, request):
-        profile_id = request.headers.get("X-Active-Profile")
-        if not profile_id:
-            return None
+    def __call__(self, request):
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
-            return None
-        from apps.profiles.models import Profile
+            try:
+                from rest_framework_simplejwt.authentication import JWTAuthentication
 
-        if not Profile.objects.filter(pk=profile_id, user=user).exists():
-            return None
-        set_profile_context(profile_id)
-        return None
+                authenticator = JWTAuthentication()
+                header = authenticator.get_header(request)
+                if header:
+                    raw_token = authenticator.get_raw_token(header)
+                    if raw_token:
+                        validated_token = authenticator.get_validated_token(raw_token)
+                        user = authenticator.get_user(validated_token)
+                        request.user = user
+            except Exception:
+                pass
+
+        profile_id = request.headers.get("X-Active-Profile")
+        if not profile_id and hasattr(request, "META"):
+            profile_id = request.META.get("HTTP_X_ACTIVE_PROFILE")
+        if not profile_id and hasattr(request, "GET"):
+            profile_id = request.GET.get("profile")
+
+        if profile_id and user and user.is_authenticated:
+            from apps.profiles.models import Profile
+
+            try:
+                if Profile.objects.filter(pk=profile_id, user=user).exists():
+                    from shared.database.rls import profile_scoped_transaction
+
+                    with profile_scoped_transaction(profile_id):
+                        return self.get_response(request)
+            except Exception:
+                pass
+
+        return self.get_response(request)

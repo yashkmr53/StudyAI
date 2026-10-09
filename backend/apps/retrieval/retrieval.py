@@ -11,6 +11,7 @@ falls back to keyword-only so suites stay portable.
 from dataclasses import dataclass
 
 from typing import Optional
+import uuid
 from django.conf import settings
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db import connection
@@ -62,24 +63,33 @@ def _candidate_depth() -> int:
     return int(getattr(settings, "RETRIEVAL_CANDIDATES", 50))
 
 
-def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: bool = False):
-    from apps.profiles.models import Profile
+def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: bool = False, profile=None):
     from apps.retrieval.models import NoteChunk
 
-    profile_ids = list(Profile.objects.filter(user=user).values_list("id", flat=True))
     if reference_only:
         qs = NoteChunk.objects.filter(stale=False, profile_id__isnull=True)
-    else:
+    elif profile is not None:
+        qs = NoteChunk.objects.filter(stale=False).filter(
+            Q(profile=profile) | Q(profile_id__isnull=True)
+        )
+    elif user is not None:
+        from apps.profiles.models import Profile
+        profile_ids = list(Profile.objects.filter(user=user).values_list("id", flat=True))
         qs = NoteChunk.objects.filter(stale=False).filter(
             Q(profile_id__in=profile_ids) | Q(profile_id__isnull=True)
         )
+    else:
+        qs = NoteChunk.objects.filter(stale=False, profile_id__isnull=True)
+
     if subject is not None:
         qs = qs.filter(subject=subject)
     if reference_book_ids is not None:
         if reference_only:
             qs = qs.filter(reference_book_id__in=reference_book_ids)
+        elif profile is not None:
+            qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile=profile))
         else:
-            qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile_id__in=profile_ids))
+            qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile_id__in=profile_ids if user else []))
     return qs
 
 
@@ -89,6 +99,7 @@ class RetrievalService:
         user,
         query: str,
         *,
+        profile=None,
         subject=None,
         subject_id=None,
         top_k: int = 8,
@@ -100,10 +111,20 @@ class RetrievalService:
         SQLite unit runs degrade to keyword-only."""
         from apps.retrieval.models import NoteChunk
         from providers.registry import embedding_model_version, get_embedding_provider
+        from apps.profiles.models import Profile
 
         query = (query or "").strip()
         if not query:
             return []
+
+        if profile is None and user:
+            user_profiles = list(Profile.objects.filter(user=user)[:2])
+            if len(user_profiles) == 1:
+                profile = user_profiles[0]
+            elif len(user_profiles) > 1:
+                raise ValueError("Explicit profile context is required for multi-profile user retrieval.")
+        elif isinstance(profile, (str, uuid.UUID)):
+            profile = Profile.objects.get(pk=profile)
 
         if subject is None and subject_id is not None:
             from apps.subjects.models import Subject
@@ -112,7 +133,7 @@ class RetrievalService:
             except Exception:
                 subject = None
 
-        base = _base_queryset(user, subject, reference_book_ids, reference_only=reference_only)
+        base = _base_queryset(user, subject, reference_book_ids, reference_only=reference_only, profile=profile)
         if not include_reference:
             base = base.exclude(source_type="reference")
 
@@ -205,14 +226,10 @@ class RetrievalService:
         # Include Phase 11 ReferenceChunks if reference material is requested
         if include_reference:
             from apps.references.services import retrieve_reference_context
-            from apps.profiles.models import Profile
 
-            user_profile = None
-            if user:
-                user_profile = Profile.objects.filter(user=user).first()
             ref_results = retrieve_reference_context(
                 query,
-                profile=user_profile,
+                profile=profile,
                 subject=subject,
                 top_k=top_k,
             )

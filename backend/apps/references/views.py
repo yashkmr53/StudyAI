@@ -122,9 +122,11 @@ class ReferenceDocumentViewSet(viewsets.ModelViewSet):
         # Authorization: user must own the profile or be staff for global docs
         if instance.profile and instance.profile.user_id != request.user.pk:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        active_profile = ProfileAuthorizationService.get_active_profile(request)
+        if instance.profile and active_profile and instance.profile_id != active_profile.pk:
+            return Response({"detail": "Forbidden: Cannot delete reference belonging to another profile"}, status=status.HTTP_403_FORBIDDEN)
         if not instance.profile and not request.user.is_staff:
-            # Only staff can delete platform global references
-            pass  # or allow owner if created by them
+            return Response({"detail": "Only staff members can delete global reference documents."}, status=status.HTTP_403_FORBIDDEN)
 
         # 1. Clean up storage file
         if instance.file_path:

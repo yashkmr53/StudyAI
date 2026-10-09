@@ -17,7 +17,7 @@ from apps.agents.serializers import (
     AgentExecutionLogSerializer,
 )
 from apps.agents.services.agent import StudyAIAgent
-from apps.chat.models import ChatSession
+from apps.chat.models import ChatMessage, ChatSession
 from apps.profiles.models import Profile
 from shared.throttles import AIBudgetThrottle
 

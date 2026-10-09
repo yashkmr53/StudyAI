@@ -61,6 +61,7 @@ def retrieve_notes_node(state: AdaptiveTestState, config=None) -> dict:
         evidence = RetrievalService.search(
             user=user,
             query=tag["stable_key"],
+            profile=profile,
             subject_id=state.get("subject_id"),
             top_k=5,
             include_reference=False,

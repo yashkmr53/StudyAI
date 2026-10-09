@@ -207,6 +207,7 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
             ref_evidence = RetrievalService.search(
                 user,
                 query,
+                profile=profile,
                 top_k=6,
                 include_reference=True,
                 reference_book_ids=reference_book_ids,

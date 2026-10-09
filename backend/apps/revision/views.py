@@ -9,6 +9,7 @@ from apps.profiles.models import Profile
 from apps.revision.models import RevisionGoal
 from apps.revision.services import RevisionPlanningService
 from apps.subjects.models import Subject
+from shared.authorization.services import ProfileAuthorizationService
 
 
 class GoalInSerializer(serializers.Serializer):
@@ -21,7 +22,7 @@ class RevisionOverviewView(APIView):
     """GET /api/v1/revision/overview — per-tag mastery summary."""
 
     def get(self, request):
-        profile = Profile.objects.filter(user=request.user).first()
+        profile = ProfileAuthorizationService.require_active_profile(request)
         return Response(RevisionPlanningService.overview(profile))
 
 
@@ -42,7 +43,7 @@ class RevisionGoalsView(APIView):
 
                 raise ValidationError("Unknown subject for this user.")
 
-        profile = Profile.objects.filter(user=request.user).first()
+        profile = ProfileAuthorizationService.require_active_profile(request)
         goal = RevisionGoal.objects.create(
             profile=profile,
             subject=subject,
@@ -57,7 +58,7 @@ class RevisionGoalsView(APIView):
         }, status=201)
 
     def get(self, request):
-        profile = Profile.objects.filter(user=request.user).first()
+        profile = ProfileAuthorizationService.require_active_profile(request)
         goals = RevisionGoal.objects.filter(profile=profile)
         return Response({"results": [
             {
@@ -74,7 +75,7 @@ class RevisionPlansView(APIView):
     """GET /api/v1/revision/plans?subject={uuid}&target_date=YYYY-MM-DD — computed plan."""
 
     def get(self, request):
-        profile = Profile.objects.filter(user=request.user).first()
+        profile = ProfileAuthorizationService.require_active_profile(request)
         subject = None
         if request.query_params.get("subject"):
             try:
