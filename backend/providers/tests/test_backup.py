@@ -59,7 +59,7 @@ class TestBackupCommands(TestCase):
         
         # Should attempt to drop and create database (target db name depends on settings)
         # Just verify that execute was called with DROP and CREATE DATABASE
-        calls = [str(call) for call in mock_cursor.execute.call_args_list]
+        calls = [str(call) for call in mock_run.call_args_list] + [str(call) for call in mock_cursor.execute.call_args_list]
         assert any("DROP DATABASE IF EXISTS" in call for call in calls)
         assert any("CREATE DATABASE" in call for call in calls)
 

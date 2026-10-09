@@ -104,6 +104,20 @@ def execute_tool_node(state: AgentState, config=None) -> dict:
     tool_calls = state.get("tool_calls", [])
     iterations = state.get("iterations", 0)
 
+    if not tool_name:
+        return {
+            "tool_calls": tool_calls,
+            "iterations": iterations + 1,
+            "last_tool_result": {
+                "tool": None,
+                "arguments": {},
+                "result": {},
+                "latency_ms": 0,
+                "success": False,
+                "error": "No tool selected",
+            },
+        }
+
     if _detect_duplicate_tool_call(tool_calls, tool_name, tool_args):
         return {
             "tool_calls": tool_calls,

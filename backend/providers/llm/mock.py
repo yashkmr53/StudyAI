@@ -196,6 +196,20 @@ class MockLLMProvider:
             data = self._chat(evidence, _question_from(prompt), prompt=prompt)
         elif prompt.name == "gap_candidate_validation":
             data = self._validate_candidate(prompt)
+        elif prompt.name == "agent_orchestrator":
+            if "Previous tool calls:" in (prompt.user or ""):
+                data = {
+                    "final_answer": "Based on user notes and learning context, here is the answer.",
+                    "tool": None,
+                    "citations": [],
+                    "reasoning": "Sufficient evidence collected",
+                }
+            else:
+                data = {
+                    "tool": "search_notes",
+                    "arguments": {"query": "general", "limit": 3},
+                    "reasoning": "Searching user notes for grounding",
+                }
         else:
             # Default handler for unknown prompts (tests, etc.)
             data = {"result": f"Mock response for {prompt.name}", "status": "ok"}

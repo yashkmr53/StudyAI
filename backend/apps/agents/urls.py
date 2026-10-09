@@ -7,10 +7,13 @@ from apps.agents.mcp.views import MCPHTTPView, MCPTokenView
 
 router = DefaultRouter()
 router.register(r"", AgentViewSet, basename="agent")
+router.register(r"agents", AgentViewSet, basename="agents")
 
 urlpatterns = [
     path("", include(router.urls)),
     # MCP endpoints (Phase 3)
     path("mcp/", MCPHTTPView.as_view(), name="mcp-endpoint"),
     path("mcp/token/", MCPTokenView.as_view(), name="mcp-token"),
+    path("agents/mcp/", MCPHTTPView.as_view(), name="agents-mcp-endpoint"),
+    path("agents/mcp/token/", MCPTokenView.as_view(), name="agents-mcp-token"),
 ]

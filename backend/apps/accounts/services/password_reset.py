@@ -1,122 +1,140 @@
-"""Password reset token service (§23)."""
+"""Password reset token service (§23).
+
+Cryptographically secure password reset flow:
+- 256-bit entropy unpredictable single-use tokens
+- Only SHA-256 token hashes stored in database (preventing plaintext exposure)
+- Strict 1-hour expiration window
+- Concurrency-safe redemption with row-level database locking (select_for_update)
+- Token replay prevention (marked used immediately)
+- Invalidation of outstanding tokens upon successful reset
+- Generic user responses preventing email enumeration
+- Clean logging with no token leakage
+"""
 
 import hashlib
-import json
+import logging
+import os
 import secrets
-from datetime import datetime, timedelta, timezone as tz_module
+from datetime import timedelta
+from typing import Optional
 
 from django.conf import settings
-from django.core import signing
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
+from django.db import transaction
+from django.utils import timezone
 
-from apps.accounts.models import User, PasswordResetToken
+from apps.accounts.models import PasswordResetToken, User
+
+logger = logging.getLogger(__name__)
 
 
-def _build_reset_url(token: str, request=None) -> str:
-    """Build the absolute password reset URL."""
-    from django.urls import reverse
-    base = request.build_absolute_uri(reverse("auth-password-reset-confirm")) if request else f"https://example.com/reset/{token}"
-    return f"{base}?token={token}"
+def _build_reset_url(raw_token: str, request=None) -> str:
+    """Build the password reset URL (frontend or API)."""
+    frontend_base = getattr(settings, "FRONTEND_URL", None) or os.environ.get("FRONTEND_URL")
+    if frontend_base:
+        return f"{frontend_base.rstrip('/')}/reset-password?token={raw_token}"
+    if request:
+        return request.build_absolute_uri(f"/reset-password?token={raw_token}")
+    return f"http://localhost:5173/reset-password?token={raw_token}"
 
 
 class PasswordResetTokenService:
     """Service for creating and confirming password reset tokens."""
 
-    @staticmethod
-    def create_and_send(user: User, *, request=None) -> dict:
-        """Create a token and send reset email. Returns dict with status."""
-        from shared.exceptions import ImproperlyConfigured
+    def __init__(self, user: Optional[User] = None):
+        self.user = user
 
-        # Delete any existing unused tokens for this user
+    def create_and_send(self, *args, **kwargs) -> dict:
+        """Create token and dispatch reset email.
+
+        Supports:
+        - PasswordResetTokenService(user).create_and_send(request=request)
+        - PasswordResetTokenService.create_and_send(user, request=request)
+        """
+        if isinstance(self, PasswordResetTokenService):
+            user = kwargs.get("user") or (args[0] if args else self.user)
+        elif isinstance(self, User):
+            user = self
+        else:
+            user = kwargs.get("user") or (args[0] if args else None)
+
+        request = kwargs.get("request")
+        if not user:
+            raise ValueError("User must be provided to create and send a reset token.")
+        return self._create_and_send_internal(user, request=request)
+
+    @classmethod
+    def _create_and_send_internal(cls, user: User, *, request=None) -> dict:
+        # Invalidate any existing unused tokens for this user
         PasswordResetToken.objects.filter(user=user, used=False).delete()
 
-        # Create a new token
+        # Generate unpredictable raw token (32 bytes = 256 bits of entropy)
+        raw_token = secrets.token_urlsafe(32)
+        # Store only SHA-256 hash in DB to prevent plaintext exposure
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+        # Create token record valid for 1 hour
         token_obj = PasswordResetToken.objects.create(
             user=user,
-            token=PasswordResetTokenService._generate_token(user),
-            expires_at=datetime.now(tz_module.utc) + timedelta(hours=1),
+            token=token_hash,
+            expires_at=timezone.now() + timedelta(hours=1),
+            used=False,
         )
 
-        # Build reset URL
-        reset_url = _build_reset_url(token_obj.token, request=request)
+        reset_url = _build_reset_url(raw_token, request=request)
 
-        # Send email
+        # Dispatch email
         try:
-            email_from = getattr(settings, "EMAIL_FROM", "noreply@studyai.local")
-            subject = "Reset your StudyAI password"
-            text_body = f"""
-Hi {user.email},
-
-You requested a password reset. Click the link below to set a new password:
-
-{reset_url}
-
-This link expires in 1 hour. If you didn't request this, please ignore this email.
-
--- The StudyAI Team
-"""
-            html_body = f"""
-<h1>Reset your StudyAI password</h1>
-<p>Hi {user.email},</p>
-<p>You requested a password reset. Click the link below to set a new password:</p>
-<p><a href="{reset_url}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 4px;">Reset Password</a></p>
-<p>This link expires in 1 hour. If you didn't request this, please ignore this email.</p>
-<p>-- The StudyAI Team</p>
-"""
-
-            # Use the email provider from registry
             from providers.registry import get_email_provider
             email_provider = get_email_provider()
             email_provider.send_password_reset_email(
                 to=user.email,
                 reset_url=reset_url,
-                user_name=user.email,
+                user_name=getattr(user, "name", user.email) or user.email,
             )
-        except Exception as e:
-            # Log but don't fail the token creation
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning("Failed to send password reset email: %s", e)
+        except Exception as exc:
+            # Never expose reset token in application logs
+            logger.warning("Failed to dispatch password reset email: %s", exc)
 
-        return {"status": "sent", "token": token_obj.token}
+        return {"status": "sent", "token_id": str(token_obj.id), "raw_token": raw_token}
 
     @staticmethod
-    def _generate_token(user: User) -> str:
-        """Generate a unique token for the user."""
-        salt = settings.SECRET_KEY[:16]
-        data = f"{user.pk}:{secrets.token_urlsafe(32)}"
-        return hashlib.sha256((salt + data).encode()).hexdigest()[:64]
-
-    @staticmethod
-    def confirm(token_str: str, new_password: str) -> dict:
+    def confirm(raw_token: str, new_password: str) -> dict:
         """Confirm password reset with a valid token. Returns dict with success/error."""
-        try:
-            signer = signing.TimestampSigner()
-            payload = signer.unsign_object(token_str, max_age=3600)
-        except signing.BadSignature:
-            return {"success": False, "error": "Invalid or expired token."}
-        except signing.SignatureExpired:
-            return {"success": False, "error": "Invalid or expired token."}
+        if not raw_token or not new_password:
+            return {"success": False, "error": "Token and new password are required."}
 
-        user_id = payload.get("user_id")
-        if not user_id:
-            return {"success": False, "error": "Invalid token payload."}
+        if len(new_password) < 10:
+            return {"success": False, "error": "Password must be at least 10 characters long."}
 
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return {"success": False, "error": "User not found."}
+        token_hash = hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
 
-        # Mark token as used and reset password
-        PasswordResetToken.objects.filter(pk=payload.get("token_id")).update(used=True)
+        with transaction.atomic():
+            # Use select_for_update to guard against concurrent redemption
+            token_obj = (
+                PasswordResetToken.objects
+                .select_for_update()
+                .select_related("user")
+                .filter(token=token_hash)
+                .first()
+            )
+            if not token_obj:
+                return {"success": False, "error": "Invalid or expired token."}
 
-        user.set_password(new_password)
-        user.save(update_fields=("password",))
+            if token_obj.used:
+                return {"success": False, "error": "This token has already been used."}
 
-        # Force password update by clearing JWT etc.
-        # The user will need to login fresh
+            if token_obj.expires_at < timezone.now():
+                return {"success": False, "error": "This token has expired."}
 
-        return {"success": True, "error": None}
+            # Atomically mark token as used
+            token_obj.used = True
+            token_obj.save(update_fields=["used"])
+
+            user = token_obj.user
+            user.set_password(new_password)
+            user.save(update_fields=["password"])
+
+            # Clean up all other remaining unused reset tokens for this user
+            PasswordResetToken.objects.filter(user=user, used=False).delete()
+
+        return {"success": True}

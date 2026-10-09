@@ -26,22 +26,22 @@ You have access to a set of tools that can retrieve information from the user's 
 
 When you need to use a tool, respond with a JSON object:
 ```json
-{
+{{
   "tool": "tool_name",
-  "arguments": { "arg1": "value1", "arg2": "value2" },
+  "arguments": {{ "arg1": "value1", "arg2": "value2" }},
   "reasoning": "Why this tool is needed"
-}
+}}
 ```
 
 When you have enough information to answer, respond with:
 ```json
-{
+{{
   "final_answer": "Your complete answer here",
   "citations": [
-    { "chunk_id": "uuid", "source_type": "note|reference", "page_start": 1, "page_end": 2, "snippet": "relevant text" }
+    {{ "chunk_id": "uuid", "source_type": "note|reference", "page_start": 1, "page_end": 2, "snippet": "relevant text" }}
   ],
   "reasoning": "Summary of how you arrived at this answer"
-}
+}}
 ```
 
 ## Guidelines

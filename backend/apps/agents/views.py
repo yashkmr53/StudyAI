@@ -4,6 +4,8 @@ Endpoints for agentic chat and tool discovery.
 """
 import logging
 
+from django.conf import settings
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -34,7 +36,11 @@ class AgentViewSet(viewsets.GenericViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        return AgentExecutionLog.objects.filter(profile__user=self.request.user)
+        qs = AgentExecutionLog.objects.filter(profile__user=self.request.user)
+        profile = getattr(self.request, "profile", None)
+        if profile:
+            qs = qs.filter(profile=profile)
+        return qs
 
     @action(detail=False, methods=["post"], url_path="chat")
     def chat(self, request):
@@ -46,9 +52,13 @@ class AgentViewSet(viewsets.GenericViewSet):
         content = serializer.validated_data["content"]
 
         try:
-            session = ChatSession.objects.select_related("profile").get(
+            session_qs = ChatSession.objects.select_related("profile").filter(
                 pk=session_id, profile__user=request.user
             )
+            active_profile = getattr(request, "profile", None)
+            if active_profile:
+                session_qs = session_qs.filter(profile=active_profile)
+            session = session_qs.get()
         except (ChatSession.DoesNotExist, ValueError, TypeError):
             return Response({"detail": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -147,7 +157,7 @@ class AgentViewSet(viewsets.GenericViewSet):
     def execution_trace(self, request, request_id=None):
         """Get execution trace for a specific agent request."""
         try:
-            log = AgentExecutionLog.objects.get(request_id=request_id, profile__user=request.user)
+            log = self.get_queryset().get(request_id=request_id)
         except AgentExecutionLog.DoesNotExist:
             return Response({"detail": "Execution trace not found"}, status=status.HTTP_404_NOT_FOUND)
 

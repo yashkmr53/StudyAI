@@ -43,9 +43,9 @@ class ProfileAuthorizationService:
 
         profile_id = None
         if hasattr(request, "headers"):
-            profile_id = request.headers.get("X-Active-Profile")
+            profile_id = request.headers.get("X-Active-Profile") or request.headers.get("X-Profile-ID")
         if not profile_id and hasattr(request, "META"):
-            profile_id = request.META.get("HTTP_X_ACTIVE_PROFILE")
+            profile_id = request.META.get("HTTP_X_ACTIVE_PROFILE") or request.META.get("HTTP_X_PROFILE_ID")
         if not profile_id and hasattr(request, "query_params"):
             profile_id = request.query_params.get("profile")
 
