@@ -11,6 +11,7 @@ from apps.profiles.models import Profile
 from apps.subjects.models import Subject
 from apps.tests.models import TestAttempt, TestInstance
 from apps.tests.services import MasteryScoringService, TestGenerationService
+from shared.authorization.services import ProfileAuthorizationService
 
 
 class AttemptInSerializer(serializers.Serializer):
@@ -57,6 +58,9 @@ class TestViewSet(
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
+        active_profile = ProfileAuthorizationService.get_active_profile(self.request)
+        if active_profile:
+            return TestInstance.objects.filter(profile=active_profile)
         return TestInstance.objects.filter(profile__user=self.request.user)
 
     def create(self, request):
@@ -70,7 +74,7 @@ class TestViewSet(
 
                 raise ValidationError("Unknown subject for this user.")
 
-        profile = Profile.objects.filter(user=request.user).first()
+        profile = ProfileAuthorizationService.require_active_profile(request)
         try:
             num = int(request.data.get("num_questions", 5))
         except (TypeError, ValueError):

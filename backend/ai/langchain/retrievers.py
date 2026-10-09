@@ -9,13 +9,15 @@ from apps.retrieval.retrieval import RetrievalService, Evidence
 
 class StudyAIRetriever(BaseRetriever):
     user = None
+    profile = None
     subject = None
     top_k: int = 8
     include_reference: bool = True
 
-    def __init__(self, user, subject=None, top_k: int = 8, include_reference: bool = True):
+    def __init__(self, user, profile=None, subject=None, top_k: int = 8, include_reference: bool = True):
         super().__init__()
         self.user = user
+        self.profile = profile
         self.subject = subject
         self.top_k = top_k
         self.include_reference = include_reference
@@ -24,6 +26,7 @@ class StudyAIRetriever(BaseRetriever):
         evidence = RetrievalService.search(
             self.user,
             query,
+            profile=self.profile,
             subject=self.subject,
             top_k=self.top_k,
             include_reference=self.include_reference,

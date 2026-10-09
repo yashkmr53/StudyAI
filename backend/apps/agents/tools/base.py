@@ -60,7 +60,7 @@ class BaseTool:
         if not hasattr(self, "metadata"):
             raise NotImplementedError("Tool must define 'metadata' class attribute")
 
-    def execute(self, input: ToolInput, *, user, request_id: str) -> ToolOutput:
+    def execute(self, input: ToolInput, *, user, request_id: str, profile=None) -> ToolOutput:
         """Execute tool with full guardrails."""
         started = time.monotonic()
 
@@ -70,7 +70,12 @@ class BaseTool:
 
             # 2. Authorization
             if self.metadata.requires_auth:
-                profile = Profile.objects.filter(user=user).first()
+                if profile is None and user:
+                    user_profiles = list(Profile.objects.filter(user=user)[:2])
+                    if len(user_profiles) == 1:
+                        profile = user_profiles[0]
+                    elif len(user_profiles) > 1:
+                        raise Forbidden("Active profile context is required for multi-profile user")
                 if profile is None:
                     raise Forbidden("No profile found for user")
                 ProfileAuthorizationService.ensure_profile_access(user, profile)

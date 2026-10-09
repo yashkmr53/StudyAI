@@ -42,3 +42,15 @@ class ProfileViewSet(viewsets.ModelViewSet):
             raise ValidationError(
                 {"name": ["You already have a profile with this name in this module."]}
             )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user_profiles_count = Profile.objects.filter(user=request.user).count()
+        if user_profiles_count <= 1:
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response(
+                {"error": {"code": "SOLE_PROFILE_CANNOT_BE_DELETED", "message": "Cannot delete profile. At least one profile must remain."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)

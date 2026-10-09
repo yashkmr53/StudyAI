@@ -11,6 +11,7 @@ db.sqlite3
 
 # Local database backups
 *.sql
+!docker/postgres/init/*.sql
 backups/
 
 # Local Python virtual environment

@@ -24,6 +24,7 @@ class SearchNotesTool(StudyAITool):
             evidence = RetrievalService.search(
                 user,
                 arguments["query"],
+                profile=profile_id,
                 subject=subject_id,
                 top_k=arguments.get("top_k", 4),
                 include_reference=arguments.get("include_reference", True),
