@@ -89,18 +89,24 @@ class PasswordResetView(APIView):
     throttle_scope = "auth"
 
     def post(self, request):
-        email = request.data.get("email")
+        email = (request.data.get("email") or "").strip().lower()
         if not email:
             raise ValidationError("Email is required.")
         user = User.objects.filter(email=email).first()
         if user:
-            from shared.crypto import generate_token
-            from apps.accounts.services import PasswordResetTokenService
+            from apps.accounts.services.password_reset import PasswordResetTokenService
 
             token_service = PasswordResetTokenService(user)
-            token_service.create_and_send()
+            token_service.create_and_send(request=request)
+            audit_event(
+                actor=user,
+                action="auth.password_reset_requested",
+                resource_type="user",
+                resource_id=user.pk,
+                request=request,
+            )
         # Always return 200 without revealing whether address exists
-        return Response({"detail": "If the address exists, a reset link has been sent."}, status=200)
+        return Response({"detail": "If the address exists, a reset link has been sent."}, status=status.HTTP_200_OK)
 
 
 class PasswordResetConfirmView(APIView):
@@ -111,23 +117,16 @@ class PasswordResetConfirmView(APIView):
     throttle_scope = "auth"
 
     def post(self, request):
-        token_str = request.data.get("token")
+        token_str = (request.data.get("token") or "").strip()
         new_password = request.data.get("new_password")
         if not token_str or not new_password:
             raise ValidationError("Token and new password are required.")
-        from apps.accounts.services import PasswordResetTokenService
+        from apps.accounts.services.password_reset import PasswordResetTokenService
 
         result = PasswordResetTokenService.confirm(token_str, new_password)
         if result["success"]:
             return Response({"detail": "Password reset successful."}, status=status.HTTP_200_OK)
         raise ValidationError(result["error"])
-
-
-class RefreshView(TokenRefreshView):
-    """Token refresh with rotation+blacklist (config from SIMPLE_JWT)."""
-
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "auth"
 
 
 class RefreshView(TokenRefreshView):

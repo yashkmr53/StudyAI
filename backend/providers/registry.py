@@ -283,9 +283,16 @@ def get_email_provider() -> EmailProvider:
             raise ValueError("SMTP backend requires SMTP_HOST environment variable")
         return SMTPEmailProvider()
     
-    if backend == "console":
-        # Django's console backend - prints to stdout
-        from django.core.mail import get_connection
+    if backend in ("console", "locmem") or "locmem" in str(backend) or "console" in str(backend):
+        # Django's console or locmem backend
+        from providers.email import ConsoleEmailProvider
+        return ConsoleEmailProvider()
+
+    if backend == "django.core.mail.backends.smtp.EmailBackend":
+        if _get_env("MAILPIT_HOST"):
+            return MailpitEmailProvider()
+        if _get_env("SMTP_HOST"):
+            return SMTPEmailProvider()
         from providers.email import ConsoleEmailProvider
         return ConsoleEmailProvider()
     

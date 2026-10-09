@@ -35,7 +35,12 @@ class StudyAIAgent:
         request_id = f"agent:{session.pk}:{uuid.uuid4().hex[:8]}"
 
         from apps.ai_classroom.budget import assert_within_budget
-        profile = Profile.objects.get(user=user)
+        profile = getattr(session, "profile", None)
+        if not profile:
+            active = getattr(user, "active_profile", None)
+            profile = active or Profile.objects.filter(user=user).first()
+        if not profile:
+            raise ValueError(f"No profile available for user {user}")
         assert_within_budget(profile.pk)
 
         initial_state = AgentState(

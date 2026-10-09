@@ -130,6 +130,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./backups:/backups
       - objectstore:/app/var/objectstore
       - django_static:/app/var/static
     healthcheck:
@@ -153,6 +154,7 @@ services:
     command: celery -A config worker -l info
     volumes:
       - ./backend:/app
+      - ./backups:/backups
       - objectstore:/app/var/objectstore
 
   beat:
@@ -167,6 +169,7 @@ services:
     command: celery -A config beat -l info
     volumes:
       - ./backend:/app
+      - ./backups:/backups
       - objectstore:/app/var/objectstore
 
   # Test runner service - uses test settings with hashing embedder and no LangSmith

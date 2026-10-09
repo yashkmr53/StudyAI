@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     libpq5 \
+    postgresql-client \
     curl \
     gcc \
     build-essential \

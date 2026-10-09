@@ -21,6 +21,10 @@ def _branch_after_tool_execution(state: AgentState) -> str:
     max_iterations = state.get("max_iterations", 5)
     tool_calls = state.get("tool_calls", [])
     max_tool_calls = state.get("max_tool_calls", 10)
+    last_res = state.get("last_tool_result")
+
+    if last_res is not None and last_res.get("tool") is None:
+        return "format_response"
 
     if iterations >= max_iterations or len(tool_calls) >= max_tool_calls:
         return "format_response"
