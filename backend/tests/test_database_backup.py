@@ -48,7 +48,7 @@ class DatabaseBackupTests(TestCase):
     @mock.patch("subprocess.run")
     def test_daily_backup_execution(self, mock_subproc):
         with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.dict(os.environ, {"BACKUP_DIR": tmpdir}):
+            with mock.patch.dict(os.environ, {"BACKUP_DIR": tmpdir, "POSTGRES_PASSWORD": "test_backup_password"}):
                 # Mock subprocess creating the backup file
                 def side_effect(cmd, **kwargs):
                     out_path = cmd[cmd.index("-f") + 1]
@@ -70,7 +70,7 @@ class DatabaseBackupTests(TestCase):
                 self.assertEqual(cmd[0], "pg_dump")
                 self.assertIn("-Fc", cmd)
                 self.assertIn("env", call_kwargs)
-                self.assertIn("PGPASSWORD", call_kwargs["env"])
+                self.assertEqual(call_kwargs["env"]["PGPASSWORD"], "test_backup_password")
 
     @mock.patch("subprocess.run")
     def test_verify_backup_command(self, mock_subproc):
