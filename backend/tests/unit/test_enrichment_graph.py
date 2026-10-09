@@ -42,7 +42,13 @@ class MockLLMProvider:
             return type("R", (), {
                 "data": {
                     "gaps": [
-                        {"topic": "complexity", "reference_chunk_id": "ref-1"},
+                        {
+                            "topic": "complexity",
+                            "why_missing": "Missing complexity analysis in student note",
+                            "missing_from_note": "No asymptotic runtime mentioned",
+                            "evidence_in_reference": "Time complexity is O(E log V).",
+                            "source_chunk_ids": ["ref-1"],
+                        }
                     ]
                 },
                 "model": "mock-gpt",
@@ -239,3 +245,129 @@ class TestEnrichmentGraphIntegration(TestCase):
     def test_branch_after_gap_detection_empty_gaps_result(self):
         state = {"gaps_result": {}}
         self.assertEqual(_branch_after_gap_detection(state), "citation_stitch")
+
+    @patch("ai.langgraph.graphs.enrichment_graph.retrieve_chunks_node")
+    @patch("apps.ai_classroom.enrichment_nodes.get_llm_provider")
+    @patch("ai.langgraph.graphs.enrichment_graph._run_verification")
+    def test_full_pipeline_with_gaps_e2e(self, mock_verify, mock_get_llm, mock_retrieve):
+        mock_get_llm.return_value = MockLLMProvider()
+        mock_retrieve.return_value = {
+            "user_chunks": [
+                {"chunk_id": "chunk-1", "content": "Dijkstra computes shortest paths.", "source_type": "note", "document_id": "doc-1", "page_start": 1, "page_end": 1, "revision_ids": []}
+            ],
+            "reference_chunks": [
+                {"chunk_id": "ref-1", "content": "Time complexity is O(E log V).", "source_type": "TEXTBOOK", "source_title": "Algorithms 101", "document_id": "ref-doc-1", "page_start": 42, "page_end": 42, "chapter": "Graph Algorithms", "section": "Shortest Paths", "revision_ids": []}
+            ],
+            "evidence_payload": {
+                "user_chunks": [{"chunk_id": "chunk-1", "content": "Dijkstra computes shortest paths."}],
+                "reference_chunks": [{"chunk_id": "ref-1", "content": "Time complexity is O(E log V).", "source_title": "Algorithms 101", "page": 42}],
+                "has_reference_material": True,
+            },
+        }
+        mock_verify.side_effect = lambda state: {
+            "stitched_blocks": [
+                {**b, "status": "supported", "score": 0.95} for b in state.get("stitched_blocks", [])
+            ]
+        }
+
+        graph = build_enrichment_graph()
+        initial_state = EnrichmentState(
+            document_id="doc-1",
+            job_id="job-1",
+            user_chunks=[],
+            reference_chunks=[],
+            evidence_payload={},
+            draft_result={},
+            gaps_result={},
+            fill_result={},
+            all_blocks=[],
+            stitched_blocks=[],
+            llm_provider="",
+            llm_model="",
+            errors=[],
+            execution_metadata={},
+        )
+        final_state = graph.invoke(initial_state)
+
+        # Verify flow produced draft + gap_fill blocks
+        self.assertIn("stitched_blocks", final_state)
+        self.assertEqual(len(final_state["stitched_blocks"]), 2)
+        overview_block = final_state["stitched_blocks"][0]
+        gap_fill_block = final_state["stitched_blocks"][1]
+
+        self.assertEqual(overview_block["block_type"], "overview")
+        self.assertEqual(gap_fill_block["block_type"], "gap_fill")
+
+        # Verify citation stitching and provenance
+        self.assertEqual(len(gap_fill_block["refs"]), 1)
+        ref = gap_fill_block["refs"][0]
+        self.assertEqual(ref["chunk_id"], "ref-1")
+        self.assertEqual(ref["source_title"], "Algorithms 101")
+        self.assertEqual(ref["page"], 42)
+        self.assertEqual(ref["chapter"], "Graph Algorithms")
+        self.assertEqual(ref["section"], "Shortest Paths")
+        self.assertEqual(gap_fill_block["status"], "supported")
+        self.assertEqual(gap_fill_block["score"], 0.95)
+
+    @patch("ai.langgraph.graphs.enrichment_graph.retrieve_chunks_node")
+    @patch("apps.ai_classroom.enrichment_nodes.get_llm_provider")
+    @patch("ai.langgraph.graphs.enrichment_graph._run_verification")
+    def test_full_pipeline_without_gaps_e2e(self, mock_verify, mock_get_llm, mock_retrieve):
+        # Provider that returns no gaps
+        class NoGapProvider(MockLLMProvider):
+            def generate_structured(self, *, prompt=None, schema=None, request_id=None, disable_fallback=False):
+                if getattr(prompt, "name", "") == "gap_detection":
+                    return type("R", (), {
+                        "data": {"gaps": []},
+                        "model": "mock-gpt",
+                        "provider": "mock",
+                        "prompt_name": "gap_detection",
+                        "prompt_version": "v1",
+                        "input_tokens": 10,
+                        "output_tokens": 5,
+                        "total_tokens": 15,
+                    })()
+                return super().generate_structured(prompt=prompt, schema=schema, request_id=request_id, disable_fallback=disable_fallback)
+
+        mock_get_llm.return_value = NoGapProvider()
+        mock_retrieve.return_value = {
+            "user_chunks": [
+                {"chunk_id": "chunk-1", "content": "Dijkstra computes shortest paths.", "source_type": "note", "document_id": "doc-1", "page_start": 1, "page_end": 1, "revision_ids": []}
+            ],
+            "reference_chunks": [],
+            "evidence_payload": {
+                "user_chunks": [{"chunk_id": "chunk-1", "content": "Dijkstra computes shortest paths."}],
+                "reference_chunks": [],
+                "has_reference_material": False,
+            },
+        }
+        mock_verify.side_effect = lambda state: {
+            "stitched_blocks": [
+                {**b, "status": "supported", "score": 0.90} for b in state.get("stitched_blocks", [])
+            ]
+        }
+
+        graph = build_enrichment_graph()
+        initial_state = EnrichmentState(
+            document_id="doc-1",
+            job_id="job-1",
+            user_chunks=[],
+            reference_chunks=[],
+            evidence_payload={},
+            draft_result={},
+            gaps_result={},
+            fill_result={},
+            all_blocks=[],
+            stitched_blocks=[],
+            llm_provider="",
+            llm_model="",
+            errors=[],
+            execution_metadata={},
+        )
+        final_state = graph.invoke(initial_state)
+
+        # Gap fill was bypassed, only draft block produced
+        self.assertIn("stitched_blocks", final_state)
+        self.assertEqual(len(final_state["stitched_blocks"]), 1)
+        self.assertEqual(final_state["stitched_blocks"][0]["block_type"], "overview")
+        self.assertEqual(final_state["fill_result"], {})
