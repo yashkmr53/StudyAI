@@ -298,3 +298,35 @@ class Phase12PostgresRLSTests(TestCase):
             cursor.execute("SELECT current_setting('app.current_profile_id', true)")
             after = cursor.fetchone()[0]
             self.assertIn(after, ("", None))
+
+    def test_reference_document_rls_scoping(self):
+        """In PostgreSQL under studyai_app, ReferenceDocuments are strictly filtered by current_setting."""
+        if connection.vendor != "postgresql":
+            self.skipTest("RLS transaction binding requires PostgreSQL")
+
+        user = User.objects.create_user(email="rls_ref_test@example.com", password="pass")
+        profile_a = Profile.objects.create(user=user, name="Profile A")
+        profile_b = Profile.objects.create(user=user, name="Profile B")
+
+        with profile_scoped_transaction(profile_a.id):
+            doc = ReferenceDocument.objects.create(
+                title="RLS Protected Doc",
+                source_type=ReferenceDocument.SourceType.TEXTBOOK,
+                file_path="references/rls_doc.pdf",
+                profile=profile_a,
+            )
+
+        # Unscoped query cannot see profile_a's document
+        with self.assertRaises(ReferenceDocument.DoesNotExist):
+            ReferenceDocument.objects.get(pk=doc.id)
+
+        # Query under profile_b cannot see profile_a's document
+        with profile_scoped_transaction(profile_b.id):
+            with self.assertRaises(ReferenceDocument.DoesNotExist):
+                ReferenceDocument.objects.get(pk=doc.id)
+
+        # Query under profile_a successfully sees the document
+        with profile_scoped_transaction(profile_a.id):
+            found = ReferenceDocument.objects.get(pk=doc.id)
+            self.assertEqual(found.title, "RLS Protected Doc")
+

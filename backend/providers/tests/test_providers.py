@@ -175,6 +175,15 @@ class TestProviderSelection(TestCase):
         provider = get_embedding_provider()
         assert provider is mock_instance
 
+    @override_settings(EMBEDDING_PROVIDER="ollama")
+    @patch("providers.embeddings.ollama.OllamaEmbeddingProvider")
+    def test_get_embedding_provider_ollama(self, mock_ollama):
+        mock_instance = MagicMock()
+        mock_ollama.return_value = mock_instance
+
+        provider = get_embedding_provider()
+        assert provider is mock_instance
+
     @override_settings(EMAIL_BACKEND="console")
     def test_get_email_provider_console(self):
         provider = get_email_provider()

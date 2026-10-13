@@ -17,7 +17,7 @@ Architecture & Priority Order:
    - Technical head-noun phrases ('[Adj/Noun]+ [Technical Noun]')
    - Delimiter-based multi-word content chunks (RAKE/YAKE style)
 4. Salience Scoring & Ranking:
-   - Sentence-Transformers MiniLM (sentence-transformers/all-MiniLM-L6-v2) semantic centrality
+   - Canonical embedding semantic centrality (qwen3-embedding:0.6b)
    - Structural sub-phrase suppression to prevent fragment errors
    - Budget control via max_candidates_per_chunk
 
@@ -35,17 +35,30 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Set, Tuple
 import numpy as np
 
-# Lazy load sentence transformer to keep lightweight imports fast
-_MINILM_MODEL = None
+# Lazy load embedding model to keep lightweight imports fast
+_CANONICAL_EMBEDDER = None
+
+
+class _EmbeddingModelWrapper:
+    def __init__(self, provider):
+        self.provider = provider
+
+    def encode(self, texts, normalize_embeddings=True):
+        version = getattr(self.provider, "model_version", "default")
+        if isinstance(texts, str):
+            res = self.provider.embed([texts], model_version=version)
+            return np.array(res[0], dtype=np.float32)
+        res = self.provider.embed(texts, model_version=version)
+        return np.array(res, dtype=np.float32)
 
 
 def get_embedding_model():
-    """Lazily load the SentenceTransformer MiniLM model."""
-    global _MINILM_MODEL
-    if _MINILM_MODEL is None:
-        from sentence_transformers import SentenceTransformer
-        _MINILM_MODEL = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    return _MINILM_MODEL
+    """Lazily load the canonical embedding provider."""
+    global _CANONICAL_EMBEDDER
+    if _CANONICAL_EMBEDDER is None:
+        from providers.registry import get_embedding_provider
+        _CANONICAL_EMBEDDER = _EmbeddingModelWrapper(get_embedding_provider())
+    return _CANONICAL_EMBEDDER
 
 
 @dataclass

@@ -195,7 +195,7 @@ class LangChainEmbeddingAdapter(EmbeddingProvider):
     ):
         self.name = name
         self._model_name = model_name or os.environ.get(
-            "EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B"
+            "EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b"
         )
         self.device = device or os.environ.get("EMBEDDING_DEVICE", "auto")
         self.batch_size = batch_size

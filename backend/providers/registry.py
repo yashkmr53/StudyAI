@@ -233,12 +233,16 @@ def get_embedding_provider() -> EmbeddingProvider:
     if name == "hashing":
         return HashingEmbeddingProvider()
     
-    if name in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding", "Qwen/Qwen3-Embedding-0.6B"):
+    if name in ("ollama", "ollama_embedding", "ollama-embedding", "qwen3-embedding", "qwen3", "qwen"):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+        return OllamaEmbeddingProvider()
+
+    if name in ("sentence_transformers", "Qwen/Qwen3-Embedding-0.6B"):
         from providers.embeddings.qwen3 import Qwen3EmbeddingProvider
         return Qwen3EmbeddingProvider()
     
     if name == "openai":
-        raise ValueError("OpenAI embeddings provider not available (legacy hosted provider removed in favor of Qwen/Qwen3-Embedding-0.6B)")
+        raise ValueError("OpenAI embeddings provider not available (legacy hosted provider removed in favor of local Ollama GPU embeddings)")
     
     raise ValueError(f"Unknown embedding provider: {name}")
 
@@ -248,7 +252,13 @@ def embedding_model_version() -> str:
     provider = _get_env("EMBEDDING_PROVIDER")
     if not provider:
         raise ValueError("EMBEDDING_PROVIDER is not configured")
-    if provider in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding"):
+    if provider in ("ollama", "ollama_embedding", "ollama-embedding", "qwen3-embedding", "qwen3", "qwen"):
+        version = _get_env("EMBEDDING_MODEL_VERSION")
+        if version and not version.startswith("hashing"):
+            return version
+        model_name = _get_env("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
+        return f"{model_name.replace('/', '-').replace(':', '-')}-v1"
+    if provider in ("sentence_transformers", "Qwen/Qwen3-Embedding-0.6B"):
         version = _get_env("EMBEDDING_MODEL_VERSION")
         if version and not version.startswith("hashing"):
             return version
@@ -262,8 +272,6 @@ def embedding_dimension() -> int:
     provider = _get_env("EMBEDDING_PROVIDER")
     if not provider:
         raise ValueError("EMBEDDING_PROVIDER is not configured")
-    if provider in ("sentence_transformers", "qwen3", "qwen", "qwen3-embedding"):
-        return int(_get_env("EMBEDDING_DIMENSIONS", "1024"))
     return int(_get_env("EMBEDDING_DIMENSIONS", "1024"))
 
 

@@ -11,7 +11,7 @@ from shared.idempotency.keys import (
 class IdempotencyKeyTests(SimpleTestCase):
     def test_keys_match_architecture_examples(self):
         self.assertEqual(ocr_key("p1", "abc", "v1"), "ocr:p1:abc:v1")
-        self.assertEqual(embedding_key("c1", "abc", "bge-m3@1"), "embedding:c1:abc:bge-m3@1")
+        self.assertEqual(embedding_key("c1", "abc", "qwen3-embedding:0.6b@1"), "embedding:c1:abc:qwen3-embedding:0.6b@1")
         self.assertEqual(enrichment_key("r1", "v3", "gpt-x"), "enrichment:r1:v3:gpt-x")
         self.assertEqual(question_generation_key("r1", "v2"), "question_generation:r1:v2")
 
