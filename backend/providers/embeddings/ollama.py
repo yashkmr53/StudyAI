@@ -40,6 +40,7 @@ class OllamaEmbeddingProvider:
         timeout: int = 60,
     ):
         dj = self._get_django_settings()
+        is_ollama_active = getattr(dj, "EMBEDDING_PROVIDER", "ollama") == "ollama"
         self.base_url = (
             base_url
             or os.environ.get("OLLAMA_BASE_URL")
@@ -47,17 +48,21 @@ class OllamaEmbeddingProvider:
         )
         self._model_name = (
             model_name
-            or os.environ.get("EMBEDDING_MODEL_NAME")
-            or getattr(dj, "EMBEDDING_MODEL_NAME", DEFAULT_MODEL_NAME)
+            or os.environ.get("OLLAMA_EMBEDDING_MODEL")
+            or (os.environ.get("EMBEDDING_MODEL_NAME") if is_ollama_active else None)
+            or (getattr(dj, "EMBEDDING_MODEL_NAME", None) if is_ollama_active else None)
+            or DEFAULT_MODEL_NAME
         )
         self._dimension = int(
             os.environ.get("EMBEDDING_DIMENSIONS")
-            or getattr(dj, "EMBEDDING_DIMENSIONS", dimension)
+            or (getattr(dj, "EMBEDDING_DIMENSIONS", dimension) if is_ollama_active else dimension)
         )
         self._model_version = (
             model_version
-            or os.environ.get("EMBEDDING_MODEL_VERSION")
-            or getattr(dj, "EMBEDDING_MODEL_VERSION", DEFAULT_MODEL_VERSION)
+            or os.environ.get("OLLAMA_EMBEDDING_MODEL_VERSION")
+            or (os.environ.get("EMBEDDING_MODEL_VERSION") if is_ollama_active else None)
+            or (getattr(dj, "EMBEDDING_MODEL_VERSION", None) if is_ollama_active else None)
+            or DEFAULT_MODEL_VERSION
         )
         self.batch_size = batch_size
         self.timeout = timeout
