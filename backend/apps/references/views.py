@@ -7,6 +7,7 @@ import logging
 import uuid
 from pathlib import Path
 
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -98,19 +99,20 @@ class ReferenceDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        ref_doc = ReferenceDocument.objects.create(
-            id=ref_id,
-            title=title,
-            source_type=source_type,
-            file_path=storage_key,
-            subject=subject,
-            profile=profile,
-            status=ReferenceDocument.Status.PENDING,
-            metadata={"filename": uploaded_file.name, "file_size": uploaded_file.size},
-        )
+        with transaction.atomic():
+            ref_doc = ReferenceDocument.objects.create(
+                id=ref_id,
+                title=title,
+                source_type=source_type,
+                file_path=storage_key,
+                subject=subject,
+                profile=profile,
+                status=ReferenceDocument.Status.PENDING,
+                metadata={"filename": uploaded_file.name, "file_size": uploaded_file.size},
+            )
 
-        # Automatically enqueue ingestion task
-        enqueue_reference_ingestion(ref_doc)
+            # Automatically enqueue ingestion task after transaction commits
+            enqueue_reference_ingestion(ref_doc)
 
         out_serializer = self.get_serializer(ref_doc)
         return Response(out_serializer.data, status=status.HTTP_201_CREATED)

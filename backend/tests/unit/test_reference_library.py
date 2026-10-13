@@ -15,7 +15,8 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.db import transaction
+from django.test import TestCase, override_settings
 from fpdf import FPDF
 from rest_framework.test import APIClient
 
@@ -29,6 +30,7 @@ from apps.references.extraction import extract_pdf_pages
 from apps.references.ingestion import ingest_reference_document
 from apps.references.models import ReferenceChunk, ReferenceDocument
 from apps.references.services import retrieve_reference_context
+from apps.references.tasks import enqueue_reference_ingestion, ingest_reference_document_task
 from apps.retrieval.models import NoteChunk
 from apps.retrieval.retrieval import RetrievalService
 from apps.subjects.models import Subject
@@ -530,3 +532,158 @@ class TestEnrichmentAndChatIntegration(TestCase):
 
             self.assertTrue(any("linear models" in c.lower() for c in contents))
             self.assertTrue(any("example" in c.lower() for c in contents))
+
+
+class TestReferenceIngestionHardening(TestCase):
+    """Regression test suite for reference ingestion transaction boundaries, RLS context, and error persistence."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="hardening_ref@studyai.test", password="password123")
+        self.profile = Profile.objects.create(user=self.user, name="Hardening Profile")
+        self.other_profile = Profile.objects.create(user=self.user, name="Other Profile")
+        self.subject = Subject.objects.create(profile=self.profile, name="Data Science")
+
+        self.pdf_content = _create_sample_pdf([
+            "Chapter 1: Foundations of Data Science. This chapter covers essential data science principles.",
+            "Chapter 2: Machine Learning Models. Overview of supervised and unsupervised techniques.",
+        ]).getvalue()
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=False)
+    @patch("apps.references.tasks.ingest_reference_document_task.delay")
+    def test_enqueue_reference_ingestion_dispatches_with_profile_id_on_commit(self, mock_delay):
+        doc = ReferenceDocument.objects.create(
+            title="Data Science Handbook",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/ds.pdf",
+            profile=self.profile,
+            subject=self.subject,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                enqueue_reference_ingestion(doc)
+                # Before commit, Celery task has not executed
+                mock_delay.assert_not_called()
+
+        # After atomic block commits, on_commit executes with profile_id
+        mock_delay.assert_called_once_with(str(doc.id), profile_id=str(self.profile.id))
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=False)
+    @patch("apps.references.tasks.ingest_reference_document_task.delay")
+    def test_enqueue_reference_ingestion_aborted_on_transaction_rollback(self, mock_delay):
+        doc = ReferenceDocument.objects.create(
+            title="Aborted Book",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/aborted.pdf",
+            profile=self.profile,
+            subject=self.subject,
+        )
+
+        try:
+            with transaction.atomic():
+                enqueue_reference_ingestion(doc)
+                raise RuntimeError("Simulated transaction failure")
+        except RuntimeError:
+            pass
+
+        # Since transaction rolled back, task was never dispatched
+        mock_delay.assert_not_called()
+
+    @patch("apps.references.ingestion.get_object_storage")
+    @patch("apps.references.ingestion.get_embedding_provider")
+    def test_ingest_reference_document_success_under_profile(self, mock_get_embedder, mock_get_storage):
+        mock_storage = MagicMock()
+        mock_storage.exists.return_value = True
+        mock_storage.read_bytes.return_value = self.pdf_content
+        mock_get_storage.return_value = mock_storage
+        mock_get_embedder.return_value = MockEmbedder()
+
+        doc = ReferenceDocument.objects.create(
+            title="Textbook Under Profile",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/textbook.pdf",
+            profile=self.profile,
+            subject=self.subject,
+        )
+
+        res = ingest_reference_document(str(doc.id), profile_id=str(self.profile.id))
+        self.assertEqual(res["status"], "ready")
+        self.assertEqual(res["page_count"], 2)
+        self.assertGreater(res["chunk_count"], 0)
+
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, ReferenceDocument.Status.READY)
+        self.assertEqual(doc.page_count, 2)
+        self.assertEqual(doc.chunk_count, res["chunk_count"])
+        self.assertEqual(doc.chunks.count(), res["chunk_count"])
+
+    @patch("apps.references.ingestion.get_object_storage")
+    def test_ingest_reference_document_profile_mismatch_rejected(self, mock_get_storage):
+        doc = ReferenceDocument.objects.create(
+            title="Private Textbook",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/private.pdf",
+            profile=self.profile,
+            subject=self.subject,
+        )
+
+        # Call ingestion under a different profile ID
+        res = ingest_reference_document(str(doc.id), profile_id=str(self.other_profile.id))
+        self.assertEqual(res["status"], "not_found")
+
+        # Document must remain in PENDING state, not modified by unauthorized profile
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, ReferenceDocument.Status.PENDING)
+
+    def test_ingest_reference_document_missing_returns_not_found(self):
+        missing_id = str(uuid.uuid4())
+        res = ingest_reference_document(missing_id, profile_id=str(self.profile.id))
+        self.assertEqual(res["status"], "not_found")
+
+    def test_ingest_reference_document_already_ready_is_idempotent(self):
+        doc = ReferenceDocument.objects.create(
+            title="Already Ready Textbook",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/ready.pdf",
+            profile=self.profile,
+            subject=self.subject,
+            status=ReferenceDocument.Status.READY,
+            chunk_count=5,
+        )
+
+        res = ingest_reference_document(str(doc.id), profile_id=str(self.profile.id))
+        self.assertEqual(res["status"], "already_ready")
+        self.assertEqual(res["chunk_count"], 5)
+
+    @patch("apps.references.ingestion.get_object_storage")
+    def test_ingest_reference_document_failure_persists_error_message(self, mock_get_storage):
+        mock_storage = MagicMock()
+        mock_storage.exists.return_value = True
+        mock_storage.read_bytes.side_effect = IOError("MinIO network failure")
+        mock_get_storage.return_value = mock_storage
+
+        doc = ReferenceDocument.objects.create(
+            title="Failing Textbook",
+            source_type=ReferenceDocument.SourceType.TEXTBOOK,
+            file_path="references/failing.pdf",
+            profile=self.profile,
+            subject=self.subject,
+        )
+
+        with self.assertRaises(IOError):
+            ingest_reference_document(str(doc.id), profile_id=str(self.profile.id))
+
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, ReferenceDocument.Status.FAILED)
+        self.assertIn("MinIO network failure", doc.error_message)
+
+    @patch("apps.references.ingestion.ingest_reference_document")
+    def test_celery_task_passes_profile_id(self, mock_ingest):
+        mock_ingest.return_value = {"status": "ready"}
+        doc_id = str(uuid.uuid4())
+        profile_id = str(self.profile.id)
+
+        res = ingest_reference_document_task(doc_id, profile_id=profile_id)
+        self.assertEqual(res, {"status": "ready"})
+        mock_ingest.assert_called_once_with(doc_id, profile_id=profile_id)
+

@@ -20,6 +20,7 @@ from django.db import transaction
 
 from apps.ai_classroom.services import EvidenceVerifier
 from apps.chat.models import ChatMessage, ChatSession
+from shared.database.rls import profile_scoped_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,6 @@ def get_bounded_history(session: ChatSession, exclude_msg_id: Optional[Any] = No
 
 class ChatService:
     @staticmethod
-    @transaction.atomic
     def ask(
         session: ChatSession,
         content: str,
@@ -101,22 +101,18 @@ class ChatService:
 
         assert_within_budget(session.profile_id)
 
-        # 1. Persist user message first
-        user_msg = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
+        # 1. Persist user message and retrieve history in a short profile-scoped transaction
+        with profile_scoped_transaction(session.profile_id):
+            user_msg = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=content)
+            previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk)
+            if not session.title and session.messages.count() <= 2:
+                session.title = ChatService._generate_title(content)
+                session.save(update_fields=["title"])
 
-        # 2. Retrieve bounded conversation history (excluding the current user message)
-        previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk)
-
-        # 3. Generate title from first message if this is a new thread
-        if not session.title and ChatMessage.objects.filter(session=session).count() <= 2:
-            session.title = ChatService._generate_title(content)
-            session.save(update_fields=["title"])
-
-        # Agent mode: use StudyAIAgent for multi-step orchestration
+        # 2. Invoke graph / agent outside transaction to avoid idle connection locks during LLM inference
         if use_agent and getattr(settings, "AGENT_ENABLED", True):
             return ChatService._ask_agent(session, content)
 
-        # Classic RAG mode (original implementation)
         return ChatService._ask_classic(session, content, previous_messages=previous_messages, image=image)
 
     @staticmethod
@@ -189,16 +185,17 @@ class ChatService:
             citations = []
 
         canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
-        message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.ASSISTANT,
-            content=answer,
-            citations=citations,
-            model=canonical_model,
-            prompt_version=CHAT_PROMPT_VERSION,
-            verification_status=verification_status,
-            verification_score=verification_score,
-        )
+        with profile_scoped_transaction(session.profile_id):
+            message = ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.ASSISTANT,
+                content=answer,
+                citations=citations,
+                model=canonical_model,
+                prompt_version=CHAT_PROMPT_VERSION,
+                verification_status=verification_status,
+                verification_score=verification_score,
+            )
         logger.info("Chat %s answered with %s citation(s) [%s] (route=%s, model=%s)", session.pk, len(citations), verification_status, route, canonical_model)
         return message
 
@@ -211,14 +208,15 @@ class ChatService:
         result = agent.process_request(content, session.profile.user, session)
 
         canonical_model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
-        message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.ASSISTANT,
-            content=result.answer,
-            citations=result.citations,
-            model=canonical_model,
-            prompt_version=AGENT_PROMPT_VERSION,
-        )
+        with profile_scoped_transaction(session.profile_id):
+            message = ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.ASSISTANT,
+                content=result.answer,
+                citations=result.citations,
+                model=canonical_model,
+                prompt_version=AGENT_PROMPT_VERSION,
+            )
         logger.info(
             "Agent chat %s answered with %s citation(s) [%s] (tools=%d, iterations=%d, outcome=%s, model=%s)",
             session.pk, len(result.citations), result.verification_status,
@@ -267,12 +265,12 @@ class ChatService:
 
         user_msg = None
         try:
-            with transaction.atomic():
+            with profile_scoped_transaction(session.profile_id):
                 user_msg = ChatMessage.objects.create(
                     session=session, role=ChatMessage.Role.USER, content=content
                 )
                 generated_title: Optional[str] = None
-                if not session.title and ChatMessage.objects.filter(session=session).count() <= 2:
+                if not session.title and session.messages.count() <= 2:
                     session.title = ChatService._generate_title(content)
                     session.save(update_fields=["title"])
                     generated_title = session.title
@@ -284,12 +282,16 @@ class ChatService:
         if generated_title:
             yield _sse(EVT_TITLE, {"title": generated_title, "session_id": str(session.pk)})
 
-        previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk if user_msg else None)
+        with profile_scoped_transaction(session.profile_id):
+            previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk if user_msg else None)
 
         # Run the graph in non-streaming mode but stream the answer text
         # by chunking the final answer through the wire. This works for
         # any LLM provider (mock/ollama/etc.) without requiring each
         # provider to expose token-level streaming.
+        # Note: Do not hold a database transaction open across long-running LLM inference.
+        # Individual database access points (such as retrieve_node) manage their own
+        # short-lived profile-scoped transactions.
         try:
             if use_agent and getattr(settings, "AGENT_ENABLED", True):
                 final_state = ChatService._run_agent_for_stream(session, content)
@@ -329,7 +331,7 @@ class ChatService:
 
         canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
         try:
-            with transaction.atomic():
+            with profile_scoped_transaction(session.profile_id):
                 persisted = ChatMessage.objects.create(
                     session=session,
                     role=ChatMessage.Role.ASSISTANT,

@@ -66,29 +66,33 @@ class AgentViewSet(viewsets.GenericViewSet):
         from apps.ai_classroom.budget import assert_within_budget
         assert_within_budget(session.profile_id)
 
-        # Create user message
-        user_message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.USER,
-            content=content,
-        )
+        from shared.database.rls import profile_scoped_transaction
 
-        # Process through agent
+        # 1. Persist user message in short scoped transaction
+        with profile_scoped_transaction(session.profile_id):
+            user_message = ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.USER,
+                content=content,
+            )
+
+        # 2. Process through agent (runs outside transaction to avoid holding connection during LLM loop)
         agent = StudyAIAgent()
         result = agent.process_request(content, request.user, session)
 
-        # Persist assistant message with tool calls trace
-        assistant_message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.ASSISTANT,
-            content=result.answer,
-            citations=result.citations + [{
-                "verification_status": result.verification_status,
-                "verification_score": result.verification_score,
-            }] if result.verification_status else result.citations,
-            model=getattr(settings, "LLM_MODEL", "qwen3.5:4b"),
-            prompt_version=getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1"),
-        )
+        # 3. Persist assistant message in short scoped transaction
+        with profile_scoped_transaction(session.profile_id):
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.ASSISTANT,
+                content=result.answer,
+                citations=result.citations + [{
+                    "verification_status": result.verification_status,
+                    "verification_score": result.verification_score,
+                }] if result.verification_status else result.citations,
+                model=getattr(settings, "LLM_MODEL", "qwen3.5:4b"),
+                prompt_version=getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1"),
+            )
 
         # Store tool calls in citations field for now (can be separate field later)
         # We'll include tool_calls in the response

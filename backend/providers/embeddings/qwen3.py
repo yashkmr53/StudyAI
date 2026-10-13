@@ -56,10 +56,21 @@ class Qwen3EmbeddingProvider:
             if is_qwen_provider
             else None
         )
+        dj_model_name = (
+            getattr(dj, "EMBEDDING_MODEL_NAME", None)
+            if is_qwen_provider
+            else None
+        )
+        env_model_name = (
+            os.environ.get("EMBEDDING_MODEL_NAME")
+            if is_qwen_provider
+            else None
+        )
         self._model_name = (
             model_name
-            or os.environ.get("EMBEDDING_MODEL_NAME")
-            or getattr(dj, "EMBEDDING_MODEL_NAME", DEFAULT_MODEL_NAME)
+            or env_model_name
+            or dj_model_name
+            or DEFAULT_MODEL_NAME
         )
         self._dimension = int(
             os.environ.get("EMBEDDING_DIMENSIONS")

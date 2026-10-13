@@ -319,12 +319,25 @@ def draft_node(state: EnrichmentState, config=None) -> dict:
 def gap_detection_node(state: EnrichmentState, config=None) -> dict:
     llm = get_llm_provider()
     prompt_template = active_prompt("gap_detection")
-    evidence_payload = state["evidence_payload"]
+    evidence_payload = state.get("evidence_payload", {})
+
+    has_ref = bool(evidence_payload.get("reference_chunks")) or evidence_payload.get("has_reference_material", False)
+    if has_ref:
+        grounding_guidance = (
+            "\n\nGROUNDING INSTRUCTION:\n"
+            "Identify missing concepts grounded strictly in the provided 'reference_chunks'. "
+            "Every gap MUST cite valid chunk_id(s) from 'reference_chunks'.\n"
+        )
+    else:
+        grounding_guidance = (
+            "\n\nGROUNDING INSTRUCTION:\n"
+            "NOTE: No textbook or reference material is available. Return an empty gaps list: {\"gaps\": []}.\n"
+        )
 
     prompt = Prompt(
         name="gap_detection",
         version=prompt_template.version,
-        user=prompt_template.template + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
+        user=prompt_template.template + grounding_guidance + "\nEVIDENCE_JSON:" + json.dumps(evidence_payload),
     )
 
     started = time.monotonic()
@@ -353,7 +366,8 @@ def gap_detection_node(state: EnrichmentState, config=None) -> dict:
 
 
 # ============================================================================
-# CANDIDATE-BASED GAP DETECTION (New Architecture)
+# CANDIDATE-BASED GAP DETECTION (Legacy / Superseded in Phase 14)
+# Superseded by direct LLM gap_detection_node; preserved for backwards compatibility.
 # ============================================================================
 
 @traced_node("studyai.enrichment.candidate_generation", feature="enrichment")

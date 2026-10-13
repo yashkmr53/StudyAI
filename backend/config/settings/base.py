@@ -190,9 +190,9 @@ AI_DAILY_BUDGET_PER_PROFILE = 500  # generous default; enforced when set
 # NoteSpace PDF renderer (architecture §7, §49)
 RENDERER_VERSION = "notespace-pdf-v1"
 
-# AI Classroom retrieval foundation (StudyAI Target Stack: Qwen/Qwen3-Embedding-0.6B)
-EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "sentence_transformers")
-EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B")
+# AI Classroom retrieval foundation (StudyAI Target Stack: Ollama GPU qwen3-embedding:0.6b)
+EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "ollama")
+EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
 EMBEDDING_DIMENSIONS = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
 EMBEDDING_MODEL_VERSION = os.environ.get("EMBEDDING_MODEL_VERSION", "qwen3-embedding-0.6b-v1")
 EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE", "auto")

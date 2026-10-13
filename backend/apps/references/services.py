@@ -1,7 +1,7 @@
 """Shared Reference Retrieval Service (Phase 11 §7, §8, §11).
 
 One unified, reusable reference retrieval service for note enrichment, Ask StudyAI,
-and agent tools. Embeds queries with canonical Qwen/Qwen3-Embedding-0.6B, executes
+and agent tools. Embeds queries with canonical qwen3-embedding:0.6b (Ollama GPU), executes
 hybrid pgvector dense + full-text search with Reciprocal Rank Fusion, strictly
 enforces profile and subject authorization, and returns full provenance metadata.
 """
@@ -113,7 +113,7 @@ def retrieve_reference_context(
     rrf_k = _rrf_k()
     depth = max(_candidate_depth(), top_k)
 
-    # 1. Embed query using canonical Qwen/Qwen3-Embedding-0.6B
+    # 1. Embed query using canonical qwen3-embedding:0.6b
     provider = get_embedding_provider()
     model_version = embedding_model_version()
     try:

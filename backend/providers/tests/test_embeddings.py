@@ -239,3 +239,56 @@ class TestEmbeddingBackfill(TestCase):
         self.assertEqual(metadata["dimension"], provider.dimension)
         self.assertEqual(metadata["normalization"], "l2")
         self.assertEqual(metadata["similarity_metric"], "cosine")
+
+
+class TestOllamaEmbeddingProvider(TestCase):
+    """Test OllamaEmbeddingProvider with mocked HTTP endpoints."""
+
+    def test_provider_initialization_defaults(self):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+
+        provider = OllamaEmbeddingProvider()
+        self.assertEqual(provider.dimension, 1024)
+        self.assertEqual(provider.model_name, "qwen3-embedding:0.6b")
+        self.assertEqual(provider.model_version, "qwen3-embedding-0.6b-v1")
+
+    @patch("requests.Session.post")
+    def test_embed_returns_normalized_vectors(self, mock_post):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "embeddings": [
+                [3.0, 4.0] + [0.0] * 1022,
+                [0.0, 5.0, 12.0] + [0.0] * 1021,
+            ]
+        }
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        provider = OllamaEmbeddingProvider()
+        vectors = provider.embed(["text1", "text2"])
+
+        self.assertEqual(len(vectors), 2)
+        self.assertEqual(len(vectors[0]), 1024)
+        self.assertEqual(len(vectors[1]), 1024)
+
+        # Check normalization (norm == 1.0)
+        norm0 = np.linalg.norm(np.array(vectors[0]))
+        self.assertAlmostEqual(norm0, 1.0, places=5)
+        # 3/5 = 0.6, 4/5 = 0.8
+        self.assertAlmostEqual(vectors[0][0], 0.6, places=5)
+        self.assertAlmostEqual(vectors[0][1], 0.8, places=5)
+
+    def test_embed_empty_list(self):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+
+        provider = OllamaEmbeddingProvider()
+        self.assertEqual(provider.embed([]), [])
+
+    def test_version_mismatch_raises_error(self):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+
+        provider = OllamaEmbeddingProvider()
+        with self.assertRaises(ProviderError):
+            provider.embed(["test"], model_version="mismatched-version")
