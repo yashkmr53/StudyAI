@@ -1,0 +1,70 @@
+{
+  "startedAt": "2026-10-13T21:46:42.295Z",
+  "completedAt": "2026-10-13T21:51:12.767Z",
+  "checklist": {
+    "authSuccess": true,
+    "navigationWorking": true,
+    "existingTextbookVerified": true,
+    "existingTextbookReadyStateAndCounts": true,
+    "referenceReloadPersistence": true,
+    "disposableUploadTriggered": true,
+    "disposableIngestionProgressObserved": true,
+    "disposableIngestionReady": true,
+    "disposableMetadataContractVerified": true,
+    "disposableReferenceCleanedUp": true,
+    "existingTextbookRemainsIntact": true,
+    "noteUploadedSuccessfully": true,
+    "ocrCompletedSuccessfully": true,
+    "enrichmentInitiated": true,
+    "enrichmentCompletedSuccessfully": true,
+    "enrichedBlocksRendered": true,
+    "citationsRenderedAndInteractive": true,
+    "enrichmentPersistsOnReload": true,
+    "disposableNoteCleanedUp": true,
+    "groundedChatAnswerReceived": true,
+    "groundedChatCitationsVerified": true,
+    "chatMultiTurnContextPreserved": true,
+    "agentModeWorking": true,
+    "chatHistoryPersistsOnReload": true,
+    "profileIsolationVerified": true
+  },
+  "metrics": {
+    "disposableIngestDurationMs": 4591,
+    "ocrDurationMs": 19514,
+    "enrichDurationMs": 92011
+  },
+  "diagnostics": {
+    "disposableDocumentMeta": {
+      "id": "794c4980-7274-403b-8b86-36e1dd739486",
+      "title": "Algorithms and Data Structures Reference (Phase 14 Test)",
+      "status": "READY",
+      "page_count": 2,
+      "chunk_count": 2,
+      "metadata": {
+        "stage": "ready",
+        "filename": "sample_textbook.pdf",
+        "file_size": 2120,
+        "page_count": 2,
+        "total_chunks": 2,
+        "embedded_chunks": 2
+      },
+      "chunks_models": [
+        "ollama",
+        "ollama"
+      ],
+      "chunks_versions": [
+        "qwen3-embedding-0.6b-v1",
+        "qwen3-embedding-0.6b-v1"
+      ]
+    },
+    "rlsIsolation": {
+      "yash_visible_doc_ids": [],
+      "yashai_doc_in_yash_view": "False",
+      "yashai_visible_doc_ids": [
+        "f148dab2-1ff0-4bd0-aa98-0857df36c068"
+      ],
+      "yashai_doc_in_yashai_view": "True"
+    }
+  },
+  "success": true
+}

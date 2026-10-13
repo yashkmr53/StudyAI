@@ -58,10 +58,14 @@ def dispatch_job(job: Job) -> None:
     if settings.CELERY_TASK_ALWAYS_EAGER:
         process_job_task(str(job.pk))
         return
-    try:
-        process_job_task.delay(str(job.pk))
-    except Exception as exc:  # broker unavailable — job stays queued
-        logger.warning("Broker unavailable; job %s remains queued (%s)", job.pk, exc)
+
+    def _enqueue():
+        try:
+            process_job_task.delay(str(job.pk))
+        except Exception as exc:  # broker unavailable — job stays queued
+            logger.warning("Broker unavailable; job %s remains queued (%s)", job.pk, exc)
+
+    transaction.on_commit(_enqueue)
 
 
 def retry_backoff(job: Job) -> timedelta:

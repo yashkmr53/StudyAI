@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Patterns indicating the user is asking about their own study material
 _MATERIAL_PATTERNS = [
-    r"\bmy\s+(notes?|materials?|docs?|documents?|studies?|course|textbook|book)\b",
-    r"\b(from|in|according to)\s+my\b",
+    r"\b(my|our|the)\s+(notes?|materials?|docs?|documents?|studies?|course|textbook|book|reference)\b",
+    r"\b(from|in|according to)\s+(my|our|the)\b",
     r"\b(i|we)\s+(uploaded|wrote|studied|learned|covered)\b",
     r"\bmy\s+(dsa|algo|math|physics|chem|bio|cs)\b",
+    r"\b(let us c|kanetkar)\b",
 ]
 
 # Date/time patterns that should use runtime date/time
@@ -171,24 +172,65 @@ def date_time_node(state: ChatState) -> dict:
 def retrieve_node(state: ChatState) -> dict:
     """Retrieve evidence from the user's uploaded study material (DB/pgvector)."""
     session_id = state.get("session_id")
+    profile_id = state.get("profile_id")
+    from shared.database.rls import profile_scoped_transaction
+
     try:
-        session = ChatSession.objects.select_related("profile__user", "subject").get(pk=session_id)
+        if profile_id:
+            with profile_scoped_transaction(profile_id):
+                session = ChatSession.objects.select_related("profile__user", "subject").get(pk=session_id)
+        else:
+            session = ChatSession.objects.select_related("profile__user", "subject").get(pk=session_id)
     except ChatSession.DoesNotExist:
         return {"errors": state.get("errors", []) + ["Session not found"]}
 
     query = state["user_request"]
     user = session.profile.user
     subject = session.subject
+    effective_profile_id = profile_id or str(session.profile_id)
 
     start = time.monotonic()
-    evidence = RetrievalService.search(
-        user,
-        query,
-        profile=session.profile,
-        subject=subject,
-        top_k=getattr(settings, "CHAT_RETRIEVAL_TOP_K", 4),
-        include_reference=True,
-    )
+    with profile_scoped_transaction(effective_profile_id):
+        evidence_dicts = [
+            e.as_dict()
+            for e in RetrievalService.search(
+                user,
+                query,
+                profile=session.profile,
+                subject=subject,
+                top_k=getattr(settings, "CHAT_RETRIEVAL_TOP_K", 4),
+                include_reference=True,
+            )
+        ]
+
+        # Also retrieve from first-class Reference Documents (Phase 11/14 shared service)
+        try:
+            from apps.references.services import retrieve_reference_context
+
+            ref_chunks = retrieve_reference_context(
+                query,
+                profile=session.profile,
+                subject=subject,
+                top_k=4,
+            )
+            for rc in ref_chunks:
+                evidence_dicts.append({
+                    "chunk_id": rc["chunk_id"],
+                    "document_id": rc["document_id"],
+                    "source_type": "reference",
+                    "page_start": rc.get("page") or rc.get("page_start", 1),
+                    "page_end": rc.get("page") or rc.get("page_end", 1),
+                    "snippet": rc.get("snippet", ""),
+                    "content": rc.get("text", "") or rc.get("content", "") or rc.get("snippet", ""),
+                    "document_title": rc.get("source_title", "Reference Textbook"),
+                    "subject_name": rc.get("subject_name") or (subject.name if subject else None),
+                    "chapter": rc.get("chapter"),
+                    "section": rc.get("section"),
+                    "scores": {"rrf": rc.get("score", 0.0)},
+                })
+        except Exception as exc:
+            logger.warning("Error querying reference context in chat: %s", exc)
+
     latency_ms = int((time.monotonic() - start) * 1000)
 
     log_retrieval(
@@ -196,12 +238,12 @@ def retrieve_node(state: ChatState) -> dict:
         profile_id=str(session.profile_id),
         subject_id=str(subject.pk) if subject else None,
         k=4,
-        results_count=len(evidence),
+        results_count=len(evidence_dicts),
         latency_ms=latency_ms,
     )
 
     return {
-        "retrieved_evidence": [e.as_dict() for e in evidence],
+        "retrieved_evidence": evidence_dicts,
     }
 
 
