@@ -50,9 +50,14 @@ export type NoteSourceKind = "canvas" | "upload";
  * generated enrichment hanging off it.
  */
 export interface NoteMeta {
-  /** Canvas session id or document id, depending on source kind. */
+  /** Note route identifier or document id. */
   id: string;
+  /** Server-side document id for documents/enrichment/tags API. */
   refId: string;
+  /** Server-side document id when finalized/persisted. */
+  documentId?: string;
+  /** Canvas session id when source === "canvas". */
+  sessionId?: string;
   profileId: string;
   subjectId: string;
   /** Folder id, or null while unfiled. */

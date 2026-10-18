@@ -32,7 +32,7 @@ export function NoteRow({ note, to }: { note: NoteMeta; to: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const docId = note.refId || note.id;
+  const docId = note.documentId || note.refId || note.id;
 
   async function handleRename(newTitle: string) {
     try {
@@ -221,8 +221,15 @@ function EnrichmentStateChip({ noteId }: { noteId: string }) {
             timer = null;
           }
         }
-      } catch {
-        // non-fatal
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status;
+        const code = (err as { code?: string })?.code;
+        if (status === 404 || status === 403 || code === "RESOURCE_NOT_FOUND") {
+          if (timer) {
+            window.clearInterval(timer);
+            timer = null;
+          }
+        }
       }
     }
 

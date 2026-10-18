@@ -11,6 +11,7 @@ POST /api/v1/documents/pages/{page_id}/finalize-upload   (explicit §46 step)
 import logging
 from django.conf import settings
 from django.db import transaction
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -71,6 +72,31 @@ class DocumentViewSet(
             )
             qs = qs.filter(profile=profile)
         return qs
+
+    def get_object(self):
+        try:
+            return super().get_object()
+        except Http404:
+            pk = self.kwargs.get("pk")
+            from apps.canvas.models import CanvasSession
+
+            try:
+                session = (
+                    CanvasSession.objects.filter(pk=pk, profile__user=self.request.user)
+                    .select_related("document")
+                    .first()
+                )
+                if session:
+                    if not session.document:
+                        from apps.documents.services import IngestionService
+                        doc = IngestionService.get_owned_document(self.request.user, pk)
+                        self.check_object_permissions(self.request, doc)
+                        return doc
+                    self.check_object_permissions(self.request, session.document)
+                    return session.document
+            except Exception:
+                pass
+            raise
 
     def create(self, request, *args, **kwargs):
         serializer = DocumentCreateSerializer(data=request.data)

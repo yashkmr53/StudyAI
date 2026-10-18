@@ -73,6 +73,7 @@ interface WorkspaceState {
     folderId: string | null;
     title: string;
   }) => Promise<NoteMeta>;
+  associateCanvasDocument: (sessionId: string, documentId: string) => Promise<void>;
   renameNote: (noteId: string, title: string) => Promise<void>;
   removeNote: (noteId: string) => Promise<void>;
   noteById: (noteId: string) => NoteMeta | undefined;
@@ -144,13 +145,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const remoteNotes: NoteMeta[] = remoteDocList
         .filter((d) => d.profile === profileId)
         .map((d) => {
-          const localMatch = localNotes.find((ln) => ln.id === d.id || ln.refId === d.id);
+          const localMatch = localNotes.find(
+            (ln) => ln.id === d.id || ln.refId === d.id || ln.documentId === d.id || ln.sessionId === d.id
+          );
           const title = d.title || localMatch?.title || d.filename || `Note ${d.id.slice(0, 8)}`;
           const rawFolder = d.notebook !== undefined ? d.notebook : localMatch?.folderId;
           const folderId = !rawFolder || rawFolder === UNFILED_FOLDER_ID ? UNFILED_FOLDER_ID : rawFolder;
           return {
             id: d.id,
             refId: d.id,
+            documentId: d.id,
+            sessionId: localMatch?.sessionId,
             profileId: d.profile,
             subjectId: d.subject || localMatch?.subjectId || "",
             folderId,
@@ -162,10 +167,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         });
 
       const remoteNoteIds = new Set(remoteNotes.map((n) => n.id));
+      const remoteSessionIds = new Set(remoteNotes.map((n) => n.sessionId).filter(Boolean));
       const mergedNotes: NoteMeta[] = [
         ...remoteNotes,
         ...localNotes
-          .filter((ln) => !remoteNoteIds.has(ln.id) && !remoteNoteIds.has(ln.refId))
+          .filter(
+            (ln) =>
+              !remoteNoteIds.has(ln.id) &&
+              !remoteNoteIds.has(ln.refId) &&
+              (!ln.documentId || !remoteNoteIds.has(ln.documentId)) &&
+              (!ln.sessionId || !remoteSessionIds.has(ln.sessionId))
+          )
           .map((ln) => ({
             ...ln,
             folderId: !ln.folderId || ln.folderId === null ? UNFILED_FOLDER_ID : ln.folderId,
@@ -336,9 +348,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       );
     }
     const targetNotebook = normalizedFolderId === UNFILED_FOLDER_ID ? null : normalizedFolderId;
-
-    if (existing.source !== "canvas") {
-      await documentsApi.move(noteId, targetNotebook);
+    const targetDocId = existing.documentId || (existing.source !== "canvas" ? noteId : null);
+    if (targetDocId) {
+      await documentsApi.move(targetDocId, targetNotebook);
     }
 
     const now = new Date().toISOString();
@@ -382,6 +394,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const note: NoteMeta = {
       id: input.sessionId,
       refId: input.sessionId,
+      sessionId: input.sessionId,
       profileId: input.profileId,
       subjectId: input.subjectId,
       folderId: input.folderId || UNFILED_FOLDER_ID,
@@ -396,11 +409,40 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return note;
   },
 
+  async associateCanvasDocument(sessionId, documentId) {
+    const existing =
+      get().notes.find(
+        (n) => n.id === sessionId || n.sessionId === sessionId || n.refId === sessionId,
+      ) || (await getNote(sessionId));
+    if (!existing) return;
+
+    const updated: NoteMeta = {
+      ...existing,
+      id: documentId,
+      refId: documentId,
+      documentId: documentId,
+      sessionId: sessionId,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (existing.id !== documentId) {
+      await deleteNote(existing.id);
+    }
+    await putNote(updated);
+
+    set((s) => ({
+      notes: s.notes.map((n) =>
+        n.id === sessionId || n.sessionId === sessionId || n.refId === sessionId ? updated : n,
+      ),
+    }));
+  },
+
   async registerUploadNote(input) {
     const now = new Date().toISOString();
     const note: NoteMeta = {
       id: input.documentId,
       refId: input.documentId,
+      documentId: input.documentId,
       profileId: input.profileId,
       subjectId: input.subjectId,
       folderId: input.folderId || UNFILED_FOLDER_ID,
@@ -436,8 +478,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         );
       }
     }
-    if (!existing || existing.source !== "canvas") {
-      await documentsApi.rename(noteId, clean);
+    const targetDocId = existing?.documentId || (existing?.source !== "canvas" ? noteId : null);
+    if (targetDocId) {
+      await documentsApi.rename(targetDocId, clean);
     }
     const now = new Date().toISOString();
     const updated: NoteMeta = existing
@@ -463,8 +506,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   async removeNote(noteId) {
     const existing = get().notes.find((n) => n.id === noteId) || (await getNote(noteId));
-    if (!existing || existing.source !== "canvas") {
-      await documentsApi.remove(noteId);
+    const targetDocId = existing?.documentId || (existing?.source !== "canvas" ? noteId : null);
+    if (targetDocId) {
+      await documentsApi.remove(targetDocId);
     }
     await deleteNote(noteId);
     set((s) => ({

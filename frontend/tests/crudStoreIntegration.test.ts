@@ -661,5 +661,92 @@ describe("Phase 10B — Frontend CRUD Store & API Integration", () => {
       expect(updatedInDb?.title).toBe("Remote Authoritative Title");
       expect(updatedInDb?.folderId).toBe("nb-new-remote");
     });
+
+    it("associates canvas session with created backend document and migrates storage key", async () => {
+      const sessionId = "sess-uuid-123";
+      const docId = "doc-uuid-456";
+
+      // Register canvas note initially stored under sessionId
+      await useWorkspaceStore.getState().registerCanvasNote({
+        sessionId,
+        profileId: "prof-1",
+        subjectId: "sub-1",
+        folderId: null,
+        title: "Lecture 1 Scribbles",
+      });
+
+      const initialInStore = useWorkspaceStore.getState().noteById(sessionId);
+      expect(initialInStore).toBeDefined();
+      expect(initialInStore?.sessionId).toBe(sessionId);
+
+      // Finalize creates document and associates it
+      await useWorkspaceStore.getState().associateCanvasDocument(sessionId, docId);
+
+      // Now queryable by docId
+      const associated = useWorkspaceStore.getState().noteById(docId);
+      expect(associated).toBeDefined();
+      expect(associated?.id).toBe(docId);
+      expect(associated?.refId).toBe(docId);
+      expect(associated?.documentId).toBe(docId);
+      expect(associated?.sessionId).toBe(sessionId);
+
+      // Old session ID record deleted from IDB, new document ID record stored in IDB
+      const oldFromDb = await getNote(sessionId);
+      expect(oldFromDb).toBeUndefined();
+      const newFromDb = await getNote(docId);
+      expect(newFromDb).toBeDefined();
+      expect(newFromDb?.id).toBe(docId);
+      expect(newFromDb?.sessionId).toBe(sessionId);
+    });
+
+    it("loadWorkspace reconciles local canvas note with remote document without duplication", async () => {
+      const sessionId = "sess-canvas-999";
+      const docId = "doc-canvas-888";
+
+      // Local note saved before sync (with associated documentId)
+      const localCanvasNote = {
+        id: sessionId,
+        refId: sessionId,
+        sessionId,
+        documentId: docId,
+        profileId: "prof-1",
+        subjectId: "sub-1",
+        folderId: UNFILED_FOLDER_ID,
+        title: "My Handwriting",
+        source: "canvas" as const,
+        createdAt: "2026-10-18T10:00:00Z",
+        updatedAt: "2026-10-18T10:00:00Z",
+      };
+      await putNote(localCanvasNote);
+
+      vi.spyOn(subjectsApi, "list").mockResolvedValueOnce([
+        { id: "sub-1", profile: "prof-1", name: "Calculus", created_at: "2026-10-18T00:00:00Z" },
+      ]);
+      vi.spyOn(notebooksApi, "list").mockResolvedValueOnce([]);
+      vi.spyOn(documentsApi, "list").mockResolvedValueOnce({
+        count: 1,
+        results: [
+          {
+            id: docId,
+            profile: "prof-1",
+            subject: "sub-1",
+            notebook: null,
+            title: "My Handwriting",
+            source: "canvas",
+            source_type: "canvas_page",
+            schema_version: "1.0",
+            created_at: "2026-10-18T10:00:00Z",
+          },
+        ],
+      });
+
+      await useWorkspaceStore.getState().loadWorkspace("prof-1");
+
+      const notes = useWorkspaceStore.getState().notes;
+      // Should NOT have duplicate notes (one for session and one for doc)
+      expect(notes.length).toBe(1);
+      expect(notes[0].id).toBe(docId);
+      expect(notes[0].sessionId).toBe(sessionId);
+    });
   });
 });

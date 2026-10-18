@@ -126,18 +126,20 @@ function CanvasSource({
   const [zoom, setZoom] = useState(1);
   const [highlighted, setHighlighted] = useState(false);
 
+  const targetSessionId = note.sessionId || note.refId || note.id;
+
   useEffect(() => {
     let cancelled = false;
     setSession(null);
     setError(null);
     canvasApi
-      .getSession(note.refId)
+      .getSession(targetSessionId)
       .then((s) => !cancelled && setSession(s))
       .catch(() => !cancelled && setError(t("notes.handwritten.loadPagesFailed")));
     return () => {
       cancelled = true;
     };
-  }, [note.refId]);
+  }, [targetSessionId]);
 
   useEffect(() => {
     if (!highlightToken) return;
@@ -168,7 +170,7 @@ function CanvasSource({
         onRetry={() => {
           setError(null);
           canvasApi
-            .getSession(note.refId)
+            .getSession(targetSessionId)
             .then(setSession)
             .catch(() => setError(t("notes.handwritten.loadPagesFailed")));
         }}

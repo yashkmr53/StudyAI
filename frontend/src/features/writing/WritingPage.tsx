@@ -126,7 +126,7 @@ export function WritingPage() {
       if (!profileId || !subjectId) return;
       try {
         ensureDevice();
-        await newSession(profileId);
+        await newSession(profileId, subjectId);
         const created = await registerCanvasNote({
           sessionId: useCanvasStore.getState().sessionId!,
           profileId,
@@ -459,8 +459,16 @@ export function WritingPage() {
       (await getStrokesForPage(activePageId)).some((s) => !s.deleted_at);
     try {
       const active = pages.find((p) => p.id === activePageId);
-      if (active && !active.is_finalized) await finalizeActive();
+      let finResult = null;
+      if (active && !active.is_finalized) {
+        finResult = await finalizeActive(note?.title);
+      }
       await flushOutbox();
+      const currentSessionId = sessionId || useCanvasStore.getState().sessionId;
+      const docId = finResult?.document_id || useCanvasStore.getState().lastFinalizedDocumentId;
+      if (docId && currentSessionId) {
+        await useWorkspaceStore.getState().associateCanvasDocument(currentSessionId, docId);
+      }
     } catch {
       /* finalize is best-effort; ink is safe locally */
     }

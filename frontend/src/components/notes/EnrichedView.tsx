@@ -25,20 +25,21 @@ interface Props {
 
 export function EnrichedView({ note, onCitation }: Props) {
   const { t } = useTranslation();
+  const docId = note.documentId || note.refId || note.id;
   const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tags, setTags] = useState<{ stable_key: string; display_name: string }[]>([]);
   const [jobId, setJobId] = useState<string | null>(() => {
     try {
-      return sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+      return sessionStorage.getItem(`studyai.enrichment.job.${docId}`);
     } catch {
       return null;
     }
   });
   const [isGenerating, setIsGenerating] = useState<boolean>(() => {
     try {
-      return !!sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+      return !!sessionStorage.getItem(`studyai.enrichment.job.${docId}`);
     } catch {
       return false;
     }
@@ -67,10 +68,11 @@ export function EnrichedView({ note, onCitation }: Props) {
             jobInfo.status === "failed_dead_letter" ||
             jobInfo.status === "cancelled"
           ) {
+            stopPolling();
             setIsGenerating(false);
             setJobId(null);
             try {
-              sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+              sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
             } catch {}
             const failSnap: EnrichmentSnapshot = { state: "failed", blocks: [], generatedAt: null };
             setSnapshot(failSnap);
@@ -80,7 +82,7 @@ export function EnrichedView({ note, onCitation }: Props) {
         }
       }
 
-      const snap = await enrichmentApi.get(note.refId);
+      const snap = await enrichmentApi.get(docId);
       if ((isGenerating || jobIdRef.current) && snap.state === "not_enriched") {
         setSnapshot((prev) =>
           prev ? { ...prev, state: "enriching" } : { state: "enriching", blocks: [], generatedAt: null },
@@ -90,49 +92,69 @@ export function EnrichedView({ note, onCitation }: Props) {
       }
 
       if (snap.state === "enriched" || snap.state === "out_of_date" || snap.state === "failed") {
+        stopPolling();
         setIsGenerating(false);
         setJobId(null);
         try {
-          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
         } catch {}
       }
 
       setSnapshot(snap);
       setLoadError(false);
       return snap;
-    } catch {
+    } catch (err: any) {
+      if (err && typeof err === "object" && (err.status === 404 || err.status === 403)) {
+        stopPolling();
+        setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
+        } catch {}
+        setLoadError(true);
+        return null;
+      }
       if (isGenerating || jobIdRef.current) {
         return null;
       }
       setLoadError(true);
       return null;
     }
-  }, [note.refId, isGenerating]);
+  }, [docId, isGenerating, stopPolling]);
+
+  // Fetch tags once per document ID
+  useEffect(() => {
+    let cancelled = false;
+    tagsApi
+      .listForDocument(docId)
+      .then((t) => {
+        if (!cancelled) {
+          setTags(t.map((x) => ({ stable_key: x.stable_key, display_name: x.display_name })));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTags([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [docId]);
 
   useEffect(() => {
     let savedJob: string | null = null;
     try {
-      savedJob = sessionStorage.getItem(`studyai.enrichment.job.${note.refId}`);
+      savedJob = sessionStorage.getItem(`studyai.enrichment.job.${docId}`);
     } catch {}
 
     setJobId(savedJob);
     setIsGenerating(!!savedJob);
     setSnapshot(savedJob ? { state: "enriching", blocks: [], generatedAt: null } : null);
     setLoadError(false);
-    setTags([]);
     setActiveCitation(null);
     stopPolling();
     void refresh();
-    void tagsApi
-      .listForDocument(note.refId)
-      .then((t) =>
-        setTags(
-          t.map((x) => ({ stable_key: x.stable_key, display_name: x.display_name })),
-        ),
-      )
-      .catch(() => {});
     return stopPolling;
-  }, [note.refId, refresh, stopPolling]);
+  }, [docId, refresh, stopPolling]);
 
   // Poll while generation job is running or state is enriching
   useEffect(() => {
@@ -148,7 +170,7 @@ export function EnrichedView({ note, onCitation }: Props) {
         setIsGenerating(false);
         setJobId(null);
         try {
-          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
         } catch {}
         setSnapshot((prev) =>
           prev ? { ...prev, state: "failed" } : { state: "failed", blocks: [], generatedAt: null },
@@ -164,12 +186,12 @@ export function EnrichedView({ note, onCitation }: Props) {
         setIsGenerating(false);
         setJobId(null);
         try {
-          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
         } catch {}
       }
     }, POLL_MS);
     return stopPolling;
-  }, [isGenerating, jobId, snapshot?.state, refresh, stopPolling, note.refId]);
+  }, [isGenerating, jobId, snapshot?.state, refresh, stopPolling, docId]);
 
   async function generate() {
     setActionError(null);
@@ -180,29 +202,31 @@ export function EnrichedView({ note, onCitation }: Props) {
       generatedAt: prev?.generatedAt ?? null,
     }));
     try {
-      const res = await enrichmentApi.generate(note.refId);
+      const res = await enrichmentApi.generate(docId);
       if (res.jobId) {
         setJobId(res.jobId);
         try {
-          sessionStorage.setItem(`studyai.enrichment.job.${note.refId}`, res.jobId);
+          sessionStorage.setItem(`studyai.enrichment.job.${docId}`, res.jobId);
         } catch {}
       }
       if (res.enrichedNote) {
         const snap = await parseEnrichment({ enriched_note: res.enrichedNote });
         setSnapshot(snap);
+        stopPolling();
         setIsGenerating(false);
         setJobId(null);
         try {
-          sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
         } catch {}
       }
-    } catch {
+    } catch (err: any) {
+      stopPolling();
       setIsGenerating(false);
       setJobId(null);
       try {
-        sessionStorage.removeItem(`studyai.enrichment.job.${note.refId}`);
+        sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
       } catch {}
-      setActionError(t("notes.enriched.startFailed"));
+      setActionError(err?.message || t("notes.enriched.startFailed"));
     }
   }
 

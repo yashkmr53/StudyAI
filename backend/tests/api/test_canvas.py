@@ -24,6 +24,7 @@ class CanvasBaseTestCase(TestCase):
         self.alice = authenticated_client("alice@example.com", "s3curePass!x")
         self.bob = authenticated_client("bob@example.com", "s3curePass!x")
         self.alice_profile = Profile.objects.get(user__email="alice@example.com")
+        self.bob_profile = Profile.objects.get(user__email="bob@example.com")
         self.device_a = "device-aaaa"
         self.device_b = "device-bbbb"
 
@@ -73,6 +74,20 @@ class SessionTests(CanvasBaseTestCase):
         response = self.bob.post(
             "/api/v1/canvas/sessions",
             {"profile": str(self.alice_profile.id), "device_id": self.device_b},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_session_in_foreign_subject_rejected(self):
+        from apps.subjects.models import Subject
+        bob_subject = Subject.objects.create(profile=self.bob_profile, name="Bob's Subject")
+        response = self.alice.post(
+            "/api/v1/canvas/sessions",
+            {
+                "profile": str(self.alice_profile.id),
+                "subject": str(bob_subject.id),
+                "device_id": self.device_a,
+            },
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 403)
