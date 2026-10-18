@@ -247,7 +247,7 @@ def extract_candidates_from_chunk_v2(
     1. Metadata headings/sections if present
     2. Definitional patterns, formal constructs, formulas, complexity notation
     3. Technical head nouns, noun-of-noun, and syntactic content chunks
-    4. SentenceTransformers MiniLM semantic centrality scoring
+    4. Canonical embedding semantic centrality scoring
     5. Sub-phrase fragment suppression and max_candidates budget enforcement
     """
     # Guard against leakage
@@ -361,7 +361,7 @@ def extract_candidates_from_chunk_v2(
     if not candidate_list:
         return []
 
-    # 4. Priority 4: Salience Scoring with MiniLM
+    # 4. Priority 4: Salience Scoring with canonical embeddings
     embedder = get_embedding_model()
     chunk_emb = embedder.encode(content, normalize_embeddings=True)
     cand_texts = [c.concept for c in candidate_list]

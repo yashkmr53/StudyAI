@@ -183,25 +183,23 @@ class LangChainChatModelAdapter(LLMProvider):
 
 
 class LangChainEmbeddingAdapter(EmbeddingProvider):
-    """Adapter wrapping sentence-transformers via LangChain to implement StudyAI EmbeddingProvider protocol."""
+    """Adapter wrapping Ollama embeddings via LangChain to implement StudyAI EmbeddingProvider protocol."""
 
     def __init__(
         self,
         *,
         model_name: Optional[str] = None,
-        device: Optional[str] = None,
-        batch_size: int = 32,
-        name: str = "sentence_transformers_langchain",
+        base_url: Optional[str] = None,
+        name: str = "ollama-langchain",
     ):
         self.name = name
         self._model_name = model_name or os.environ.get(
             "EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b"
         )
-        self.device = device or os.environ.get("EMBEDDING_DEVICE", "auto")
-        self.batch_size = batch_size
+        self.base_url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         self._embeddings = None
         self._dimension = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
-        self._model_version = f"{self._model_name.replace('/', '-')}-v1"
+        self._model_version = f"{self._model_name.replace('/', '-').replace(':', '-')}-v1"
         self._init_embeddings()
 
     @property
@@ -215,40 +213,21 @@ class LangChainEmbeddingAdapter(EmbeddingProvider):
     def _init_embeddings(self):
         """Initialize LangChain embeddings."""
         try:
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            import torch
+            from langchain_ollama import OllamaEmbeddings
 
-            # Determine device
-            if self.device == "auto":
-                if torch.cuda.is_available():
-                    device = "cuda"
-                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                    device = "mps"
-                else:
-                    device = "cpu"
-            else:
-                device = self.device
-
-            self._embeddings = HuggingFaceEmbeddings(
-                model_name=self.model_name,
-                model_kwargs={"device": device},
-                encode_kwargs={"normalize_embeddings": True, "batch_size": self.batch_size},
+            self._embeddings = OllamaEmbeddings(
+                base_url=self.base_url,
+                model=self._model_name,
             )
-
-            # Verify dimension
-            test_embedding = self._embeddings.embed_query("test")
-            self._dimension = len(test_embedding)
-
             logger.info(
-                "LangChain HuggingFaceEmbeddings initialized "
-                "(model=%s, dimension=%d, version=%s, device=%s)",
-                self.model_name, self.dimension, self.model_version, device
+                "LangChain OllamaEmbeddings initialized (model=%s, base_url=%s, dimension=%d)",
+                self._model_name, self.base_url, self._dimension
             )
         except ImportError:
-            logger.warning("langchain-community or sentence-transformers not installed; adapter will not work")
+            logger.warning("langchain-ollama not installed; adapter will not work")
             self._embeddings = None
         except Exception as e:
-            logger.exception("Failed to initialize LangChain embeddings")
+            logger.exception("Failed to initialize LangChain OllamaEmbeddings")
             self._embeddings = None
 
     @property
@@ -313,26 +292,38 @@ def get_chat_model(
 
 @lru_cache(maxsize=1)
 def get_embedding_model(
-    provider: str = "sentence_transformers_langchain",
+    provider: str = "ollama",
     **kwargs,
 ) -> EmbeddingProvider:
     """Get an embedding model instance by provider name.
 
     Args:
-        provider: Provider identifier ("sentence_transformers_langchain", "sentence_transformers", "hashing")
+        provider: Provider identifier ("ollama", "ollama-langchain", "hashing")
         **kwargs: Additional arguments passed to provider constructor
 
     Returns:
         EmbeddingProvider instance
     """
-    if provider == "sentence_transformers_langchain":
+    if provider in ("ollama", "ollama_embedding", "qwen3-embedding"):
+        from providers.embeddings.ollama import OllamaEmbeddingProvider
+        return OllamaEmbeddingProvider(**kwargs)
+    elif provider == "ollama-langchain":
         return LangChainEmbeddingAdapter(**kwargs)
-    elif provider == "sentence_transformers":
-        from providers.embeddings.local import SentenceTransformerEmbeddingProvider
-        return SentenceTransformerEmbeddingProvider(**kwargs)
     elif provider == "hashing":
         from providers.embeddings.hashing import HashingEmbeddingProvider
         return HashingEmbeddingProvider(**kwargs)
+    elif provider in (
+        "sentence_transformers",
+        "sentence_transformers_langchain",
+        "SentenceTransformer",
+        "Qwen/Qwen3-Embedding-0.6B",
+        "all-MiniLM-L6-v2",
+        "bge-m3",
+    ):
+        raise ValueError(
+            f"Legacy embedding provider '{provider}' was removed in Phase 14 in favor of host GPU-accelerated Ollama. "
+            "Configure EMBEDDING_PROVIDER='ollama' and EMBEDDING_MODEL_NAME='qwen3-embedding:0.6b'."
+        )
     else:
         raise ValueError(f"Unknown embedding model provider: {provider}")
 

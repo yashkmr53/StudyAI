@@ -234,7 +234,7 @@ def _generate_embeddings_for_chunks(chunks):
     from django.conf import settings
     
     provider = get_embedding_provider()
-    model_version = getattr(settings, 'EMBEDDING_MODEL_VERSION', 'sentence-transformers-all-MiniLM-L6-v2-v1')
+    model_version = getattr(settings, 'EMBEDDING_MODEL_VERSION', 'qwen3-embedding-0.6b-v1')
     
     texts = [c.content for c in chunks]
     embeddings = provider.embed(texts, model_version=model_version)

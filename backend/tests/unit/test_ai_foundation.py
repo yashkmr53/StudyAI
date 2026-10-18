@@ -24,14 +24,23 @@ class TestLangChainModels(TestCase):
         model = get_chat_model("mock")
         self.assertIsNotNone(model)
 
-    def test_get_embedding_model_sentence_transformers_langchain(self):
-        with patch("ai.langchain.models.LangChainEmbeddingAdapter._init_embeddings"):
-            model = get_embedding_model("sentence_transformers_langchain")
+    def test_get_embedding_model_ollama(self):
+        get_embedding_model.cache_clear()
+        with patch("providers.embeddings.ollama.OllamaEmbeddingProvider.__init__", return_value=None):
+            model = get_embedding_model("ollama")
             self.assertIsNotNone(model)
 
     def test_get_embedding_model_hashing_fallback(self):
+        get_embedding_model.cache_clear()
         model = get_embedding_model("hashing")
         self.assertIsNotNone(model)
+
+    def test_get_embedding_model_legacy_raises(self):
+        get_embedding_model.cache_clear()
+        with self.assertRaises(ValueError):
+            get_embedding_model("sentence_transformers_langchain")
+        with self.assertRaises(ValueError):
+            get_embedding_model("sentence_transformers")
 
     def test_get_provider_chain_llm(self):
         with patch("ai.langchain.models.LangChainChatModelAdapter._init_model"):
@@ -39,8 +48,9 @@ class TestLangChainModels(TestCase):
             self.assertEqual(len(chain), 2)
 
     def test_get_provider_chain_embedding(self):
-        with patch("ai.langchain.models.LangChainEmbeddingAdapter._init_embeddings"):
-            chain = get_provider_chain("sentence_transformers_langchain,hashing", provider_type="embedding")
+        get_embedding_model.cache_clear()
+        with patch("providers.embeddings.ollama.OllamaEmbeddingProvider.__init__", return_value=None):
+            chain = get_provider_chain("ollama,hashing", provider_type="embedding")
             self.assertEqual(len(chain), 2)
 
     def test_unknown_provider_raises(self):

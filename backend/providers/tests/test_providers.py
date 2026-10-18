@@ -167,13 +167,10 @@ class TestProviderSelection(TestCase):
         assert isinstance(provider, HashingEmbeddingProvider)
 
     @override_settings(EMBEDDING_PROVIDER="sentence_transformers")
-    @patch("providers.embeddings.qwen3.Qwen3EmbeddingProvider")
-    def test_get_embedding_provider_sentence_transformers(self, mock_st):
-        mock_instance = MagicMock()
-        mock_st.return_value = mock_instance
-        
-        provider = get_embedding_provider()
-        assert provider is mock_instance
+    def test_get_embedding_provider_legacy_rejected(self):
+        with self.assertRaises(ValueError) as cm:
+            get_embedding_provider()
+        self.assertIn("Legacy embedding provider", str(cm.exception))
 
     @override_settings(EMBEDDING_PROVIDER="ollama")
     @patch("providers.embeddings.ollama.OllamaEmbeddingProvider")
@@ -209,10 +206,17 @@ class TestProviderSelection(TestCase):
             version = embedding_model_version()
             assert version == "test-v1"
         
-        with override_settings(EMBEDDING_PROVIDER="sentence_transformers", 
-                              EMBEDDING_MODEL_NAME="sentence-transformers/test-model"):
+        with override_settings(
+            EMBEDDING_PROVIDER="ollama",
+            EMBEDDING_MODEL_NAME="qwen3-embedding:0.6b",
+            EMBEDDING_MODEL_VERSION="qwen3-embedding-0.6b-v1",
+        ):
             version = embedding_model_version()
-            assert version == "sentence-transformers-test-model-v1"
+            assert version == "qwen3-embedding-0.6b-v1"
+
+        with override_settings(EMBEDDING_PROVIDER="sentence_transformers"):
+            with self.assertRaises(ValueError):
+                embedding_model_version()
 
     def test_embedding_dimension(self):
         with override_settings(EMBEDDING_PROVIDER="hashing", EMBEDDING_DIMENSIONS=1024):
@@ -327,7 +331,7 @@ class TestProviderSwitching(TestCase):
         STORAGE_BACKEND="minio",
         OCR_PROVIDER_CHAIN="tesseract,mock",
         LLM_PROVIDER_CHAIN="ollama,mock",
-        EMBEDDING_PROVIDER="sentence_transformers",
+        EMBEDDING_PROVIDER="ollama",
         EMAIL_BACKEND="mailpit",
         MINIO_ACCESS_KEY="test",
         MINIO_SECRET_KEY="test",
@@ -335,12 +339,12 @@ class TestProviderSwitching(TestCase):
     @patch("providers.storage.s3.MinIOStorageProvider")
     @patch("providers.ocr.local.TesseractOCRProvider")
     @patch("providers.llm.local.OllamaLLMProvider")
-    @patch("providers.embeddings.local.SentenceTransformerEmbeddingProvider")
+    @patch("providers.embeddings.ollama.OllamaEmbeddingProvider")
     def test_all_development_providers(
-        self, mock_st, mock_ollama, mock_tesseract, mock_minio
+        self, mock_ollama_emb, mock_ollama, mock_tesseract, mock_minio
     ):
         """All development providers should work together."""
-        for mock in [mock_st, mock_ollama, mock_tesseract, mock_minio]:
+        for mock in [mock_ollama_emb, mock_ollama, mock_tesseract, mock_minio]:
             mock.return_value = MagicMock()
         
         storage = get_object_storage()

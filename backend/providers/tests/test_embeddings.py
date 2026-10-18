@@ -1,14 +1,13 @@
-"""Embedding generation and persistence tests (StudyAI Phased Migration - Phase 3).
+"""Embedding generation and persistence tests (Canonical Phase 14 Stack).
 
 Verifies:
-- Canonical Qwen3-Embedding-0.6B provider (1024-d, L2 normalized, GPU/MPS/CPU).
+- Canonical OllamaEmbeddingProvider (1024-d, L2 normalized, host GPU/MPS acceleration).
 - Deterministic hashing provider for test environments.
 - Persistence format compatibility with pgvector (vector(1024)).
 - Version mismatch handling and backfill tracking.
 """
-import importlib.util
 import numpy as np
-import unittest
+import requests
 from unittest.mock import patch, MagicMock
 
 from django.conf import settings
@@ -16,15 +15,13 @@ from django.test import TestCase, override_settings
 
 from providers.base import EmbeddingProvider
 from providers.embeddings.hashing import HashingEmbeddingProvider
-from providers.embeddings.qwen3 import (
-    Qwen3EmbeddingProvider,
+from providers.embeddings.ollama import (
+    OllamaEmbeddingProvider,
     DEFAULT_MODEL_NAME,
     DEFAULT_DIMENSION,
     DEFAULT_MODEL_VERSION,
 )
 from shared.exceptions import ProviderError
-
-SENTENCE_TRANSFORMERS_AVAILABLE = importlib.util.find_spec("sentence_transformers") is not None
 
 
 class TestHashingEmbeddingProvider(TestCase):
@@ -71,133 +68,6 @@ class TestHashingEmbeddingProvider(TestCase):
         self.assertEqual(provider.model_name, "hashing")
         self.assertEqual(provider.model_version, f"hashing-{provider.dimension}-v1")
 
-
-@unittest.skipUnless(SENTENCE_TRANSFORMERS_AVAILABLE, "sentence_transformers not installed")
-class TestQwen3EmbeddingProvider(TestCase):
-    """Test canonical Qwen/Qwen3-Embedding-0.6B provider."""
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_canonical_defaults(self, mock_st_class):
-        """Provider should initialize with Qwen3-Embedding-0.6B defaults (1024-d)."""
-        mock_model = MagicMock()
-        mock_model.encode.return_value = np.array([[0.01] * 1024], dtype=np.float32)
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        self.assertEqual(provider.model_name, DEFAULT_MODEL_NAME)
-        self.assertEqual(provider.dimension, 1024)
-        self.assertEqual(provider.model_version, DEFAULT_MODEL_VERSION)
-        mock_st_class.assert_called_once_with(DEFAULT_MODEL_NAME, device="cpu")
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_embed_single_text(self, mock_st_class):
-        """Test embedding a single text string."""
-        mock_model = MagicMock()
-        mock_model.encode.side_effect = [
-            np.array([[0.01] * 1024], dtype=np.float32),  # probe in _load_model
-            np.array([[0.05] * 1024], dtype=np.float32),  # actual call
-        ]
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        embeddings = provider.embed(["Photosynthesis process in plants"], model_version=DEFAULT_MODEL_VERSION)
-
-        self.assertEqual(len(embeddings), 1)
-        self.assertEqual(len(embeddings[0]), 1024)
-        self.assertIsInstance(embeddings[0], list)
-        self.assertIsInstance(embeddings[0][0], float)
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_embed_batch(self, mock_st_class):
-        """Test batch embedding with normalization."""
-        mock_model = MagicMock()
-        mock_model.encode.side_effect = [
-            np.array([[0.01] * 1024], dtype=np.float32),  # probe
-            np.array([[0.01] * 1024, [0.02] * 1024], dtype=np.float32),  # batch
-        ]
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu", batch_size=2)
-        embeddings = provider.embed(["chunk 1", "chunk 2"], model_version=DEFAULT_MODEL_VERSION)
-
-        self.assertEqual(len(embeddings), 2)
-        self.assertEqual(len(embeddings[0]), 1024)
-        self.assertEqual(len(embeddings[1]), 1024)
-        call_args = mock_model.encode.call_args
-        self.assertEqual(call_args[1]["batch_size"], 2)
-        self.assertTrue(call_args[1]["normalize_embeddings"])
-
-    def test_empty_batch_returns_empty_list(self):
-        """Empty texts list should return empty list without calling model."""
-        provider = Qwen3EmbeddingProvider.__new__(Qwen3EmbeddingProvider)
-        provider._model = None
-        self.assertEqual(provider.embed([]), [])
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_model_version_mismatch_raises(self, mock_st_class):
-        """Should raise ProviderError when requested model version does not match."""
-        mock_model = MagicMock()
-        mock_model.encode.return_value = np.array([[0.01] * 1024], dtype=np.float32)
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        with self.assertRaises(ProviderError) as cm:
-            provider.embed(["test"], model_version="legacy-minilm-v1")
-        self.assertIn("Embedding model version mismatch", str(cm.exception))
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_model_load_failure_raises(self, mock_st_class):
-        """Should raise ProviderError when model fails to load."""
-        mock_st_class.side_effect = RuntimeError("Weights file missing")
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        self.assertIsNone(provider._model)
-
-        with self.assertRaises(ProviderError) as cm:
-            provider.embed(["test"])
-        self.assertIn("not loaded", str(cm.exception))
-
-    @patch("torch.backends.mps.is_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=False)
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_auto_device_selects_mps_on_apple_silicon(self, mock_st, mock_cuda, mock_mps):
-        """On Apple Silicon Mac, auto device should select MPS."""
-        mock_model = MagicMock()
-        mock_model.encode.return_value = np.array([[0.01] * 1024], dtype=np.float32)
-        mock_st.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="auto")
-        self.assertEqual(provider._device, "mps")
-
-
-class TestEmbeddingPersistence(TestCase):
-    """Test embedding persistence format compatibility with pgvector."""
-
-    def test_hashing_embeddings_pgvector_compatible(self):
-        """Hashing embeddings should be compatible with pgvector."""
-        provider = HashingEmbeddingProvider()
-        embeddings = provider.embed(["test"], model_version=provider.model_version)
-
-        self.assertIsInstance(embeddings[0], list)
-        self.assertTrue(all(isinstance(x, float) for x in embeddings[0]))
-        self.assertEqual(len(embeddings[0]), provider.dimension)
-
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_qwen3_embeddings_pgvector_compatible(self, mock_st_class):
-        """Qwen3 embeddings should be list of 1024 floats for pgvector."""
-        mock_model = MagicMock()
-        mock_model.encode.side_effect = [
-            np.array([[0.01] * 1024], dtype=np.float32),
-            np.array([[0.01] * 1024], dtype=np.float32),
-        ]
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        embeddings = provider.embed(["test"], model_version=provider.model_version)
-
-        self.assertIsInstance(embeddings[0], list)
-        self.assertTrue(all(isinstance(x, float) for x in embeddings[0]))
-        self.assertEqual(len(embeddings[0]), 1024)
-
     def test_embedding_dimension_consistency(self):
         """All embeddings from same provider should have consistent dimension."""
         provider = HashingEmbeddingProvider()
@@ -209,21 +79,11 @@ class TestEmbeddingPersistence(TestCase):
 class TestEmbeddingBackfill(TestCase):
     """Test embedding backfill and metadata tracking."""
 
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_model_version_changes_require_backfill(self, mock_st_class):
+    def test_model_version_changes_require_backfill(self):
         """Changing model version should trigger mismatch and backfill requirement."""
-        mock_model = MagicMock()
-        mock_model.encode.side_effect = [
-            np.array([[0.01] * 1024], dtype=np.float32),
-            np.array([[0.01] * 1024], dtype=np.float32),
-        ]
-        mock_st_class.return_value = mock_model
-
-        provider = Qwen3EmbeddingProvider(device="cpu")
-        provider._model_version = "qwen3-embedding-0.6b-v2"
-
+        provider = OllamaEmbeddingProvider()
         with self.assertRaises(ProviderError) as cm:
-            provider.embed(["test"], model_version="qwen3-embedding-0.6b-v1")
+            provider.embed(["test"], model_version="legacy-minilm-v1")
         self.assertIn("Embedding model version mismatch", str(cm.exception))
 
     def test_embedding_model_metadata(self):
@@ -245,8 +105,6 @@ class TestOllamaEmbeddingProvider(TestCase):
     """Test OllamaEmbeddingProvider with mocked HTTP endpoints."""
 
     def test_provider_initialization_defaults(self):
-        from providers.embeddings.ollama import OllamaEmbeddingProvider
-
         provider = OllamaEmbeddingProvider()
         self.assertEqual(provider.dimension, 1024)
         self.assertEqual(provider.model_name, "qwen3-embedding:0.6b")
@@ -254,9 +112,8 @@ class TestOllamaEmbeddingProvider(TestCase):
 
     @patch("requests.Session.post")
     def test_embed_returns_normalized_vectors(self, mock_post):
-        from providers.embeddings.ollama import OllamaEmbeddingProvider
-
         mock_resp = MagicMock()
+        mock_resp.status_code = 200
         mock_resp.json.return_value = {
             "embeddings": [
                 [3.0, 4.0] + [0.0] * 1022,
@@ -281,14 +138,63 @@ class TestOllamaEmbeddingProvider(TestCase):
         self.assertAlmostEqual(vectors[0][1], 0.8, places=5)
 
     def test_embed_empty_list(self):
-        from providers.embeddings.ollama import OllamaEmbeddingProvider
-
         provider = OllamaEmbeddingProvider()
         self.assertEqual(provider.embed([]), [])
 
     def test_version_mismatch_raises_error(self):
-        from providers.embeddings.ollama import OllamaEmbeddingProvider
-
         provider = OllamaEmbeddingProvider()
         with self.assertRaises(ProviderError):
             provider.embed(["test"], model_version="mismatched-version")
+
+    @patch("requests.Session.post")
+    def test_dimension_mismatch_raises_error(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "embeddings": [[1.0] * 512]  # wrong dimension: 512 instead of 1024
+        }
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        provider = OllamaEmbeddingProvider()
+        with self.assertRaises(ProviderError) as cm:
+            provider.embed(["test"])
+        self.assertIn("Embedding dimension mismatch", str(cm.exception))
+
+    @patch("requests.Session.post")
+    def test_model_not_found_raises_error(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_post.return_value = mock_resp
+
+        provider = OllamaEmbeddingProvider()
+        with self.assertRaises(ProviderError) as cm:
+            provider.embed(["test"])
+        self.assertIn("not found in Ollama", str(cm.exception))
+
+    @patch("requests.Session.post")
+    def test_connection_error_raises_error(self, mock_post):
+        mock_post.side_effect = requests.ConnectionError("Connection refused")
+
+        provider = OllamaEmbeddingProvider()
+        with self.assertRaises(ProviderError) as cm:
+            provider.embed(["test"])
+        self.assertIn("Cannot connect to Ollama", str(cm.exception))
+
+    @patch("requests.Session.post")
+    def test_embed_documents_and_query_convenience_methods(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "embeddings": [[1.0] + [0.0] * 1023]
+        }
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        provider = OllamaEmbeddingProvider()
+        doc_embs = provider.embed_documents(["doc1"])
+        query_emb = provider.embed_query("query1")
+
+        self.assertEqual(len(doc_embs), 1)
+        self.assertEqual(len(doc_embs[0]), 1024)
+        self.assertEqual(len(query_emb), 1024)

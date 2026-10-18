@@ -241,5 +241,5 @@ Each `stitched_block`:
 | `ENRICHMENT_MODEL` | "mock-gpt" | Default model name (overridden by provider) |
 | `LLM_PROVIDER_CHAIN` | "mock,mock" | Provider chain (e.g., "ollama" for real) |
 | `LLM_DISABLE_FALLBACK` | "0" | If "1", prevents mock fallback in real runs |
-| `EMBEDDING_PROVIDER` | "sentence_transformers" | Embedding model for retrieval |
-| `EMBEDDING_DIMENSIONS` | 384 | Vector dimension |
+| `EMBEDDING_PROVIDER` | "ollama" | Canonical embedding provider for retrieval |
+| `EMBEDDING_DIMENSIONS` | 1024 | Vector dimension (qwen3-embedding:0.6b) |
