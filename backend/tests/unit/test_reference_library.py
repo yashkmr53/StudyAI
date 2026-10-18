@@ -213,7 +213,7 @@ class TestIngestionWorkflow(TestCase):
         mock_get_storage.return_value = mock_storage
 
         mock_embedder = MagicMock()
-        mock_embedder.name = "sentence_transformers"
+        mock_embedder.name = "ollama"
         mock_embedder.embed.side_effect = lambda texts, **kw: [[0.1] * 1024 for _ in texts]
         mock_get_embedder.return_value = mock_embedder
 

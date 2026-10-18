@@ -4,7 +4,7 @@ Provider selection is driven by environment variables:
 - OCR_PROVIDER: "mock", "tesseract", "paddleocr" (default: "mock")
 - LLM_PROVIDER: "mock", "ollama", "ollama-chat" (default: "mock")
 - WEB_SEARCH_PROVIDER: "duckduckgo", "mock" (default: "duckduckgo")
-- EMBEDDING_PROVIDER: "hashing", "sentence_transformers" (default: "hashing")
+- EMBEDDING_PROVIDER: "ollama", "hashing" (default: "ollama")
 - STORAGE_BACKEND: "local", "minio", "s3" (default: "local")
 - EMAIL_BACKEND: "mailpit", "smtp", "console" (default: "mailpit" for dev, "console" for tests)
 
@@ -237,9 +237,17 @@ def get_embedding_provider() -> EmbeddingProvider:
         from providers.embeddings.ollama import OllamaEmbeddingProvider
         return OllamaEmbeddingProvider()
 
-    if name in ("sentence_transformers", "Qwen/Qwen3-Embedding-0.6B"):
-        from providers.embeddings.qwen3 import Qwen3EmbeddingProvider
-        return Qwen3EmbeddingProvider()
+    if name in (
+        "sentence_transformers",
+        "SentenceTransformer",
+        "Qwen/Qwen3-Embedding-0.6B",
+        "all-MiniLM-L6-v2",
+        "bge-m3",
+    ):
+        raise ValueError(
+            f"Legacy embedding provider '{name}' was removed in Phase 14 in favor of host GPU-accelerated Ollama. "
+            "Configure EMBEDDING_PROVIDER='ollama' and EMBEDDING_MODEL_NAME='qwen3-embedding:0.6b'."
+        )
     
     if name == "openai":
         raise ValueError("OpenAI embeddings provider not available (legacy hosted provider removed in favor of local Ollama GPU embeddings)")
@@ -258,12 +266,17 @@ def embedding_model_version() -> str:
             return version
         model_name = _get_env("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
         return f"{model_name.replace('/', '-').replace(':', '-')}-v1"
-    if provider in ("sentence_transformers", "Qwen/Qwen3-Embedding-0.6B"):
-        version = _get_env("EMBEDDING_MODEL_VERSION")
-        if version and not version.startswith("hashing"):
-            return version
-        model_name = _get_env("EMBEDDING_MODEL_NAME", "Qwen/Qwen3-Embedding-0.6B")
-        return f"{model_name.replace('/', '-')}-v1"
+    if provider in (
+        "sentence_transformers",
+        "SentenceTransformer",
+        "Qwen/Qwen3-Embedding-0.6B",
+        "all-MiniLM-L6-v2",
+        "bge-m3",
+    ):
+        raise ValueError(
+            f"Legacy embedding provider '{provider}' was removed in Phase 14 in favor of host GPU-accelerated Ollama. "
+            "Configure EMBEDDING_PROVIDER='ollama' and EMBEDDING_MODEL_NAME='qwen3-embedding:0.6b'."
+        )
     return _get_env("EMBEDDING_MODEL_VERSION", "hashing-1024-v1")
 
 

@@ -2,7 +2,7 @@
 
 StudyAI Phased AI Stack Migration (Phase 3):
 Embeds any chunks with NULL embeddings or outdated embedding versions.
-Runs natively using the canonical Qwen3EmbeddingProvider with GPU/MPS acceleration.
+Runs natively using the canonical OllamaEmbeddingProvider with GPU/MPS acceleration.
 """
 import logging
 import time
