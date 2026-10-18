@@ -14,7 +14,7 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
         model = EnrichedNote
         fields = (
             "id", "document", "revision_ids", "provider", "model",
-            "prompt_version", "schema_version", "ai_stale", "blocks",
+            "prompt_version", "schema_version", "ai_stale", "empty_reason", "blocks",
             "job_status", "created_at",
         )
 

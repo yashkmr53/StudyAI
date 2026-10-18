@@ -75,7 +75,8 @@ export type EnrichmentState =
   | "enriching"
   | "enriched"
   | "out_of_date"
-  | "failed";
+  | "failed"
+  | "insufficient_content";
 
 /** Status chip model per active module (§14). */
 export type NoteStatusChip =
@@ -138,6 +139,7 @@ export interface EnrichmentSnapshot {
   state: EnrichmentState;
   blocks: EnrichedBlock[];
   generatedAt: string | null;
+  emptyReason?: string | null;
 }
 
 /* ---- Practice QA / Tests / Chat DTOs used by UI ---- */

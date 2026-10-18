@@ -212,7 +212,7 @@ class EnrichmentService:
                 if not force_refresh
                 else None
             )
-            if existing and existing.blocks.exists():
+            if existing and (existing.blocks.exists() or existing.empty_reason):
                 return {"note": existing, "job": None, "created": False}
 
             # B7: Enrichment coalescing window + change-magnitude threshold
@@ -275,6 +275,35 @@ def run_enrichment_job(job: Job) -> None:
         logger.info("Enrichment job %s document %s no longer exists (deleted); skipping.", job.pk, job.resource_id)
         job.status = Job.Status.CANCELLED
         job.save(update_fields=("status",))
+        return
+
+    # Early Content Gate (§3): Check academic sufficiency before expensive retrieval and LLM calls
+    from apps.ai_classroom.content_gate import validate_note_academic_content
+
+    gate_valid, gate_reason, gate_details = validate_note_academic_content(document)
+    if not gate_valid:
+        logger.info(
+            "Enrichment job %s document %s skipped due to insufficient content (%s): %s",
+            job.pk, document.pk, gate_reason, gate_details,
+        )
+        with transaction.atomic():
+            EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
+            EnrichedNote.objects.create(
+                document=document,
+                content_hash=_descriptor(document),
+                revision_ids=[
+                    str(pk)
+                    for pk in document.pages.exclude(current_revision_id=None).values_list(
+                        "current_revision_id", flat=True
+                    )
+                ],
+                generation_job=job,
+                provider="content_gate",
+                model=getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b"),
+                prompt_version="content_gate:v1",
+                schema_version="v1",
+                empty_reason=gate_reason,
+            )
         return
 
     # --- Checkpoint recovery (§28/§52): resume from last completed node --

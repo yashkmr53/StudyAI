@@ -29,6 +29,7 @@ class EnrichedNote(models.Model):
     schema_version = models.CharField(max_length=32, default="v1")
     ai_stale = models.BooleanField(default=False)  # set when source revisions change (§27/§21)
     superseded = models.BooleanField(default=False)  # older generations retained, not active
+    empty_reason = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

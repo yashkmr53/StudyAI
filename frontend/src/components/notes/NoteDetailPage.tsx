@@ -247,7 +247,11 @@ export function NoteDetailPage() {
               highlightToken={highlightToken}
             />
           ) : (
-            <EnrichedView note={note} onCitation={onCitation} />
+            <EnrichedView
+              note={note}
+              onCitation={onCitation}
+              onEditHandwritten={() => setTab("handwritten")}
+            />
           )}
         </div>
       </div>

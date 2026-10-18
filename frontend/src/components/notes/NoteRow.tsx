@@ -215,20 +215,18 @@ function EnrichmentStateChip({ noteId }: { noteId: string }) {
         const snap = await enrichmentApi.get(noteId);
         if (cancelled) return;
         setState(snap.state);
-        if (snap.state === "enriched" || snap.state === "out_of_date" || snap.state === "failed") {
+        // Only keep polling if the document is actively generating enrichment
+        if (snap.state !== "enriching") {
           if (timer) {
             window.clearInterval(timer);
             timer = null;
           }
         }
       } catch (err: unknown) {
-        const status = (err as { status?: number })?.status;
-        const code = (err as { code?: string })?.code;
-        if (status === 404 || status === 403 || code === "RESOURCE_NOT_FOUND") {
-          if (timer) {
-            window.clearInterval(timer);
-            timer = null;
-          }
+        // Any error is terminal for this chip to prevent runaway polling
+        if (timer) {
+          window.clearInterval(timer);
+          timer = null;
         }
       }
     }
@@ -244,6 +242,6 @@ function EnrichmentStateChip({ noteId }: { noteId: string }) {
       }
     };
   }, [noteId]);
-  if (state === "not_enriched") return null;
+  if (state === "not_enriched" || state === "insufficient_content") return null;
   return <EnrichmentChip state={state} />;
 }

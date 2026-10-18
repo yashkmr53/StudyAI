@@ -45,6 +45,7 @@ interface WireEnrichment {
   ai_stale?: boolean;
   superseded?: boolean;
   created_at?: string;
+  empty_reason?: string;
   blocks?: WireBlock[];
   job_status?: string;
 }
@@ -81,6 +82,19 @@ function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
     state = "out_of_date";
   } else if (Array.isArray(wire.blocks) && wire.blocks.length > 0) {
     state = "enriched";
+  } else if (
+    wire.empty_reason === "insufficient_content" ||
+    wire.empty_reason === "blank_content" ||
+    wire.empty_reason === "unreadable_content" ||
+    (wire.job_status === "succeeded" && (!wire.blocks || wire.blocks.length === 0))
+  ) {
+    state = "insufficient_content";
+  } else if (
+    wire.job_status === "failed_retryable" ||
+    wire.job_status === "failed_dead_letter" ||
+    wire.job_status === "cancelled"
+  ) {
+    state = "failed";
   }
 
   const blocks: EnrichedBlock[] = (wire.blocks ?? [])
@@ -96,6 +110,7 @@ function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
     state,
     blocks,
     generatedAt: wire.created_at ?? null,
+    emptyReason: wire.empty_reason ?? null,
   };
 }
 

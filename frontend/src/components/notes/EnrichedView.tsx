@@ -4,13 +4,13 @@ import { enrichmentApi, parseEnrichment } from "../../services/api/enrichment";
 import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
-import { AlertIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
+import { AlertIcon, EditIcon, NoteIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
 
 /**
  * Enriched tab (§17). Rendered only when EnrichmentService is enabled —
  * NoteSpace never mounts this component (Rule 5).
  *
- * Explicit states per §19: generating, ready, out-of-date, failure.
+ * Explicit states per §19: generating, ready, out-of-date, failure, insufficient_content.
  * Never a blank page while generation runs.
  */
 
@@ -21,9 +21,11 @@ interface Props {
   note: NoteMeta;
   /** Called when a citation chip is clicked (§18). */
   onCitation: (page: number) => void;
+  /** Called to return to editing the handwritten note. */
+  onEditHandwritten?: () => void;
 }
 
-export function EnrichedView({ note, onCitation }: Props) {
+export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
   const { t } = useTranslation();
   const docId = note.documentId || note.refId || note.id;
   const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(null);
@@ -60,6 +62,7 @@ export function EnrichedView({ note, onCitation }: Props) {
   const refresh = useCallback(async () => {
     try {
       const activeJobId = jobIdRef.current;
+      let jobSucceeded = false;
       if (activeJobId) {
         const jobInfo = await enrichmentApi.getJob(activeJobId);
         if (jobInfo) {
@@ -79,25 +82,51 @@ export function EnrichedView({ note, onCitation }: Props) {
             setLoadError(false);
             return failSnap;
           }
+          if (jobInfo.status === "succeeded") {
+            jobSucceeded = true;
+          }
         }
       }
 
       const snap = await enrichmentApi.get(docId);
-      if ((isGenerating || jobIdRef.current) && snap.state === "not_enriched") {
-        setSnapshot((prev) =>
-          prev ? { ...prev, state: "enriching" } : { state: "enriching", blocks: [], generatedAt: null },
-        );
-        setLoadError(false);
-        return { state: "enriching" as const, blocks: [], generatedAt: null };
-      }
-
-      if (snap.state === "enriched" || snap.state === "out_of_date" || snap.state === "failed") {
+      if (
+        snap.state === "enriched" ||
+        snap.state === "insufficient_content" ||
+        snap.state === "out_of_date" ||
+        snap.state === "failed"
+      ) {
         stopPolling();
         setIsGenerating(false);
         setJobId(null);
         try {
           sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
         } catch {}
+        setSnapshot(snap);
+        setLoadError(false);
+        return snap;
+      }
+
+      if (jobSucceeded) {
+        stopPolling();
+        setIsGenerating(false);
+        setJobId(null);
+        try {
+          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
+        } catch {}
+        const finalSnap: EnrichmentSnapshot = snap.state === "not_enriched"
+          ? { ...snap, state: "insufficient_content" as const }
+          : snap;
+        setSnapshot(finalSnap);
+        setLoadError(false);
+        return finalSnap;
+      }
+
+      if ((isGenerating || jobIdRef.current) && snap.state === "not_enriched") {
+        setSnapshot((prev) =>
+          prev ? { ...prev, state: "enriching" } : { state: "enriching", blocks: [], generatedAt: null },
+        );
+        setLoadError(false);
+        return { state: "enriching" as const, blocks: [], generatedAt: null };
       }
 
       setSnapshot(snap);
@@ -180,7 +209,10 @@ export function EnrichedView({ note, onCitation }: Props) {
       const snap = await refresh();
       if (
         snap &&
-        (snap.state === "enriched" || snap.state === "failed" || snap.state === "out_of_date")
+        (snap.state === "enriched" ||
+         snap.state === "insufficient_content" ||
+         snap.state === "failed" ||
+         snap.state === "out_of_date")
       ) {
         stopPolling();
         setIsGenerating(false);
@@ -212,12 +244,19 @@ export function EnrichedView({ note, onCitation }: Props) {
       if (res.enrichedNote) {
         const snap = await parseEnrichment({ enriched_note: res.enrichedNote });
         setSnapshot(snap);
-        stopPolling();
-        setIsGenerating(false);
-        setJobId(null);
-        try {
-          sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
-        } catch {}
+        if (
+          snap.state === "enriched" ||
+          snap.state === "insufficient_content" ||
+          snap.state === "failed" ||
+          snap.state === "out_of_date"
+        ) {
+          stopPolling();
+          setIsGenerating(false);
+          setJobId(null);
+          try {
+            sessionStorage.removeItem(`studyai.enrichment.job.${docId}`);
+          } catch {}
+        }
       }
     } catch (err: any) {
       stopPolling();
@@ -271,6 +310,31 @@ export function EnrichedView({ note, onCitation }: Props) {
             <SparkleIcon size={14} />
             {t("notes.enriched.generate")}
           </button>
+        }
+      />
+    );
+  }
+
+  if (snapshot.state === "insufficient_content") {
+    return (
+      <EmptyState
+        icon={<NoteIcon size={24} />}
+        title={t("notes.enriched.insufficientTitle", "Not enough academic content yet")}
+        description={t(
+          "notes.enriched.insufficientDescription",
+          "There's not enough academic content to enrich this note yet. Add a concept, question, or explanation to your handwritten notes, save it, and try again."
+        )}
+        action={
+          onEditHandwritten ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={onEditHandwritten}
+            >
+              <EditIcon size={14} />
+              {t("notes.enriched.editHandwritten", "Edit Handwritten Note")}
+            </button>
+          ) : undefined
         }
       />
     );
