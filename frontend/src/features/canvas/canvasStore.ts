@@ -15,14 +15,14 @@ interface CanvasState {
   lastFinalizedRevisionId: string | null;
 
   ensureDevice: () => string;
-  newSession: (profileId: string) => Promise<void>;
+  newSession: (profileId: string, subjectId?: string | null) => Promise<void>;
   openSession: (sessionId: string) => Promise<void>;
   addPage: () => Promise<void>;
   setActivePage: (pageId: string) => void;
   applySession: (session: CanvasSessionInfo) => void;
   markLockLost: () => void;
   recoverLock: () => Promise<void>;
-  finalizeActive: () => Promise<void>;
+  finalizeActive: (title?: string) => Promise<{ page_id: string; is_finalized: boolean; already_finalized: boolean; document_id?: string | null; revision_id?: string | null; job_id?: string | null } | null>;
   reset: () => void;
 }
 
@@ -44,9 +44,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return id;
   },
 
-  async newSession(profileId) {
+  async newSession(profileId, subjectId) {
     const device = get().ensureDevice();
-    const session = await canvasApi.createSession(profileId, device);
+    const session = await canvasApi.createSession(profileId, device, subjectId);
     get().applySession(session);
     await get().addPage();
   },
@@ -97,12 +97,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().applySession(session);
   },
 
-  async finalizeActive() {
+  async finalizeActive(title?: string) {
     const { activePageId, deviceId, generation, pages } = get();
-    if (!activePageId) return;
+    if (!activePageId) return null;
     const result = await canvasApi.finalizePage(activePageId, {
       device_id: deviceId,
       lock_generation: generation,
+      ...(title ? { title } : {}),
     });
     if (result.is_finalized) {
       set({
@@ -111,6 +112,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         lastFinalizedRevisionId: result.revision_id ?? null,
       });
     }
+    return result;
   },
 
   reset() {

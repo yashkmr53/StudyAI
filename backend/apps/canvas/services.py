@@ -43,10 +43,15 @@ class CanvasSessionService:
 
     @staticmethod
     def get_owned_session(user, session_id, *, for_update: bool = False) -> CanvasSession:
+        from django.db.models import Q
+
         qs = CanvasSession.objects.filter(profile__user=user)
         if for_update:
             qs = qs.select_for_update()
         try:
+            session = qs.filter(Q(pk=session_id) | Q(document_id=session_id)).first()
+            if session:
+                return session
             return qs.get(pk=session_id)
         except (CanvasSession.DoesNotExist, ValueError, TypeError):
             raise ResourceNotFound("Canvas session not found.")
@@ -156,7 +161,7 @@ class CanvasSyncService:
             }
 
     @classmethod
-    def finalize_page(cls, user, page_id, device_id: str, lock_generation) -> dict:
+    def finalize_page(cls, user, page_id, device_id: str, lock_generation, title: str = "") -> dict:
         """One transaction: lock validation + finalization + ingestion (§67).
 
         Creates (once per session) the canonical Document, a DocumentPage
@@ -169,7 +174,7 @@ class CanvasSyncService:
             page, session = cls._locked_page_for_user(user, page_id)
             CanvasSessionService.ensure_lock(session, device_id, lock_generation)
             already = page.is_finalized
-            document = None
+            document = session.document
             revision = None
             job = None
             if not already:
@@ -183,11 +188,6 @@ class CanvasSyncService:
                 strokes = list(page.strokes.order_by("sequence_order").values_list("points", flat=True))
                 png = render_strokes_png(strokes)
 
-                document = (
-                    Document.objects.filter(source="canvas", source_type="canvas_page", profile=session.profile)
-                    .order_by("created_at")
-                    .first()
-                )
                 if document is None:
                     document, doc_page = IngestionService.create_document(
                         user,
@@ -195,9 +195,14 @@ class CanvasSyncService:
                         source=Document.Source.CANVAS,
                         source_type=Document.SourceType.CANVAS_PAGE,
                         subject=session.subject,
+                        title=title.strip() if title else "",
                     )
                     CanvasSession.objects.filter(pk=session.pk).update(document=document)
+                    session.document = document
                 else:
+                    if title and title.strip() and document.title == "Untitled Note":
+                        document.title = title.strip()
+                        document.save(update_fields=("title",))
                     doc_page_number = (
                         DocumentPage.objects.filter(document=document).count() + 1
                     )
@@ -222,7 +227,7 @@ class CanvasSyncService:
                 "page_id": str(page.pk),
                 "is_finalized": True,
                 "already_finalized": already,
-                "document_id": str(document.pk) if document else None,
+                "document_id": str(document.pk) if (document and not already) else None,
                 "revision_id": str(revision.pk) if revision else None,
                 "job_id": str(job.pk) if job else None,
             }

@@ -46,7 +46,9 @@ export function NoteDetailPage() {
 
   const { moduleId, services } = useSubjectModule(subjectId);
 
-  const storeNote = notes.find((n) => n.id === noteId || n.refId === noteId);
+  const storeNote = notes.find(
+    (n) => n.id === noteId || n.refId === noteId || n.sessionId === noteId || n.documentId === noteId
+  );
   const [remoteNote, setRemoteNote] = useState<NoteMeta | null>(null);
   const [fetchingRemote, setFetchingRemote] = useState<boolean>(!storeNote && !!noteId);
   const [fetchFailed, setFetchFailed] = useState<boolean>(false);
@@ -55,7 +57,9 @@ export function NoteDetailPage() {
 
   useEffect(() => {
     if (!noteId) return;
-    const existing = notes.find((n) => n.id === noteId || n.refId === noteId);
+    const existing = notes.find(
+      (n) => n.id === noteId || n.refId === noteId || n.sessionId === noteId || n.documentId === noteId
+    );
     if (existing) {
       setRemoteNote(null);
       setFetchingRemote(false);
@@ -72,6 +76,7 @@ export function NoteDetailPage() {
         const meta: NoteMeta = {
           id: doc.id,
           refId: doc.id,
+          documentId: doc.id,
           profileId: doc.profile,
           subjectId: doc.subject || subjectId || "",
           folderId: UNFILED_FOLDER_ID,

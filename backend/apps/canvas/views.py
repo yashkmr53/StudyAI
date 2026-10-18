@@ -40,6 +40,11 @@ class CanvasSessionViewSet(
     def get_queryset(self):
         return CanvasSession.objects.filter(profile__user=self.request.user)
 
+    def get_object(self):
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup_value = self.kwargs[lookup_url_kwarg]
+        return CanvasSessionService.get_owned_session(self.request.user, lookup_value)
+
     def get_serializer_class(self):
         if self.action == "create":
             return CanvasSessionCreateSerializer
@@ -50,6 +55,8 @@ class CanvasSessionViewSet(
         serializer.is_valid(raise_exception=True)
         profile = serializer.validated_data["profile"]
         ProfileAuthorizationService.ensure_profile_access(request.user, profile)
+        if serializer.validated_data.get("subject"):
+            ProfileAuthorizationService.ensure_subject_access(request.user, serializer.validated_data["subject"])
         session = CanvasSessionService.create_session(
             request.user,
             profile,
@@ -133,5 +140,6 @@ class CanvasPageViewSet(
             request.user, pk,
             device_id=serializer.validated_data["device_id"],
             lock_generation=serializer.validated_data["lock_generation"],
+            title=serializer.validated_data.get("title", ""),
         )
         return Response(result)

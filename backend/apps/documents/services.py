@@ -46,6 +46,31 @@ class IngestionService:
         try:
             return Document.objects.get(pk=document_id, profile__user=user)
         except (Document.DoesNotExist, ValueError, TypeError):
+            from apps.canvas.models import CanvasSession
+
+            try:
+                session = (
+                    CanvasSession.objects.filter(pk=document_id, profile__user=user)
+                    .select_related("document")
+                    .first()
+                )
+                if session:
+                    if session.document:
+                        return session.document
+                    title = f"Canvas Note {session.created_at.strftime('%Y-%m-%d %H:%M')}"
+                    document, _ = IngestionService.create_document(
+                        user,
+                        profile=session.profile,
+                        source=Document.Source.CANVAS,
+                        source_type=Document.SourceType.CANVAS_PAGE,
+                        subject=session.subject,
+                        title=title,
+                    )
+                    CanvasSession.objects.filter(pk=session.pk).update(document=document)
+                    session.document = document
+                    return document
+            except Exception:
+                pass
             raise ResourceNotFound("Document not found.")
 
     @staticmethod

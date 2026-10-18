@@ -58,6 +58,7 @@ class StrokeBatchSerializer(serializers.Serializer):
 class FinalizeSerializer(serializers.Serializer):
     device_id = serializers.CharField(max_length=64)
     lock_generation = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
 
 class HeartbeatSerializer(serializers.Serializer):

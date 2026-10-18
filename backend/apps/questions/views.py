@@ -22,17 +22,22 @@ class DocumentQuestionsViewSet(
     http_method_names = ["get", "head", "options"]
 
     def get_queryset(self):
+        from apps.documents.services import IngestionService
+
         document_id = self.kwargs.get("document_id")
+        try:
+            doc = IngestionService.get_owned_document(self.request.user, document_id)
+            target_id = doc.pk
+        except Exception:
+            target_id = document_id
         return Question.objects.filter(
-            document_id=document_id,
+            document_id=target_id,
             document__profile__user=self.request.user,
         ).select_related("document")
 
     def list(self, request, *args, **kwargs):
-        document_id = self.kwargs.get("document_id")
-        try:
-            Document.objects.get(pk=document_id, profile__user=request.user)
-        except (Document.DoesNotExist, ValueError, TypeError):
-            raise ResourceNotFound("Document not found.")
+        from apps.documents.services import IngestionService
 
+        document_id = self.kwargs.get("document_id")
+        IngestionService.get_owned_document(request.user, document_id)
         return super().list(request, *args, **kwargs)

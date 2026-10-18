@@ -113,3 +113,90 @@ class CanvasFinalizeIngestionTests(TestCase):
         self.assertTrue(response.json()["already_finalized"])
         self.assertIsNone(response.json()["document_id"])
         self.assertEqual(Document.objects.count(), documents_before)
+
+    def test_distinct_sessions_create_distinct_documents(self):
+        """Regression: each session must create its own distinct Document, not coalesce across profile."""
+        first = self.finalize()
+        doc1_id = first.json()["document_id"]
+
+        session2 = self.alice.post(
+            "/api/v1/canvas/sessions",
+            {"profile": str(self.profile.id), "device_id": "devA"},
+            content_type="application/json",
+        ).json()
+        page2 = self.alice.post(
+            "/api/v1/canvas/pages",
+            {
+                "session": session2["id"],
+                "page_number": 1,
+                "device_id": "devA",
+                "lock_generation": 1,
+            },
+            content_type="application/json",
+        ).json()
+        CanvasStroke.objects.create(
+            id="22222222-2222-2222-2222-222222222222",
+            page_id=page2["id"],
+            sequence_order=0,
+            points=[20.0, 20.0, 300.0, 250.0],
+            client_idempotency_key="stroke-2",
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            second = self.alice.post(
+                f"/api/v1/canvas/pages/{page2['id']}/finalize",
+                {"device_id": "devA", "lock_generation": 1, "title": "Calculus Notes"},
+                content_type="application/json",
+            )
+        self.assertEqual(second.status_code, 200)
+        doc2_id = second.json()["document_id"]
+        self.assertNotEqual(doc1_id, doc2_id)
+        doc2 = Document.objects.get(pk=doc2_id)
+        self.assertEqual(doc2.title, "Calculus Notes")
+
+    def test_enrichment_and_tags_lookup_by_canvas_session_id(self):
+        """Regression: accessing enrichment, enrich, and tags endpoints with canvas session_id resolves document."""
+        from apps.ai_classroom.models import EnrichedNote
+
+        first = self.finalize()
+        doc_id = first.json()["document_id"]
+        session_id = self.session["id"]
+
+        # Before enrichment exists: GET /enrichment finds the document and returns 404 with "No enrichment exists"
+        resp_before = self.alice.get(f"/api/v1/documents/{session_id}/enrichment")
+        self.assertEqual(resp_before.status_code, 404)
+        self.assertIn("No enrichment exists", resp_before.json().get("error", {}).get("message", ""))
+
+        # POST /api/v1/documents/{session_id}/enrich resolves document and enqueues enrichment (202)
+        resp_enrich = self.alice.post(f"/api/v1/documents/{session_id}/enrich")
+        self.assertEqual(resp_enrich.status_code, 202)
+        self.assertIsNotNone(resp_enrich.json().get("job"))
+
+        # GET /api/v1/documents/{session_id}/tags resolves without 404
+        resp_tags = self.alice.get(f"/api/v1/documents/{session_id}/tags")
+        self.assertEqual(resp_tags.status_code, 200)
+
+        # GET /api/v1/canvas/sessions/{doc_id} resolves session by document_id
+        resp_sess = self.alice.get(f"/api/v1/canvas/sessions/{doc_id}")
+        self.assertEqual(resp_sess.status_code, 200)
+        self.assertEqual(resp_sess.json()["id"], session_id)
+
+        # When an enriched note exists, GET /enrichment returns 200 with document data
+        EnrichedNote.objects.create(
+            document_id=doc_id,
+            content_hash="abc123hash",
+            provider="ollama",
+            model="qwen3.5:4b",
+            prompt_version="enrichment_draft:v1",
+        )
+        resp_after = self.alice.get(f"/api/v1/documents/{session_id}/enrichment")
+        self.assertEqual(resp_after.status_code, 200)
+        self.assertEqual(resp_after.json()["document"], doc_id)
+
+    def test_foreign_user_cannot_access_session_document(self):
+        """Cross-profile security check: foreign user cannot resolve document by session_id."""
+        self.finalize()
+        session_id = self.session["id"]
+
+        bob = authenticated_client("bob@example.com", "s3curePass!y")
+        resp = bob.get(f"/api/v1/documents/{session_id}/enrichment")
+        self.assertEqual(resp.status_code, 404)
