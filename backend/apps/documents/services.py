@@ -172,6 +172,10 @@ class IngestionService:
             page.ocr_status = ocr_status
             page.needs_review = ocr_status == DocumentPageRevision.OcrStatus.NEEDS_REVIEW
             page.save(update_fields=("current_revision_id", "ocr_status", "needs_review"))
+
+            # Invalidate active enrichments when note content revision changes
+            from apps.ai_classroom.models import EnrichedNote
+            EnrichedNote.objects.filter(document=page.document, superseded=False).update(ai_stale=True)
         return revision
 
     @classmethod
