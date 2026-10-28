@@ -20,6 +20,7 @@ import logging
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 
 from apps.ai_classroom.models import CitationBlock, EnrichedNote, EnrichedNoteBlock
 from apps.ai_classroom.prompts import QUALIFIED, active_prompt
@@ -203,9 +204,18 @@ class EnrichmentService:
             if not document.pages.exclude(current_revision_id=None).exists():
                 raise ValidationError("Document has no completed revisions to enrich.")
 
+            existing = (
+                EnrichedNote.objects.filter(document=document, superseded=False, ai_stale=False).first()
+                if not force_refresh
+                else None
+            )
+            if existing and (existing.blocks.exists() or existing.empty_reason):
+                return {"note": existing, "job": None, "created": False}
+
             # Check 1: In-flight OCR
             processing_pages = document.pages.filter(
-                review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING]
+                Q(review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING])
+                | Q(ocr_status__in=[DocumentPage.OcrStatus.PENDING, DocumentPage.OcrStatus.PROCESSING])
             )
             if processing_pages.exists():
                 raise ValidationError("Note transcription is still processing. Please wait for transcription to complete before enriching.")
@@ -218,14 +228,6 @@ class EnrichmentService:
             from apps.ai_classroom.budget import assert_within_budget
 
             assert_within_budget(document.profile_id)
-
-            existing = (
-                EnrichedNote.objects.filter(document=document, superseded=False, ai_stale=False).first()
-                if not force_refresh
-                else None
-            )
-            if existing and (existing.blocks.exists() or existing.empty_reason):
-                return {"note": existing, "job": None, "created": False}
 
             # B7: Enrichment coalescing window + change-magnitude threshold
             coalesce_window = getattr(settings, "ENRICHMENT_COALESCE_WINDOW_SECONDS", 300)
@@ -291,7 +293,8 @@ def run_enrichment_job(job: Job) -> None:
 
     # Guard: If OCR is still in-flight or pages are unapproved, abort without marking as blank/insufficient!
     processing_pages = document.pages.filter(
-        review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING]
+        Q(review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING])
+        | Q(ocr_status__in=[DocumentPage.OcrStatus.PENDING, DocumentPage.OcrStatus.PROCESSING])
     )
     if processing_pages.exists():
         logger.warning(
