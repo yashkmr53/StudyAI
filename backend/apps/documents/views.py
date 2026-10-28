@@ -228,7 +228,11 @@ class DocumentViewSet(
 
         if lines:
             revision = IngestionService.create_user_revision(request.user, str(document.pk), page_id, lines)
-            return Response({"revision": DocumentPageRevisionSerializer(revision).data, "job": None}, status=200)
+            return Response({
+                "revision": DocumentPageRevisionSerializer(revision).data,
+                "page": DocumentPageSerializer(revision.page).data,
+                "job": None,
+            }, status=200)
 
         result = IngestionService.finalize_upload(request.user, page_id)
         if str(result["revision"].page.document_id) != str(document.pk):
@@ -429,6 +433,40 @@ class FinalizeUploadView(APIView):
                 "revision": DocumentPageRevisionSerializer(result["revision"]).data,
                 "job": _job_payload(result["job"]),
                 "job_created": result["job_created"],
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class DocumentPageApproveView(APIView):
+    """POST /api/v1/documents/{document_id}/pages/{page_id}/approve."""
+    throttle_scope = "ai"
+
+    def post(self, request, document_id, page_id):
+        page, all_approved = IngestionService.approve_page(request.user, str(document_id), str(page_id))
+        return Response(
+            {
+                "page_id": str(page.pk),
+                "review_status": page.review_status,
+                "is_approved": page.is_approved,
+                "approved_at": page.approved_at,
+                "all_pages_approved": all_approved,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DocumentPageRetryOcrView(APIView):
+    """POST /api/v1/documents/{document_id}/pages/{page_id}/retry-ocr."""
+    throttle_scope = "ai"
+
+    def post(self, request, document_id, page_id):
+        page, job = IngestionService.retry_page_ocr(request.user, str(document_id), str(page_id))
+        return Response(
+            {
+                "page_id": str(page.pk),
+                "review_status": page.review_status,
+                "job": _job_payload(job),
             },
             status=status.HTTP_202_ACCEPTED,
         )
