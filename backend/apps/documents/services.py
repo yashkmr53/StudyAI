@@ -262,10 +262,34 @@ class IngestionService:
     @classmethod
     def retry_page_ocr(cls, user, document_id, page_id) -> tuple[DocumentPage, Job]:
         """Re-run OCR for a specific page."""
+        from providers.registry import get_object_storage
+
         with transaction.atomic():
             page = cls.get_owned_page(user, page_id)
             if str(page.document_id) != str(document_id):
                 raise ValidationError("Page does not belong to this document.")
+
+            storage = get_object_storage()
+
+            # If this is a canvas page and has not been rasterized yet or image_ref is missing
+            if page.document.source == Document.Source.CANVAS and (not page.image_ref or not storage.exists(page.image_ref)):
+                from apps.canvas.models import CanvasSession, CanvasPage
+                from apps.canvas.raster import render_strokes_png
+
+                session = CanvasSession.objects.filter(document_id=page.document_id).first()
+                if session:
+                    cpage = CanvasPage.objects.filter(session=session, page_number=page.page_number).first()
+                    if cpage:
+                        strokes = list(cpage.strokes.order_by("sequence_order").values_list("points", flat=True))
+                        png = render_strokes_png(strokes)
+                        key = f"{session.profile_id}/{page.id}.png"
+                        storage.store_bytes(key, png)
+                        page.image_ref = key
+                        page.save(update_fields=("image_ref",))
+                        if not cpage.is_finalized:
+                            cpage.is_finalized = True
+                            cpage.finalized_at = timezone.now()
+                            cpage.save(update_fields=("is_finalized", "finalized_at"))
 
             page.review_status = DocumentPage.ReviewStatus.OCR_PENDING
             page.ocr_status = DocumentPage.OcrStatus.PENDING
@@ -281,7 +305,19 @@ class IngestionService:
             if not revision:
                 revision = DocumentPageRevision.objects.filter(page=page).order_by("-revision_number").first()
 
-            if revision:
+            if not revision:
+                if not page.image_ref:
+                    raise ValidationError("Page has no image to transcribe.")
+                if not storage.exists(page.image_ref):
+                    raise ValidationError("Page image file does not exist in storage.")
+                content_bytes = storage.read_bytes(page.image_ref)
+                content_hash = compute_content_hash(content_bytes)
+                revision = cls._create_revision_locked(
+                    page,
+                    content_hash=content_hash,
+                    ocr_status=DocumentPageRevision.OcrStatus.PENDING,
+                )
+            else:
                 revision.ocr_status = DocumentPageRevision.OcrStatus.PENDING
                 revision.save(update_fields=("ocr_status",))
 
