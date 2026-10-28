@@ -114,4 +114,46 @@ describe("Enrichment parsing & insufficient content state", () => {
     const snapshot = await parseEnrichment(payload);
     expect(snapshot.state).toBe("failed");
   });
+
+  it("computes transcription in-flight and needs-approval status correctly", () => {
+    const pagesTranscribing = [
+      { id: "p1", document: "d1", page_number: 1, ocr_status: "pending", needs_review: false, review_status: "ocr_pending", current_revision_id: null },
+    ];
+    const isTranscribing = pagesTranscribing.some(
+      (p) =>
+        p.review_status === "ocr_pending" ||
+        p.review_status === "ocr_processing" ||
+        p.ocr_status === "pending" ||
+        p.ocr_status === "processing",
+    );
+    expect(isTranscribing).toBe(true);
+
+    const pagesNeedsReview = [
+      { id: "p1", document: "d1", page_number: 1, ocr_status: "completed", needs_review: true, review_status: "needs_review", is_approved: false, current_revision_id: "r1" },
+    ];
+    const needsApproval =
+      !pagesNeedsReview.some(
+        (p) =>
+          p.review_status === "ocr_pending" ||
+          p.review_status === "ocr_processing" ||
+          p.ocr_status === "pending" ||
+          p.ocr_status === "processing",
+      ) &&
+      pagesNeedsReview.some((p) => !p.is_approved && p.review_status !== "approved");
+    expect(needsApproval).toBe(true);
+
+    const pagesApproved = [
+      { id: "p1", document: "d1", page_number: 1, ocr_status: "completed", needs_review: false, review_status: "approved", is_approved: true, current_revision_id: "r1" },
+    ];
+    const isApprovedReady =
+      !pagesApproved.some(
+        (p) =>
+          p.review_status === "ocr_pending" ||
+          p.review_status === "ocr_processing" ||
+          p.ocr_status === "pending" ||
+          p.ocr_status === "processing",
+      ) &&
+      !pagesApproved.some((p) => !p.is_approved && p.review_status !== "approved");
+    expect(isApprovedReady).toBe(true);
+  });
 });

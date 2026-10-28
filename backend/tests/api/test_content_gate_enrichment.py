@@ -83,6 +83,8 @@ class EnrichmentInsufficientContentPipelineTests(TestCase):
             document=self.doc,
             page_number=1,
             ocr_status=DocumentPage.OcrStatus.COMPLETED,
+            review_status=DocumentPage.ReviewStatus.APPROVED,
+            is_approved=True,
         )
 
     def _create_revision_with_text(self, text: str):
@@ -99,7 +101,10 @@ class EnrichmentInsufficientContentPipelineTests(TestCase):
             text=text,
         )
         self.page.current_revision_id = rev.pk
-        self.page.save(update_fields=("current_revision_id",))
+        self.page.ocr_status = DocumentPage.OcrStatus.COMPLETED
+        self.page.review_status = DocumentPage.ReviewStatus.APPROVED
+        self.page.is_approved = True
+        self.page.save(update_fields=("current_revision_id", "ocr_status", "review_status", "is_approved"))
         return rev
 
     def test_yash_kumar_note_skips_llm_and_records_insufficient_content(self):
@@ -180,6 +185,13 @@ class EnrichmentInsufficientContentPipelineTests(TestCase):
 
         enriched.refresh_from_db()
         self.assertTrue(enriched.ai_stale)
+
+        # Once user completes transcription/approval for the updated note, enqueue_enrichment enqueues a fresh job
+        self.page.refresh_from_db()
+        self.page.ocr_status = DocumentPage.OcrStatus.COMPLETED
+        self.page.review_status = DocumentPage.ReviewStatus.APPROVED
+        self.page.is_approved = True
+        self.page.save(update_fields=("ocr_status", "review_status", "is_approved"))
 
         # After becoming stale, enqueue_enrichment enqueues a fresh job rather than returning the stale note
         result = EnrichmentService.enqueue_enrichment(self.profile.user, str(self.doc.pk))

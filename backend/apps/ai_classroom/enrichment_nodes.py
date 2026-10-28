@@ -152,13 +152,21 @@ def retrieve_chunks_node(state: EnrichmentState, config=None) -> dict:
         .order_by("chunk_index")[:8]
     )
     if not user_chunks and document.pages.exclude(current_revision_id=None).exists():
-        from apps.retrieval.services import index_document
-        index_document(document)
-        user_chunks = list(
-            NoteChunk.objects.filter(document=document, stale=False)
-            .select_related("reference_book")
-            .order_by("chunk_index")[:8]
-        )
+        # Only index if all pages of the document are approved
+        all_approved = not document.pages.filter(is_approved=False).exists()
+        if all_approved:
+            from apps.retrieval.services import index_document
+            index_document(document)
+            user_chunks = list(
+                NoteChunk.objects.filter(document=document, stale=False)
+                .select_related("reference_book")
+                .order_by("chunk_index")[:8]
+            )
+        else:
+            logger.warning(
+                "retrieve_chunks_node called for document %s with unapproved pages; skipping index.",
+                document.pk,
+            )
 
     # Use shared Reference Retrieval Service (Phase 11 §7, §9) to fetch relevant textbook/reference chunks
     from apps.references.services import retrieve_reference_context

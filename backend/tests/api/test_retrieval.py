@@ -50,7 +50,9 @@ def _make_ocr_document(client, profile, page_texts: list[list[str]]) -> str:
             )
         page.current_revision_id = revision.pk
         page.ocr_status = "completed"
-        page.save(update_fields=("current_revision_id", "ocr_status"))
+        page.review_status = "approved"
+        page.is_approved = True
+        page.save(update_fields=("current_revision_id", "ocr_status", "review_status", "is_approved"))
     return doc_id
 
 

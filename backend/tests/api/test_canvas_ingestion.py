@@ -166,6 +166,12 @@ class CanvasFinalizeIngestionTests(TestCase):
         self.assertEqual(resp_before.status_code, 404)
         self.assertIn("No enrichment exists", resp_before.json().get("error", {}).get("message", ""))
 
+        # Approve page before enriching per Phase 2 approval gating
+        from apps.documents.models import DocumentPage
+        DocumentPage.objects.filter(document_id=doc_id).update(
+            is_approved=True, review_status=DocumentPage.ReviewStatus.APPROVED
+        )
+
         # POST /api/v1/documents/{session_id}/enrich resolves document and enqueues enrichment (202)
         resp_enrich = self.alice.post(f"/api/v1/documents/{session_id}/enrich")
         self.assertEqual(resp_enrich.status_code, 202)
