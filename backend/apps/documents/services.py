@@ -261,8 +261,9 @@ class IngestionService:
 
     @classmethod
     def retry_page_ocr(cls, user, document_id, page_id) -> tuple[DocumentPage, Job]:
-        """Re-run OCR for a specific page."""
+        """Re-run OCR for a specific page, creating a new OCR revision and re-dispatching."""
         from providers.registry import get_object_storage
+        from apps.jobs.services import dispatch_job, get_or_create_job
 
         with transaction.atomic():
             page = cls.get_owned_page(user, page_id)
@@ -271,8 +272,8 @@ class IngestionService:
 
             storage = get_object_storage()
 
-            # If this is a canvas page and has not been rasterized yet or image_ref is missing
-            if page.document.source == Document.Source.CANVAS and (not page.image_ref or not storage.exists(page.image_ref)):
+            # If this is a canvas page, always re-render strokes to capture any updated drawing
+            if page.document.source == Document.Source.CANVAS:
                 from apps.canvas.models import CanvasSession, CanvasPage
                 from apps.canvas.raster import render_strokes_png
 
@@ -285,11 +286,25 @@ class IngestionService:
                         key = f"{session.profile_id}/{page.id}.png"
                         storage.store_bytes(key, png)
                         page.image_ref = key
-                        page.save(update_fields=("image_ref",))
                         if not cpage.is_finalized:
                             cpage.is_finalized = True
                             cpage.finalized_at = timezone.now()
                             cpage.save(update_fields=("is_finalized", "finalized_at"))
+
+            if not page.image_ref:
+                raise ValidationError("Page has no image to transcribe.")
+            if not storage.exists(page.image_ref):
+                raise ValidationError("Page image file does not exist in storage.")
+
+            content_bytes = storage.read_bytes(page.image_ref)
+            content_hash = compute_content_hash(content_bytes)
+
+            # Create a new revision so this OCR re-run is fresh, cleanly tracked, and never blocked by old completed revisions
+            revision = cls._create_revision_locked(
+                page,
+                content_hash=content_hash,
+                ocr_status=DocumentPageRevision.OcrStatus.PENDING,
+            )
 
             page.review_status = DocumentPage.ReviewStatus.OCR_PENDING
             page.ocr_status = DocumentPage.OcrStatus.PENDING
@@ -297,31 +312,28 @@ class IngestionService:
             page.approved_at = None
             page.approved_by = None
             page.needs_review = False
-            page.save(update_fields=("review_status", "ocr_status", "is_approved", "approved_at", "approved_by", "needs_review"))
+            page.current_revision_id = revision.pk
+            page.save(update_fields=(
+                "review_status", "ocr_status", "is_approved", "approved_at",
+                "approved_by", "needs_review", "current_revision_id", "image_ref"
+            ))
 
-            revision = None
-            if page.current_revision_id:
-                revision = DocumentPageRevision.objects.filter(pk=page.current_revision_id).first()
-            if not revision:
-                revision = DocumentPageRevision.objects.filter(page=page).order_by("-revision_number").first()
-
-            if not revision:
-                if not page.image_ref:
-                    raise ValidationError("Page has no image to transcribe.")
-                if not storage.exists(page.image_ref):
-                    raise ValidationError("Page image file does not exist in storage.")
-                content_bytes = storage.read_bytes(page.image_ref)
-                content_hash = compute_content_hash(content_bytes)
-                revision = cls._create_revision_locked(
-                    page,
-                    content_hash=content_hash,
-                    ocr_status=DocumentPageRevision.OcrStatus.PENDING,
+            idempotency_key = f"ocr:{page.pk}:rev_{revision.revision_number}:{revision.content_hash}:{_pipeline_version()}"
+            job, created = get_or_create_job(
+                job_type="ocr",
+                resource_type="document_page_revision",
+                resource_id=str(revision.pk),
+                profile_id=page.document.profile_id,
+                revision_id=revision.pk,
+                idempotency_key=idempotency_key,
+            )
+            if not created and job.status != Job.Status.QUEUED:
+                Job.objects.filter(pk=job.pk).update(
+                    status=Job.Status.QUEUED, next_retry_at=None, last_error=""
                 )
-            else:
-                revision.ocr_status = DocumentPageRevision.OcrStatus.PENDING
-                revision.save(update_fields=("ocr_status",))
+                job.refresh_from_db()
+            dispatch_job(job)
 
-            job, _ = cls.enqueue_ocr_job(page, revision)
             return page, job
 
 

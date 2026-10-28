@@ -161,8 +161,38 @@ class FinalizeAndOcrTests(TestCase):
         self.assertEqual(body["review_status"], "ocr_pending")
 
         page = DocumentPage.objects.get(pk=self.page_id)
-        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.OCR_PENDING)
+        self.assertIn(page.review_status, (DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.PENDING_REVIEW))
         self.assertFalse(page.is_approved)
+
+    def test_retry_ocr_after_approved_resets_and_can_be_approved_again(self):
+        from apps.retrieval.models import NoteChunk
+        self.finalize()
+
+        # 1. First approval
+        with self.captureOnCommitCallbacks(execute=True):
+            res1 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/approve")
+        self.assertEqual(res1.status_code, 200)
+        page = DocumentPage.objects.get(pk=self.page_id)
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
+        self.assertGreater(NoteChunk.objects.filter(document_id=self.doc_id).count(), 0)
+
+        # 2. Re-run OCR after approval
+        with self.captureOnCommitCallbacks(execute=True):
+            res2 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/retry-ocr")
+        self.assertEqual(res2.status_code, 202)
+        page.refresh_from_db()
+        # In eager mode, OCR task executes and transitions page to PENDING_REVIEW, unapproved
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.PENDING_REVIEW)
+        self.assertFalse(page.is_approved)
+
+        # 3. Approve again - should succeed and re-index
+        with self.captureOnCommitCallbacks(execute=True):
+            res3 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/approve")
+        self.assertEqual(res3.status_code, 200)
+        page.refresh_from_db()
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
 
     def test_duplicate_content_reuses_logical_job(self):
         first = self.finalize()

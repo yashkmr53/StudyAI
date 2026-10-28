@@ -235,6 +235,33 @@ function CanvasSource({
     void loadPageTranscript();
   }, [loadPageTranscript]);
 
+  const canvasPollTimer = useRef<number | null>(null);
+
+  const stopCanvasPolling = useCallback(() => {
+    if (canvasPollTimer.current) {
+      window.clearInterval(canvasPollTimer.current);
+      canvasPollTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const isPending =
+      docPage?.review_status === "ocr_pending" ||
+      docPage?.review_status === "ocr_processing" ||
+      docPage?.ocr_status === "pending" ||
+      docPage?.ocr_status === "processing";
+
+    if (!isPending) {
+      stopCanvasPolling();
+      return;
+    }
+    stopCanvasPolling();
+    canvasPollTimer.current = window.setInterval(async () => {
+      await loadPageTranscript();
+    }, 2000);
+    return stopCanvasPolling;
+  }, [docPage?.review_status, docPage?.ocr_status, loadPageTranscript, stopCanvasPolling]);
+
   useEffect(() => {
     if (!highlightToken) return;
     setHighlighted(true);
@@ -719,16 +746,21 @@ function TranscriptPanel({
     );
   }
 
-  const approved = isApproved || reviewStatus === "approved";
-  const needsReview = reviewStatus === "needs_review";
+  const isProcessing = reviewStatus === "ocr_pending" || reviewStatus === "ocr_processing";
+  const approved = !isProcessing && (isApproved || reviewStatus === "approved");
+  const needsReview = !isProcessing && reviewStatus === "needs_review";
 
   return (
     <div className="transcript-review-panel">
       {/* Review Status Banner */}
-      <div className={`transcript-review-banner ${approved ? "approved" : needsReview ? "needs-review" : "pending-review"}`}>
+      <div className={`transcript-review-banner ${isProcessing ? "pending-review" : approved ? "approved" : needsReview ? "needs-review" : "pending-review"}`}>
         <div>
           <div style={{ fontWeight: 650, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-            {approved ? (
+            {isProcessing ? (
+              <span style={{ color: "#2563eb", display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="spinner spinner--inline" /> Transcribing with AI...
+              </span>
+            ) : approved ? (
               <>
                 <CheckIcon size={15} />
                 <span>Transcript Approved</span>
@@ -740,7 +772,9 @@ function TranscriptPanel({
             )}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-            {approved
+            {isProcessing
+              ? "StudyAI is reading handwriting with AI. Transcribed lines will update automatically."
+              : approved
               ? "This transcript is approved and indexed in your knowledge base."
               : "Review and approve this transcript to enable AI search and chat citations."}
           </div>
@@ -754,7 +788,7 @@ function TranscriptPanel({
                   type="button"
                   className="btn btn--primary"
                   onClick={handleApprove}
-                  disabled={approving}
+                  disabled={approving || isProcessing}
                   style={{ background: "#059669", borderColor: "#059669" }}
                 >
                   <CheckIcon size={14} /> {approving ? "Approving..." : "Approve Transcript"}
@@ -764,20 +798,19 @@ function TranscriptPanel({
                 type="button"
                 className="btn btn--secondary"
                 onClick={handleStartEdit}
+                disabled={isProcessing}
               >
                 <EditIcon size={14} /> Edit Transcript
               </button>
-              {!approved && (
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={handleRetryOcr}
-                  disabled={retrying}
-                  title="Re-run OCR"
-                >
-                  <RefreshIcon size={14} />
-                </button>
-              )}
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={handleRetryOcr}
+                disabled={retrying || isProcessing}
+                title="Re-run OCR"
+              >
+                <RefreshIcon size={14} /> {retrying || isProcessing ? "Transcribing..." : "Re-run OCR"}
+              </button>
             </>
           )}
         </div>
