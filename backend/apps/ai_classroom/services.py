@@ -24,7 +24,7 @@ from django.db import transaction
 from apps.ai_classroom.models import CitationBlock, EnrichedNote, EnrichedNoteBlock
 from apps.ai_classroom.prompts import QUALIFIED, active_prompt
 from apps.jobs.models import Job, JobExecutionState
-from apps.documents.models import Document
+from apps.documents.models import Document, DocumentPage
 from apps.retrieval.models import NoteChunk
 from providers.registry import get_llm_provider
 from shared.exceptions import ResourceNotFound, ValidationError
@@ -203,6 +203,18 @@ class EnrichmentService:
             if not document.pages.exclude(current_revision_id=None).exists():
                 raise ValidationError("Document has no completed revisions to enrich.")
 
+            # Check 1: In-flight OCR
+            processing_pages = document.pages.filter(
+                review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING]
+            )
+            if processing_pages.exists():
+                raise ValidationError("Note transcription is still processing. Please wait for transcription to complete before enriching.")
+
+            # Check 2: Transcript Approval Gating
+            unapproved_pages = document.pages.filter(is_approved=False)
+            if unapproved_pages.exists():
+                raise ValidationError("Note transcript must be approved before generating enrichment.")
+
             from apps.ai_classroom.budget import assert_within_budget
 
             assert_within_budget(document.profile_id)
@@ -275,6 +287,31 @@ def run_enrichment_job(job: Job) -> None:
         logger.info("Enrichment job %s document %s no longer exists (deleted); skipping.", job.pk, job.resource_id)
         job.status = Job.Status.CANCELLED
         job.save(update_fields=("status",))
+        return
+
+    # Guard: If OCR is still in-flight or pages are unapproved, abort without marking as blank/insufficient!
+    processing_pages = document.pages.filter(
+        review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING]
+    )
+    if processing_pages.exists():
+        logger.warning(
+            "Enrichment job %s for document %s aborted: OCR is still processing on some pages.",
+            job.pk, document.pk,
+        )
+        job.status = Job.Status.FAILED_RETRYABLE
+        job.last_error = "OCR is still processing on some pages."
+        job.save(update_fields=("status", "last_error"))
+        return
+
+    unapproved_pages = document.pages.filter(is_approved=False)
+    if unapproved_pages.exists():
+        logger.warning(
+            "Enrichment job %s for document %s aborted: Pages are not approved.",
+            job.pk, document.pk,
+        )
+        job.status = Job.Status.FAILED_RETRYABLE
+        job.last_error = "Pages are not approved."
+        job.save(update_fields=("status", "last_error"))
         return
 
     # Early Content Gate (§3): Check academic sufficiency before expensive retrieval and LLM calls

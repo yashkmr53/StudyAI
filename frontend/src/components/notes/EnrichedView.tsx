@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enrichmentApi, parseEnrichment } from "../../services/api/enrichment";
+import { documentsApi, type PageStatus } from "../../services/api/documents";
 import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
@@ -47,6 +48,8 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
     }
   });
   const [activeCitation, setActiveCitation] = useState<any | null>(null);
+  const [pages, setPages] = useState<PageStatus[]>([]);
+  const [approvingAndGenerating, setApprovingAndGenerating] = useState(false);
   const pollsLeft = useRef(MAX_POLLS);
   const pollTimer = useRef<number | null>(null);
   const jobIdRef = useRef<string | null>(jobId);
@@ -225,6 +228,72 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
     return stopPolling;
   }, [isGenerating, jobId, snapshot?.state, refresh, stopPolling, docId]);
 
+  const loadPages = useCallback(async () => {
+    try {
+      const pageList = await documentsApi.pages(docId);
+      setPages(pageList || []);
+      return pageList || [];
+    } catch {
+      setPages([]);
+      return [];
+    }
+  }, [docId]);
+
+  useEffect(() => {
+    void loadPages();
+  }, [loadPages]);
+
+  const isTranscribing = pages.some(
+    (p) =>
+      p.review_status === "ocr_pending" ||
+      p.review_status === "ocr_processing" ||
+      p.ocr_status === "pending" ||
+      p.ocr_status === "processing",
+  );
+
+  const needsApproval =
+    !isTranscribing &&
+    pages.length > 0 &&
+    pages.some((p) => !p.is_approved && p.review_status !== "approved");
+
+  useEffect(() => {
+    if (!isTranscribing) return;
+    const interval = window.setInterval(async () => {
+      const updated = await loadPages();
+      const stillTranscribing = updated.some(
+        (p) =>
+          p.review_status === "ocr_pending" ||
+          p.review_status === "ocr_processing" ||
+          p.ocr_status === "pending" ||
+          p.ocr_status === "processing",
+      );
+      if (!stillTranscribing) {
+        window.clearInterval(interval);
+        void refresh();
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [isTranscribing, loadPages, refresh]);
+
+  async function handleApproveAndGenerate() {
+    setActionError(null);
+    setApprovingAndGenerating(true);
+    try {
+      const unapproved = pages.filter((p) => !p.is_approved && p.review_status !== "approved");
+      for (const p of unapproved) {
+        await documentsApi.approvePage(docId, p.id);
+      }
+      setPages((prev) =>
+        prev.map((p) => ({ ...p, is_approved: true, review_status: "approved" })),
+      );
+      await generate();
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to approve transcript and start enrichment.");
+    } finally {
+      setApprovingAndGenerating(false);
+    }
+  }
+
   async function generate() {
     setActionError(null);
     setIsGenerating(true);
@@ -296,6 +365,60 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
         <p>{t("notes.enriched.generatingBody")}</p>
         <div className="pulse" aria-hidden />
       </div>
+    );
+  }
+
+  if (isTranscribing && snapshot.state === "not_enriched") {
+    return (
+      <div className="enrichment-progress" role="status">
+        <div className="spinner spinner--lg" style={{ margin: "0 auto 16px" }} />
+        <h3>{t("notes.enriched.transcribingTitle", "Transcribing your note with AI…")}</h3>
+        <p>
+          {t(
+            "notes.enriched.transcribingBody",
+            "StudyAI is reading your handwriting. Transcribed text will be ready for review shortly.",
+          )}
+        </p>
+        <div className="pulse" aria-hidden />
+      </div>
+    );
+  }
+
+  if (needsApproval && snapshot.state === "not_enriched") {
+    return (
+      <EmptyState
+        icon={<NoteIcon size={24} />}
+        title={t("notes.enriched.needsApprovalTitle", "Review your transcript first")}
+        description={t(
+          "notes.enriched.needsApprovalDescription",
+          "To ensure high-quality AI notes and accurate textbook citations, review and approve your note transcript before generating enrichment.",
+        )}
+        action={
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            {onEditHandwritten && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={onEditHandwritten}
+              >
+                <EditIcon size={14} /> {t("notes.enriched.reviewTranscript", "Review Transcript")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => void handleApproveAndGenerate()}
+              disabled={approvingAndGenerating}
+              style={{ background: "#059669", borderColor: "#059669" }}
+            >
+              <SparkleIcon size={14} />{" "}
+              {approvingAndGenerating
+                ? t("notes.enriched.approvingAndEnriching", "Approving & Enriching…")
+                : t("notes.enriched.approveAndEnrich", "Approve & Generate Enrichment")}
+            </button>
+          </div>
+        }
+      />
     );
   }
 

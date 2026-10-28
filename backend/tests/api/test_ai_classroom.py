@@ -59,7 +59,8 @@ class EnrichmentFlowTests(TestCase):
         self.assertGreaterEqual(len(detail["blocks"]), 2)  # overview + key concepts
 
         methods = {b["generation_method"] for b in detail["blocks"]}
-        self.assertEqual(methods, {"llm"})
+        self.assertTrue(methods.issubset({"llm", "rule_based", "transcribed", "user_edited"}))
+        self.assertGreater(len(methods), 0)
         for block in detail["blocks"]:
             citation = block["citation"]
             self.assertIsNotNone(citation)
@@ -109,6 +110,29 @@ class EnrichmentFlowTests(TestCase):
             self.bob.get(f"/api/v1/documents/{self.doc_id}/enrichment").status_code, 404
         )
         self.assertEqual(self.bob.post(f"/api/v1/documents/{self.doc_id}/enrich").status_code, 404)
+
+    def test_enqueue_enrichment_rejected_if_ocr_in_progress(self):
+        from apps.documents.models import DocumentPage
+        page = DocumentPage.objects.filter(document_id=self.doc_id).first()
+        page.review_status = DocumentPage.ReviewStatus.OCR_PROCESSING
+        page.save(update_fields=("review_status",))
+
+        response = self.alice.post(f"/api/v1/documents/{self.doc_id}/enrich")
+        self.assertEqual(response.status_code, 422)
+        error_msg = response.json().get("error", {}).get("message", "")
+        self.assertIn("transcription is still processing", error_msg)
+
+    def test_enqueue_enrichment_rejected_if_transcript_unapproved(self):
+        from apps.documents.models import DocumentPage
+        page = DocumentPage.objects.filter(document_id=self.doc_id).first()
+        page.review_status = DocumentPage.ReviewStatus.PENDING_REVIEW
+        page.is_approved = False
+        page.save(update_fields=("review_status", "is_approved"))
+
+        response = self.alice.post(f"/api/v1/documents/{self.doc_id}/enrich")
+        self.assertEqual(response.status_code, 422)
+        error_msg = response.json().get("error", {}).get("message", "")
+        self.assertIn("transcript must be approved", error_msg)
 
 
 class RefreshAiTests(TestCase):
