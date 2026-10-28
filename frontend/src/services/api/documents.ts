@@ -19,6 +19,9 @@ export interface PageStatus {
   page_number: number;
   ocr_status: string;
   needs_review: boolean;
+  review_status?: string;
+  is_approved?: boolean;
+  approved_at?: string | null;
   current_revision_id: string | null;
   image_ref?: string | null;
 }
@@ -142,9 +145,31 @@ export const documentsApi = {
   },
 
   submitEdit(documentId: string, pageId: string, lines: { line_index: number; text: string; is_heading?: boolean }[]) {
-    return apiRequest<{ revision: RevisionInfo; job: null }>(`/documents/${documentId}/revisions`, {
+    return apiRequest<{ revision: RevisionInfo; page?: PageStatus; job: null }>(`/documents/${documentId}/revisions`, {
       method: "POST",
       body: { page_id: pageId, lines },
+    });
+  },
+
+  approvePage(documentId: string, pageId: string) {
+    return apiRequest<{
+      page_id: string;
+      review_status: string;
+      is_approved: boolean;
+      approved_at: string | null;
+      all_pages_approved: boolean;
+    }>(`/documents/${documentId}/pages/${pageId}/approve`, {
+      method: "POST",
+    });
+  },
+
+  retryPageOcr(documentId: string, pageId: string) {
+    return apiRequest<{
+      page_id: string;
+      review_status: string;
+      job: JobInfo;
+    }>(`/documents/${documentId}/pages/${pageId}/retry-ocr`, {
+      method: "POST",
     });
   },
 

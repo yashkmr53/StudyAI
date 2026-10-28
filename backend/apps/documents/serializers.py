@@ -120,7 +120,8 @@ class DocumentPageSerializer(serializers.ModelSerializer):
         model = DocumentPage
         fields = (
             "id", "document", "page_number", "image_ref",
-            "current_revision_id", "needs_review", "ocr_status", "created_at",
+            "current_revision_id", "needs_review", "ocr_status",
+            "review_status", "is_approved", "approved_at", "created_at",
         )
 
 

@@ -144,17 +144,20 @@ export function SkeletonRows({ count = 5 }: { count?: number }) {
 
 export function TranscriptionChip({ status }: { status: string }) {
   const { t } = useTranslation();
-  if (status === "completed" || status === "transcribed") {
-    return <span className="chip chip--green">{t("notes.status.transcribed")}</span>;
+  if (status === "approved" || status === "completed" || status === "transcribed") {
+    return <span className="chip chip--green">{t("notes.status.approved", "Approved")}</span>;
   }
-  if (status === "processing") {
+  if (status === "pending_review") {
+    return <span className="chip chip--blue">{t("notes.status.pendingReview", "Review Needed")}</span>;
+  }
+  if (status === "processing" || status === "ocr_processing") {
     return (
       <span className="chip chip--blue">
         <span className="spinner spinner--inline" aria-hidden /> {t("notes.status.processing")}
       </span>
     );
   }
-  if (status === "failed") {
+  if (status === "failed" || status === "ocr_failed") {
     return <span className="chip chip--red">{t("notes.status.transcriptionFailed")}</span>;
   }
   if (status === "needs_review") {

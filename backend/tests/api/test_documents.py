@@ -89,6 +89,7 @@ class UploadFlowTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+@override_settings(OCR_PROVIDER_CHAIN=["mock"])
 class FinalizeAndOcrTests(TestCase):
     def setUp(self):
         self.alice = authenticated_client("alice@example.com", "s3curePass!x")
@@ -122,10 +123,76 @@ class FinalizeAndOcrTests(TestCase):
 
         page = DocumentPage.objects.get(pk=self.page_id)
         self.assertEqual(page.ocr_status, "completed")
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.PENDING_REVIEW)
+        self.assertFalse(page.is_approved)
         self.assertEqual(str(page.current_revision_id), body["revision"]["id"])
         revision = DocumentPageRevision.objects.get(pk=body["revision"]["id"])
         self.assertEqual(revision.lines.count(), 3)
         self.assertFalse(page.needs_review)
+
+    def test_ocr_completion_does_not_auto_index(self):
+        from apps.retrieval.models import NoteChunk
+        self.finalize()
+        # Chunks must NOT be created before student approval
+        self.assertEqual(NoteChunk.objects.filter(document_id=self.doc_id).count(), 0)
+
+    def test_page_approve_endpoint_triggers_indexing(self):
+        from apps.retrieval.models import NoteChunk
+        self.finalize()
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/approve")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["review_status"], "approved")
+        self.assertTrue(body["is_approved"])
+        self.assertTrue(body["all_pages_approved"])
+
+        page = DocumentPage.objects.get(pk=self.page_id)
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
+        # Note chunks should now be created because all pages are approved
+        self.assertGreater(NoteChunk.objects.filter(document_id=self.doc_id).count(), 0)
+
+    def test_page_retry_ocr_endpoint(self):
+        self.finalize()
+        response = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/retry-ocr")
+        self.assertEqual(response.status_code, 202)
+        body = response.json()
+        self.assertEqual(body["review_status"], "ocr_pending")
+
+        page = DocumentPage.objects.get(pk=self.page_id)
+        self.assertIn(page.review_status, (DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.PENDING_REVIEW))
+        self.assertFalse(page.is_approved)
+
+    def test_retry_ocr_after_approved_resets_and_can_be_approved_again(self):
+        from apps.retrieval.models import NoteChunk
+        self.finalize()
+
+        # 1. First approval
+        with self.captureOnCommitCallbacks(execute=True):
+            res1 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/approve")
+        self.assertEqual(res1.status_code, 200)
+        page = DocumentPage.objects.get(pk=self.page_id)
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
+        self.assertGreater(NoteChunk.objects.filter(document_id=self.doc_id).count(), 0)
+
+        # 2. Re-run OCR after approval
+        with self.captureOnCommitCallbacks(execute=True):
+            res2 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/retry-ocr")
+        self.assertEqual(res2.status_code, 202)
+        page.refresh_from_db()
+        # In eager mode, OCR task executes and transitions page to PENDING_REVIEW, unapproved
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.PENDING_REVIEW)
+        self.assertFalse(page.is_approved)
+
+        # 3. Approve again - should succeed and re-index
+        with self.captureOnCommitCallbacks(execute=True):
+            res3 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/approve")
+        self.assertEqual(res3.status_code, 200)
+        page.refresh_from_db()
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
 
     def test_duplicate_content_reuses_logical_job(self):
         first = self.finalize()
@@ -144,7 +211,7 @@ class FinalizeAndOcrTests(TestCase):
         revision = DocumentPageRevision.objects.get(pk=str(page.current_revision_id))
         self.assertEqual(revision.ocr_status, "needs_review")
 
-    @override_settings(OCR_PROVIDER_CHAIN=["failing", "mock"])
+    @override_settings(OCR_PROVIDER_CHAIN=["failing", "mock"], LLM_DISABLE_FALLBACK=False)
     def test_primary_failure_falls_back(self):
         response = self.finalize()
         body = response.json()
@@ -189,6 +256,9 @@ class FinalizeAndOcrTests(TestCase):
 
         new_revision = DocumentPageRevision.objects.get(pk=body["revision"]["id"])
         self.assertEqual(new_revision.lines.first().text, "Hand-corrected line")
+        page = DocumentPage.objects.get(pk=self.page_id)
+        self.assertTrue(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
         # Old revision untouched (§48 immutability)
         self.assertEqual(
             list(DocumentLine.objects.filter(page_revision=old_revision).values_list("text", flat=True)),
@@ -204,6 +274,7 @@ class FinalizeAndOcrTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@override_settings(OCR_PROVIDER_CHAIN=["mock"])
 class RetryProcessingTests(TestCase):
     def setUp(self):
         self.alice = authenticated_client("alice@example.com", "s3curePass!x")

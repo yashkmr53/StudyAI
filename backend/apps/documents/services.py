@@ -220,11 +220,121 @@ class IngestionService:
                     for l in clean_lines
                 ]
             )
+            page.review_status = DocumentPage.ReviewStatus.APPROVED
+            page.is_approved = True
+            page.approved_at = timezone.now()
+            page.approved_by = user
+            page.needs_review = False
+            page.save(update_fields=("review_status", "is_approved", "approved_at", "approved_by", "needs_review"))
+
             # §10: content changed → document must be re-indexed.
             from apps.retrieval.services import enqueue_index_job
 
             enqueue_index_job(page.document)
             return revision
+
+    @classmethod
+    def approve_page(cls, user, document_id, page_id) -> tuple[DocumentPage, bool]:
+        """Approve a page's transcript and enqueue indexing if all pages in the document are approved."""
+        with transaction.atomic():
+            page = cls.get_owned_page(user, page_id)
+            if str(page.document_id) != str(document_id):
+                raise ValidationError("Page does not belong to this document.")
+
+            page.review_status = DocumentPage.ReviewStatus.APPROVED
+            page.is_approved = True
+            page.approved_at = timezone.now()
+            page.approved_by = user
+            page.needs_review = False
+            page.save(update_fields=("review_status", "is_approved", "approved_at", "approved_by", "needs_review"))
+
+            doc = page.document
+            unapproved_count = doc.pages.filter(is_approved=False).count()
+            all_approved = (unapproved_count == 0)
+
+            if all_approved:
+                from apps.retrieval.services import enqueue_index_job
+                enqueue_index_job(doc)
+                logger.info("All pages approved for document %s; indexing enqueued.", doc.pk)
+
+            return page, all_approved
+
+    @classmethod
+    def retry_page_ocr(cls, user, document_id, page_id) -> tuple[DocumentPage, Job]:
+        """Re-run OCR for a specific page, creating a new OCR revision and re-dispatching."""
+        from providers.registry import get_object_storage
+        from apps.jobs.services import dispatch_job, get_or_create_job
+
+        with transaction.atomic():
+            page = cls.get_owned_page(user, page_id)
+            if str(page.document_id) != str(document_id):
+                raise ValidationError("Page does not belong to this document.")
+
+            storage = get_object_storage()
+
+            # If this is a canvas page, always re-render strokes to capture any updated drawing
+            if page.document.source == Document.Source.CANVAS:
+                from apps.canvas.models import CanvasSession, CanvasPage
+                from apps.canvas.raster import render_strokes_png
+
+                session = CanvasSession.objects.filter(document_id=page.document_id).first()
+                if session:
+                    cpage = CanvasPage.objects.filter(session=session, page_number=page.page_number).first()
+                    if cpage:
+                        strokes = list(cpage.strokes.order_by("sequence_order").values_list("points", flat=True))
+                        png = render_strokes_png(strokes)
+                        key = f"{session.profile_id}/{page.id}.png"
+                        storage.store_bytes(key, png)
+                        page.image_ref = key
+                        if not cpage.is_finalized:
+                            cpage.is_finalized = True
+                            cpage.finalized_at = timezone.now()
+                            cpage.save(update_fields=("is_finalized", "finalized_at"))
+
+            if not page.image_ref:
+                raise ValidationError("Page has no image to transcribe.")
+            if not storage.exists(page.image_ref):
+                raise ValidationError("Page image file does not exist in storage.")
+
+            content_bytes = storage.read_bytes(page.image_ref)
+            content_hash = compute_content_hash(content_bytes)
+
+            # Create a new revision so this OCR re-run is fresh, cleanly tracked, and never blocked by old completed revisions
+            revision = cls._create_revision_locked(
+                page,
+                content_hash=content_hash,
+                ocr_status=DocumentPageRevision.OcrStatus.PENDING,
+            )
+
+            page.review_status = DocumentPage.ReviewStatus.OCR_PENDING
+            page.ocr_status = DocumentPage.OcrStatus.PENDING
+            page.is_approved = False
+            page.approved_at = None
+            page.approved_by = None
+            page.needs_review = False
+            page.current_revision_id = revision.pk
+            page.save(update_fields=(
+                "review_status", "ocr_status", "is_approved", "approved_at",
+                "approved_by", "needs_review", "current_revision_id", "image_ref"
+            ))
+
+            idempotency_key = f"ocr:{page.pk}:rev_{revision.revision_number}:{revision.content_hash}:{_pipeline_version()}"
+            job, created = get_or_create_job(
+                job_type="ocr",
+                resource_type="document_page_revision",
+                resource_id=str(revision.pk),
+                profile_id=page.document.profile_id,
+                revision_id=revision.pk,
+                idempotency_key=idempotency_key,
+            )
+            if not created and job.status != Job.Status.QUEUED:
+                Job.objects.filter(pk=job.pk).update(
+                    status=Job.Status.QUEUED, next_retry_at=None, last_error=""
+                )
+                job.refresh_from_db()
+            dispatch_job(job)
+
+            return page, job
 
 
 def run_ocr_job(job: Job) -> None:
@@ -257,16 +367,31 @@ def run_ocr_job(job: Job) -> None:
     DocumentPageRevision.objects.filter(pk=revision.pk).update(
         ocr_status=DocumentPageRevision.OcrStatus.PROCESSING
     )
+    DocumentPage.objects.filter(pk=page.pk).update(
+        ocr_status=DocumentPage.OcrStatus.PROCESSING,
+        review_status=DocumentPage.ReviewStatus.OCR_PROCESSING,
+    )
 
     request_id = f"job_{job.pk}"
     chain = get_ocr_provider()
-    result, attempted = chain.recognize(page.image_ref, request_id=request_id)
+    try:
+        result, attempted = chain.recognize(page.image_ref, request_id=request_id)
+    except Exception as exc:
+        DocumentPageRevision.objects.filter(pk=revision.pk).update(
+            ocr_status=DocumentPageRevision.OcrStatus.FAILED,
+            error_message=str(exc)[:500],
+        )
+        DocumentPage.objects.filter(pk=page.pk).update(
+            ocr_status=DocumentPage.OcrStatus.FAILED,
+            review_status=DocumentPage.ReviewStatus.OCR_FAILED,
+        )
+        raise
 
     lines = sorted(result.lines or [], key=lambda l: l.get("line_index", 0))
     avg_confidence = result.confidence
     needs_review = avg_confidence < _review_threshold()
 
-    # One transaction: claim result + lines + status + downstream hook (§67).
+    # One transaction: claim result + lines + status + review workflow state.
     with transaction.atomic():
         revision.refresh_from_db()
         DocumentLine.objects.filter(page_revision=revision).delete()  # safe re-run
@@ -293,18 +418,14 @@ def run_ocr_job(job: Job) -> None:
 
         page.needs_review = needs_review
         page.ocr_status = revision.ocr_status
-        page.save(update_fields=("needs_review", "ocr_status"))
+        page.review_status = (
+            DocumentPage.ReviewStatus.NEEDS_REVIEW
+            if needs_review
+            else DocumentPage.ReviewStatus.PENDING_REVIEW
+        )
+        page.save(update_fields=("needs_review", "ocr_status", "review_status"))
 
-    # §47 downstream enqueue (Phase 5): chunk + embed + index the document.
-    from apps.retrieval.services import enqueue_index_job
-
-    if not Document.objects.filter(pk=page.document_id).exists():
-        logger.info("Document %s was deleted during OCR; skipping index enqueue.", page.document_id)
-        return
-
-    index_job, index_created = enqueue_index_job(page.document)
     logger.info(
-        "OCR job %s completed via %s (%s lines, review=%s); index job %s",
-        job.pk, attempted, len(lines), needs_review,
-        "created" if index_created else f"reused({index_job.status})",
+        "OCR job %s completed via %s (%s lines, review=%s, review_status=%s)",
+        job.pk, attempted, len(lines), needs_review, page.review_status,
     )

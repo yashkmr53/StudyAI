@@ -63,6 +63,14 @@ class DocumentPage(models.Model):
         NEEDS_REVIEW = "needs_review", "needs_review"
         FAILED = "failed", "failed"
 
+    class ReviewStatus(models.TextChoices):
+        OCR_PENDING = "ocr_pending", "ocr_pending"
+        OCR_PROCESSING = "ocr_processing", "ocr_processing"
+        OCR_FAILED = "ocr_failed", "ocr_failed"
+        NEEDS_REVIEW = "needs_review", "needs_review"
+        PENDING_REVIEW = "pending_review", "pending_review"
+        APPROVED = "approved", "approved"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="pages")
     page_number = models.PositiveIntegerField()
@@ -72,6 +80,21 @@ class DocumentPage(models.Model):
     current_revision_id = models.UUIDField(null=True, blank=True)
     needs_review = models.BooleanField(default=False)
     ocr_status = models.CharField(max_length=20, choices=OcrStatus.choices, default=OcrStatus.PENDING)
+    review_status = models.CharField(
+        max_length=32,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.OCR_PENDING,
+        db_index=True,
+    )
+    is_approved = models.BooleanField(default=False, db_index=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_document_pages",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

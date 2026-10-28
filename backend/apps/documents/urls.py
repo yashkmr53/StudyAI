@@ -7,6 +7,8 @@ from apps.documents.views import (
     CancelJobView,
     DigitizedDocumentViewSet,
     DigitizedDownloadView,
+    DocumentPageApproveView,
+    DocumentPageRetryOcrView,
     DocumentViewSet,
     FinalizeUploadView,
     JobViewSet,
@@ -28,6 +30,8 @@ document_questions = DocumentQuestionsViewSet.as_view({"get": "list"})
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("documents/<uuid:document_id>/pages/<uuid:page_id>/approve", DocumentPageApproveView.as_view(), name="document-page-approve"),
+    path("documents/<uuid:document_id>/pages/<uuid:page_id>/retry-ocr", DocumentPageRetryOcrView.as_view(), name="document-page-retry-ocr"),
     path("documents/pages/<uuid:page_id>/finalize-upload", FinalizeUploadView.as_view(), name="finalize-upload"),
     path("documents/pages/<uuid:page_id>/download", PageDownloadView.as_view(), name="page-download"),
     path("digitized-documents/<uuid:pk>/download", DigitizedDownloadView.as_view(), name="digitized-download"),
