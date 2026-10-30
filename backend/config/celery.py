@@ -17,6 +17,14 @@ app.conf.beat_schedule = {
         "task": "apps.jobs.tasks.promote_retries_task",
         "schedule": 120.0,  # every 2 minutes
     },
+    "reconcile-unindexed-pages": {
+        "task": "apps.jobs.tasks.reconcile_unindexed_pages_task",
+        "schedule": 300.0,  # every 5 minutes
+    },
+    "reap-stuck-ocr-pages": {
+        "task": "apps.jobs.tasks.reap_stuck_ocr_pages_task",
+        "schedule": 300.0,  # every 5 minutes
+    },
     "daily-backup": {
         "task": "apps.audit.tasks.daily_backup",
         "schedule": crontab(hour=2, minute=30),  # 02:30 UTC daily

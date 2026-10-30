@@ -82,6 +82,7 @@ def _handler_for(job: Job):
         "ocr": run_ocr_job,
         "pdf_render": _run_pdf_render,
         "index": _run_index,
+        "index_page": _run_index_page,
         "enrich": _run_enrich,
     }
     handler = handlers.get(job.job_type)
@@ -100,6 +101,12 @@ def _run_index(job: Job):
     from apps.retrieval.services import run_index_job
 
     run_index_job(job)
+
+
+def _run_index_page(job: Job):
+    from apps.retrieval.services import run_page_index_job
+
+    run_page_index_job(job)
 
 
 def _run_enrich(job: Job):

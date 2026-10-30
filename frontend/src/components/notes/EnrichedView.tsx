@@ -49,7 +49,6 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
   });
   const [activeCitation, setActiveCitation] = useState<any | null>(null);
   const [pages, setPages] = useState<PageStatus[]>([]);
-  const [approvingAndGenerating, setApprovingAndGenerating] = useState(false);
   const pollsLeft = useRef(MAX_POLLS);
   const pollTimer = useRef<number | null>(null);
   const jobIdRef = useRef<string | null>(jobId);
@@ -251,10 +250,10 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
       p.ocr_status === "processing",
   );
 
-  const needsApproval =
-    !isTranscribing &&
-    pages.length > 0 &&
-    pages.some((p) => !p.is_approved && p.review_status !== "approved");
+  const hasApprovedPage = pages.some((p) => p.is_approved || p.review_status === "approved");
+  const blockingPages = pages.filter((p) => !p.is_approved && p.review_status !== "approved" && !p.is_ignored);
+  const isReadyForEnrichment = hasApprovedPage && blockingPages.length === 0;
+  const needsApproval = !isTranscribing && !isReadyForEnrichment;
 
   useEffect(() => {
     if (!isTranscribing) return;
@@ -275,26 +274,15 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
     return () => window.clearInterval(interval);
   }, [isTranscribing, loadPages, refresh]);
 
-  async function handleApproveAndGenerate() {
-    setActionError(null);
-    setApprovingAndGenerating(true);
-    try {
-      const unapproved = pages.filter((p) => !p.is_approved && p.review_status !== "approved");
-      for (const p of unapproved) {
-        await documentsApi.approvePage(docId, p.id);
-      }
-      setPages((prev) =>
-        prev.map((p) => ({ ...p, is_approved: true, review_status: "approved" })),
-      );
-      await generate();
-    } catch (err: any) {
-      setActionError(err?.message || "Failed to approve transcript and start enrichment.");
-    } finally {
-      setApprovingAndGenerating(false);
-    }
-  }
-
   async function generate() {
+    if (!isReadyForEnrichment) {
+      setActionError(
+        blockingPages.length > 0
+          ? `Pages requiring review: ${blockingPages.map((p) => p.page_number).join(", ")}. Review and approve or ignore all pages before generating enrichment.`
+          : "At least one approved page is required before generating enrichment.",
+      );
+      return;
+    }
     setActionError(null);
     setIsGenerating(true);
     setSnapshot((prev) => ({
@@ -389,33 +377,22 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
       <EmptyState
         icon={<NoteIcon size={24} />}
         title={t("notes.enriched.needsApprovalTitle", "Review your transcript first")}
-        description={t(
-          "notes.enriched.needsApprovalDescription",
-          "To ensure high-quality AI notes and accurate textbook citations, review and approve your note transcript before generating enrichment.",
-        )}
+        description={
+          blockingPages.length > 0
+            ? `Pages requiring review: ${blockingPages.map((p) => p.page_number).join(", ")}. Review and approve or ignore all pages before generating enrichment.`
+            : "At least one approved page is required before generating enrichment."
+        }
         action={
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             {onEditHandwritten && (
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="btn btn--primary"
                 onClick={onEditHandwritten}
               >
                 <EditIcon size={14} /> {t("notes.enriched.reviewTranscript", "Review Transcript")}
               </button>
             )}
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => void handleApproveAndGenerate()}
-              disabled={approvingAndGenerating}
-              style={{ background: "#059669", borderColor: "#059669" }}
-            >
-              <SparkleIcon size={14} />{" "}
-              {approvingAndGenerating
-                ? t("notes.enriched.approvingAndEnriching", "Approving & Enriching…")
-                : t("notes.enriched.approveAndEnrich", "Approve & Generate Enrichment")}
-            </button>
           </div>
         }
       />
@@ -429,7 +406,17 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
         title={t("notes.enriched.emptyTitle")}
         description={t("notes.enriched.emptyDescription")}
         action={
-          <button type="button" className="btn btn--primary" onClick={() => void generate()}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => void generate()}
+            disabled={!isReadyForEnrichment || isGenerating}
+            title={
+              !isReadyForEnrichment
+                ? "All pages must be approved or ignored before generating enrichment."
+                : undefined
+            }
+          >
             <SparkleIcon size={14} />
             {t("notes.enriched.generate")}
           </button>

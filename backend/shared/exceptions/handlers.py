@@ -26,6 +26,7 @@ ERROR_IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
 ERROR_REVISION_CONFLICT = "REVISION_CONFLICT"
 ERROR_VALIDATION_ERROR = "VALIDATION_ERROR"
 ERROR_RATE_LIMITED = "RATE_LIMITED"
+ERROR_NOT_READY_FOR_ENRICHMENT = "NOT_READY_FOR_ENRICHMENT"
 ERROR_INTERNAL_ERROR = "INTERNAL_ERROR"
 ERROR_PROVIDER_ERROR = "PROVIDER_ERROR"
 ERROR_PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
@@ -38,9 +39,11 @@ class APIError(Exception):
     code = ERROR_INVALID_REQUEST
     default_message = "Invalid request."
 
-    def __init__(self, message: Optional[str] = None, *, details: Optional[dict] = None):
+    def __init__(self, message: Optional[str] = None, *, code: Optional[str] = None, details: Optional[dict] = None):
         super().__init__(message or self.default_message)
         self.message = message or self.default_message
+        if code:
+            self.code = code
         self.details = details or {}
 
 

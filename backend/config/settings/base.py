@@ -174,6 +174,14 @@ CANVAS_LOCK_TTL_SECONDS = 90
 OCR_PIPELINE_VERSION = "qwen35-v1"          # part of the OCR idempotency key (§20)
 OCR_PROVIDER_CHAIN = "qwen35"               # StudyAI canonical OCR provider (qwen3.5:4b vision)
 OCR_REVIEW_THRESHOLD = 0.80               # avg confidence below → needs_review (§48)
+MAX_OCR_ATTEMPTS = 3
+OCR_ILLEGIBLE_THRESHOLD = 0.15
+OCR_UNCERTAIN_THRESHOLD = 0.30
+OCR_LINE_UNCERTAIN_THRESHOLD = 0.80  # placeholder to calibrate on real handwritten pages
+OCR_PENDING_TIMEOUT = 1800  # 30 minutes
+OCR_PROCESSING_TIMEOUT = 600  # 10 minutes
+MAX_LINE_LENGTH = 1000
+MAX_LINES_PER_PAGE = 500
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 UPLOAD_ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"]
 # Must exceed UPLOAD_MAX_BYTES so bodies at the boundary reach our view,

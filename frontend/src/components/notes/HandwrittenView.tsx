@@ -321,6 +321,8 @@ function CanvasSource({
             pageId={docPage?.id}
             reviewStatus={docPage?.review_status}
             isApproved={docPage?.is_approved}
+            isIgnored={docPage?.is_ignored}
+            ocrAttemptCount={docPage?.ocr_attempt_count}
             revision={revision}
             onRefresh={loadPageTranscript}
           />
@@ -385,6 +387,8 @@ interface PageData {
   ocrStatus: string;
   reviewStatus?: string;
   isApproved?: boolean;
+  isIgnored?: boolean;
+  ocrAttemptCount?: number;
   imageUrl: string | null;
   revision: RevisionInfo | null;
 }
@@ -433,6 +437,8 @@ function UploadSource({ note, page, onPageChange, highlightToken }: Omit<Props, 
           ocrStatus: p.ocr_status,
           reviewStatus: p.review_status,
           isApproved: p.is_approved,
+          isIgnored: p.is_ignored,
+          ocrAttemptCount: p.ocr_attempt_count,
           imageUrl,
           revision,
         });
@@ -540,6 +546,8 @@ function UploadSource({ note, page, onPageChange, highlightToken }: Omit<Props, 
             pageId={active.id}
             reviewStatus={active.reviewStatus}
             isApproved={active.isApproved}
+            isIgnored={active.isIgnored}
+            ocrAttemptCount={active.ocrAttemptCount}
             revision={active.revision}
             onRefresh={load}
           />
@@ -558,6 +566,8 @@ interface TranscriptPanelProps {
   pageId?: string;
   reviewStatus?: string;
   isApproved?: boolean;
+  isIgnored?: boolean;
+  ocrAttemptCount?: number;
   revision: RevisionInfo | null;
   onRefresh: () => void | Promise<any>;
 }
@@ -567,6 +577,8 @@ function TranscriptPanel({
   pageId,
   reviewStatus,
   isApproved,
+  isIgnored,
+  ocrAttemptCount = 0,
   revision,
   onRefresh,
 }: TranscriptPanelProps) {
@@ -574,24 +586,38 @@ function TranscriptPanel({
   const toast = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [draftLines, setDraftLines] = useState<Array<{ line_index: number; text: string; is_heading?: boolean }>>([]);
+  const [draftLines, setDraftLines] = useState<
+    Array<{
+      lineage_id?: string | null;
+      line_index: number;
+      text: string;
+      bbox?: number[] | null;
+      is_heading?: boolean;
+    }>
+  >([]);
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [ignoring, setIgnoring] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [showForceRetryModal, setShowForceRetryModal] = useState(false);
 
   // Initialize draft lines when revision changes
   useEffect(() => {
     if (revision?.lines) {
       setDraftLines(
         revision.lines.map((l) => ({
+          lineage_id: l.lineage_id,
           line_index: l.line_index,
           text: l.text,
+          bbox: l.bbox,
           is_heading: l.is_heading,
         })),
       );
     } else {
       setDraftLines([]);
     }
+    setConflictError(null);
     setIsEditing(false);
   }, [revision?.id]);
 
@@ -599,14 +625,17 @@ function TranscriptPanel({
     if (revision?.lines && revision.lines.length > 0) {
       setDraftLines(
         revision.lines.map((l) => ({
+          lineage_id: l.lineage_id,
           line_index: l.line_index,
           text: l.text,
+          bbox: l.bbox,
           is_heading: l.is_heading,
         })),
       );
     } else {
-      setDraftLines([{ line_index: 0, text: "" }]);
+      setDraftLines([{ lineage_id: null, line_index: 0, text: "" }]);
     }
+    setConflictError(null);
     setIsEditing(true);
   };
 
@@ -614,12 +643,15 @@ function TranscriptPanel({
     if (revision?.lines) {
       setDraftLines(
         revision.lines.map((l) => ({
+          lineage_id: l.lineage_id,
           line_index: l.line_index,
           text: l.text,
+          bbox: l.bbox,
           is_heading: l.is_heading,
         })),
       );
     }
+    setConflictError(null);
     setIsEditing(false);
   };
 
@@ -637,7 +669,7 @@ function TranscriptPanel({
     setDraftLines((prev) => {
       const next = [...prev];
       const insertAt = atIndex !== undefined ? atIndex + 1 : next.length;
-      next.splice(insertAt, 0, { line_index: insertAt, text: "" });
+      next.splice(insertAt, 0, { lineage_id: null, line_index: insertAt, text: "" });
       return next.map((l, i) => ({ ...l, line_index: i }));
     });
   };
@@ -671,11 +703,11 @@ function TranscriptPanel({
     });
   };
 
-  const handleSaveAndApprove = async () => {
+  const handleSaveDraft = async () => {
     if (!pageId) return;
     const cleanLines = draftLines
-      .map((l) => ({ ...l, text: l.text.trim() }))
-      .filter((l) => l.text.length > 0)
+      .map((l) => ({ ...l, text: l.text.replace(/[\r\n]+$/, "") }))
+      .filter((l) => l.text.trim().length > 0)
       .map((l, i) => ({ ...l, line_index: i }));
 
     if (cleanLines.length === 0) {
@@ -684,13 +716,18 @@ function TranscriptPanel({
     }
 
     setSaving(true);
+    setConflictError(null);
     try {
-      await documentsApi.submitEdit(documentId, pageId, cleanLines);
-      toast.success("Transcript updated and approved! Indexed for AI search.");
+      await documentsApi.submitEdit(documentId, pageId, cleanLines, revision?.revision_number);
+      toast.success("Transcript updated! Review and approve when ready.");
       setIsEditing(false);
       await onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save transcript revision.");
+      if (err?.status === 409 || err?.message?.includes("Stale") || err?.message?.includes("Conflict")) {
+        setConflictError(err?.message || "Stale revision. Another change was made to this page.");
+      } else {
+        toast.error(err?.message || "Failed to save transcript revision.");
+      }
     } finally {
       setSaving(false);
     }
@@ -700,27 +737,80 @@ function TranscriptPanel({
     if (!pageId) return;
     setApproving(true);
     try {
-      await documentsApi.approvePage(documentId, pageId);
+      await documentsApi.approvePage(documentId, pageId, revision?.revision_number);
       toast.success("Transcript approved! Indexed for AI search.");
       await onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to approve transcript.");
+      if (err?.status === 409 || err?.message?.includes("Stale") || err?.message?.includes("Conflict")) {
+        toast.error("Stale revision. A newer revision exists; please reload before approving.");
+        await onRefresh();
+      } else {
+        toast.error(err?.message || "Failed to approve transcript.");
+      }
     } finally {
       setApproving(false);
     }
   };
 
-  const handleRetryOcr = async () => {
+  const handleRetryOcrClick = () => {
+    if (revision?.revision_type === "user_edit") {
+      setShowForceRetryModal(true);
+    } else {
+      void executeRetryOcr(false);
+    }
+  };
+
+  const executeRetryOcr = async (force: boolean) => {
     if (!pageId) return;
     setRetrying(true);
+    setShowForceRetryModal(false);
     try {
-      await documentsApi.retryPageOcr(documentId, pageId);
+      await documentsApi.retryPageOcr(documentId, pageId, force);
       toast.success("OCR re-transcription started.");
       await onRefresh();
     } catch (err: any) {
       toast.error(err?.message || "Failed to retry OCR.");
     } finally {
       setRetrying(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!pageId) return;
+    try {
+      await documentsApi.reopenPage(documentId, pageId);
+      toast.success("Page reopened for review.");
+      await onRefresh();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to reopen page.");
+    }
+  };
+
+  const handleIgnore = async () => {
+    if (!pageId) return;
+    setIgnoring(true);
+    try {
+      await documentsApi.ignorePage(documentId, pageId);
+      toast.success("Page ignored and excluded from study materials.");
+      await onRefresh();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to ignore page.");
+    } finally {
+      setIgnoring(false);
+    }
+  };
+
+  const handleUnignore = async () => {
+    if (!pageId) return;
+    setIgnoring(true);
+    try {
+      await documentsApi.unignorePage(documentId, pageId);
+      toast.success("Page un-ignored and awaiting review.");
+      await onRefresh();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to un-ignore page.");
+    } finally {
+      setIgnoring(false);
     }
   };
 
@@ -731,14 +821,22 @@ function TranscriptPanel({
           {t("notes.handwritten.transcriptPending")}
         </p>
         {pageId && (
-          <div style={{ padding: "0 18px" }}>
+          <div style={{ padding: "0 18px", display: "flex", gap: 8 }}>
             <button
               type="button"
               className="btn btn--secondary"
-              onClick={handleRetryOcr}
-              disabled={retrying}
+              onClick={handleRetryOcrClick}
+              disabled={retrying || ocrAttemptCount >= 3}
+              title={ocrAttemptCount >= 3 ? "Maximum 3 OCR attempts reached for this page." : "Re-run OCR"}
             >
               <RefreshIcon size={14} /> Re-run OCR
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={handleStartEdit}
+            >
+              <EditIcon size={14} /> Manual Transcription
             </button>
           </div>
         )}
@@ -749,14 +847,21 @@ function TranscriptPanel({
   const isProcessing = reviewStatus === "ocr_pending" || reviewStatus === "ocr_processing";
   const approved = !isProcessing && (isApproved || reviewStatus === "approved");
   const needsReview = !isProcessing && reviewStatus === "needs_review";
+  const attemptsExceeded = ocrAttemptCount >= 3;
 
   return (
     <div className="transcript-review-panel">
       {/* Review Status Banner */}
-      <div className={`transcript-review-banner ${isProcessing ? "pending-review" : approved ? "approved" : needsReview ? "needs-review" : "pending-review"}`}>
+      <div
+        className={`transcript-review-banner ${
+          isIgnored ? "ignored" : isProcessing ? "pending-review" : approved ? "approved" : needsReview ? "needs-review" : "pending-review"
+        }`}
+      >
         <div>
           <div style={{ fontWeight: 650, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-            {isProcessing ? (
+            {isIgnored ? (
+              <span style={{ color: "#6b7280" }}>🚫 Page Ignored</span>
+            ) : isProcessing ? (
               <span style={{ color: "#2563eb", display: "flex", alignItems: "center", gap: 6 }}>
                 <span className="spinner spinner--inline" /> Transcribing with AI...
               </span>
@@ -772,7 +877,9 @@ function TranscriptPanel({
             )}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-            {isProcessing
+            {isIgnored
+              ? "This page is ignored and excluded from AI search and note enrichment."
+              : isProcessing
               ? "StudyAI is reading handwriting with AI. Transcribed lines will update automatically."
               : approved
               ? "This transcript is approved and indexed in your knowledge base."
@@ -783,44 +890,202 @@ function TranscriptPanel({
         <div className="transcript-review-banner__actions">
           {!isEditing && (
             <>
-              {!approved && (
+              {isIgnored ? (
                 <button
                   type="button"
-                  className="btn btn--primary"
-                  onClick={handleApprove}
-                  disabled={approving || isProcessing}
-                  style={{ background: "#059669", borderColor: "#059669" }}
+                  className="btn btn--secondary"
+                  onClick={handleUnignore}
+                  disabled={ignoring || isProcessing}
                 >
-                  <CheckIcon size={14} /> {approving ? "Approving..." : "Approve Transcript"}
+                  Un-ignore Page
                 </button>
+              ) : (
+                <>
+                  {!approved ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={handleApprove}
+                      disabled={approving || isProcessing || (revision.lines.length === 0)}
+                      style={{ background: "#059669", borderColor: "#059669" }}
+                    >
+                      <CheckIcon size={14} /> {approving ? "Approving..." : "Approve Transcript"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      onClick={handleReopen}
+                      title="Reopen approved transcript for review"
+                    >
+                      Reopen Review
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={handleStartEdit}
+                    disabled={isProcessing}
+                  >
+                    <EditIcon size={14} /> Edit Transcript
+                  </button>
+                  {!approved && (
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      onClick={handleIgnore}
+                      disabled={ignoring || isProcessing}
+                      title="Ignore this blank or irrelevant page"
+                    >
+                      Ignore Page
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={handleRetryOcrClick}
+                    disabled={retrying || isProcessing || approved || attemptsExceeded}
+                    title={
+                      approved
+                        ? "Reopen page before retrying OCR."
+                        : attemptsExceeded
+                        ? "Maximum 3 OCR attempts reached for this page."
+                        : "Re-run OCR"
+                    }
+                  >
+                    <RefreshIcon size={14} /> {retrying || isProcessing ? "Transcribing..." : "Re-run OCR"}
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={handleStartEdit}
-                disabled={isProcessing}
-              >
-                <EditIcon size={14} /> Edit Transcript
-              </button>
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={handleRetryOcr}
-                disabled={retrying || isProcessing}
-                title="Re-run OCR"
-              >
-                <RefreshIcon size={14} /> {retrying || isProcessing ? "Transcribing..." : "Re-run OCR"}
-              </button>
             </>
           )}
         </div>
       </div>
 
+      {/* Review Reasons Chips */}
+      {!isEditing && revision?.review_reasons && revision.review_reasons.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 14px", background: "#fefce8", borderBottom: "1px solid #fef08a" }}>
+          {revision.review_reasons.map((r: string) => {
+            const labels: Record<string, string> = {
+              high_illegible_ratio: "Illegible words (>15%)",
+              high_uncertain_ratio: "Uncertain handwriting (>30%)",
+              repetition_loop: "Repetition loop detected",
+              blank_page: "Blank page detected",
+              low_resolution: "Low resolution scan",
+              heavy_ink_low_text: "Heavy ink, little recognized text",
+            };
+            return (
+              <span
+                key={r}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 650,
+                  padding: "2px 8px",
+                  borderRadius: 12,
+                  background: "#fef08a",
+                  color: "#854d0e",
+                  border: "1px solid #fde047",
+                }}
+              >
+                ⚠ {labels[r] || r}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Conflict Banner */}
+      {conflictError && (
+        <div
+          style={{
+            background: "#fef2f2",
+            border: "1px solid #f87171",
+            borderRadius: 8,
+            padding: "12px 16px",
+            margin: "12px",
+          }}
+        >
+          <div style={{ fontWeight: 650, color: "#991b1b", fontSize: 13, marginBottom: 4 }}>
+            ⚠ Revision Conflict
+          </div>
+          <div style={{ fontSize: 12, color: "#7f1d1d", marginBottom: 10, lineHeight: 1.4 }}>
+            A newer revision was saved while you were editing. Your unsaved draft has been preserved below so no work is lost.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => {
+                setConflictError(null);
+                handleCancelEdit();
+                void onRefresh();
+              }}
+            >
+              Discard Draft & Reload Latest
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => {
+                const draftText = draftLines.map((l) => l.text).join("\n");
+                navigator.clipboard?.writeText(draftText);
+                toast.success("Draft copied to clipboard!");
+              }}
+            >
+              Copy Draft Text
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Force Retry Warning Modal */}
+      {showForceRetryModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 440,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "#dc2626" }}>Replace Manual Edits?</h3>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 18, lineHeight: 1.5 }}>
+              Re-running OCR will replace your manual transcript edits in the active view. Older edits will remain preserved in revision history. Do you want to continue?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn--secondary" onClick={() => setShowForceRetryModal(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                onClick={() => void executeRetryOcr(true)}
+              >
+                Re-run OCR (Replace Edits)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main content: Edit Mode or View Mode */}
       {isEditing ? (
         <div className="transcript-edit-wrap">
           <div style={{ marginBottom: 10, fontSize: 12, color: "var(--text-secondary)" }}>
-            Correct misread words, reorder lines, or add missing text. Saving will automatically approve and re-index the note.
+            Correct misread words, reorder lines, or add missing text. Leading spaces and indentation are preserved.
           </div>
           {draftLines.map((line, idx) => (
             <div key={idx} className="transcript-line-edit">
@@ -830,7 +1095,10 @@ function TranscriptPanel({
                 value={line.text}
                 onChange={(e) => handleLineChange(idx, e.target.value)}
                 placeholder="Line text..."
-                style={line.is_heading ? { fontWeight: 650 } : {}}
+                style={{
+                  fontFamily: "monospace",
+                  ...(line.is_heading ? { fontWeight: 650 } : {}),
+                }}
               />
               <button
                 type="button"
@@ -893,11 +1161,11 @@ function TranscriptPanel({
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={handleSaveAndApprove}
+                onClick={handleSaveDraft}
                 disabled={saving}
                 style={{ background: "#059669", borderColor: "#059669" }}
               >
-                <CheckIcon size={14} /> {saving ? "Saving..." : "Save & Approve"}
+                <CheckIcon size={14} /> {saving ? "Saving..." : "Save Draft"}
               </button>
             </div>
           </div>
@@ -906,18 +1174,63 @@ function TranscriptPanel({
         <div className="transcript-lines" style={{ padding: 0 }}>
           {revision.lines.length === 0 ? (
             <p className="hint-text" style={{ padding: "8px 0" }}>
-              No text detected on this page.
+              No text detected on this page. Use Ignore for blank pages.
             </p>
           ) : (
-            revision.lines.map((line: LinePayload) => (
-              <div
-                key={line.line_index}
-                className={line.is_heading ? "transcript-line is-heading" : "transcript-line"}
-              >
-                <span className="transcript-line__index">{line.line_index + 1}</span>
-                <span>{line.text}</span>
-              </div>
-            ))
+            revision.lines.map((line: LinePayload) => {
+              const isUncertain =
+                line.confidence_score !== null &&
+                line.confidence_score !== undefined &&
+                line.confidence_score < 0.8;
+              const isIllegible = line.text.toLowerCase().includes("[illegible]");
+
+              return (
+                <div
+                  key={line.line_index}
+                  className={line.is_heading ? "transcript-line is-heading" : "transcript-line"}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: isIllegible ? "#fff7ed" : isUncertain ? "#fefce8" : undefined,
+                  }}
+                >
+                  <span className="transcript-line__index">{line.line_index + 1}</span>
+                  <span style={{ flexGrow: 1, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                    {line.text}
+                  </span>
+                  {isIllegible && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 650,
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        background: "#fed7aa",
+                        color: "#9a3412",
+                      }}
+                    >
+                      [illegible]
+                    </span>
+                  )}
+                  {isUncertain && !isIllegible && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 650,
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        background: "#fef08a",
+                        color: "#854d0e",
+                      }}
+                      title={`Confidence: ${(line.confidence_score! * 100).toFixed(0)}%`}
+                    >
+                      uncertain
+                    </span>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}

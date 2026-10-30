@@ -95,7 +95,19 @@ class DocumentPage(models.Model):
         blank=True,
         related_name="approved_document_pages",
     )
+    is_ignored = models.BooleanField(default=False)
+    ocr_attempt_count = models.PositiveIntegerField(default=0)
+    ocr_generation = models.PositiveIntegerField(default=0)
+    ocr_started_at = models.DateTimeField(null=True, blank=True)
+    index_epoch = models.PositiveIntegerField(default=0)
+    indexed_text_hash = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def current_revision(self):
+        if not self.current_revision_id:
+            return None
+        return self.revisions.filter(pk=self.current_revision_id).first()
 
     class Meta:
         ordering = ("page_number",)
@@ -115,8 +127,31 @@ class DocumentPageRevision(models.Model):
         NEEDS_REVIEW = "needs_review", "needs_review"
         FAILED = "failed", "failed"
 
+    class RevisionType(models.TextChoices):
+        OCR = "ocr", "OCR"
+        USER_EDIT = "user_edit", "User Edit"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     page = models.ForeignKey(DocumentPage, on_delete=models.CASCADE, related_name="revisions")
+    parent_revision = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="derived_revisions",
+    )
+    revision_type = models.CharField(
+        max_length=20,
+        choices=RevisionType.choices,
+        default=RevisionType.OCR,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_revisions",
+    )
     revision_number = models.PositiveIntegerField()
     content_hash = models.CharField(max_length=64)  # sha256 hex of canonical content
     content_snapshot = models.JSONField(default=dict)  # canonical lines snapshot for reproducibility
@@ -126,6 +161,8 @@ class DocumentPageRevision(models.Model):
     ocr_status = models.CharField(max_length=20, choices=OcrStatus.choices, default=OcrStatus.PENDING)
     ocr_provider = models.CharField(max_length=64, null=True, blank=True)
     error_message = models.TextField(blank=True)
+    review_reasons = models.JSONField(default=list, blank=True)
+    text_hash = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -142,18 +179,24 @@ class DocumentLine(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     page_revision = models.ForeignKey(DocumentPageRevision, on_delete=models.CASCADE, related_name="lines")
     line_index = models.PositiveIntegerField()
+    lineage_id = models.UUIDField(default=uuid.uuid4, db_index=True)
+    original_text = models.TextField(blank=True, default="")
     text = models.TextField()
     bbox = models.JSONField(null=True, blank=True)  # [x, y, w, h]
     confidence_score = models.FloatField(null=True, blank=True)
     # Headings are rendered as such ONLY when explicitly flagged by the
     # source (provider metadata or user edit) — never inferred (§7/§49).
     is_heading = models.BooleanField(null=True, blank=True)
+    is_edited = models.BooleanField(default=False)
+    is_user_added = models.BooleanField(default=False)
+    parent_line_id = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("line_index",)
         constraints = [
             models.UniqueConstraint(fields=("page_revision", "line_index"), name="uniq_revision_line_index"),
+            models.UniqueConstraint(fields=("page_revision", "lineage_id"), name="uniq_revision_lineage_id"),
         ]
 
     def __str__(self) -> str:

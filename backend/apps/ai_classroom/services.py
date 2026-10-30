@@ -47,13 +47,21 @@ def _partial_threshold() -> float:
 
 
 def _descriptor(document: Document) -> str:
-    revision_ids = sorted(
-        document.pages.exclude(current_revision_id=None).values_list("current_revision_id", flat=True)
+    approved_pages = list(
+        document.pages.filter(is_approved=True, is_ignored=False)
+        .prefetch_related("current_revision__lines")
+        .order_by("page_number")
     )
-    prompt_versions = ",".join(sorted(QUALIFIED.values()))
-    model = getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")
-    payload = f"{document.pk}|{revision_ids}|{prompt_versions}|{model}"
-    return hashlib.sha256(payload.encode()).hexdigest()
+    if not approved_pages:
+        return ""
+    parts = []
+    for p in approved_pages:
+        rev = p.current_revision
+        if rev:
+            for l in rev.lines.order_by("line_index"):
+                parts.append(f"{p.page_number}:{l.line_index}:{l.text}")
+    payload = "|".join(parts)
+    return "v2:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:61]
 
 
 def _get_next_node(current_node: str) -> str:
@@ -220,10 +228,20 @@ class EnrichmentService:
             if processing_pages.exists():
                 raise ValidationError("Note transcription is still processing. Please wait for transcription to complete before enriching.")
 
-            # Check 2: Transcript Approval Gating
-            unapproved_pages = document.pages.filter(is_approved=False)
-            if unapproved_pages.exists():
-                raise ValidationError("Note transcript must be approved before generating enrichment.")
+            # Check 2: Transcript Approval & Readiness Gating
+            approved_pages_count = document.pages.filter(is_approved=True).count()
+            unapproved_unignored = document.pages.filter(is_approved=False, is_ignored=False).count()
+            if approved_pages_count == 0 or unapproved_unignored > 0:
+                blocking = list(
+                    document.pages.filter(is_approved=False, is_ignored=False)
+                    .order_by("page_number")
+                    .values_list("page_number", flat=True)
+                )
+                raise ValidationError(
+                    "Note transcript must be approved before generating enrichment. Document is not ready for enrichment: all pages must be approved or ignored, and at least one page must be approved.",
+                    code="NOT_READY_FOR_ENRICHMENT",
+                    details={"blocking_pages": blocking},
+                )
 
             from apps.ai_classroom.budget import assert_within_budget
 
@@ -306,16 +324,19 @@ def run_enrichment_job(job: Job) -> None:
         job.save(update_fields=("status", "last_error"))
         return
 
-    unapproved_pages = document.pages.filter(is_approved=False)
-    if unapproved_pages.exists():
+    approved_pages_count = document.pages.filter(is_approved=True).count()
+    unapproved_unignored = document.pages.filter(is_approved=False, is_ignored=False).count()
+    if approved_pages_count == 0 or unapproved_unignored > 0:
         logger.warning(
-            "Enrichment job %s for document %s aborted: Pages are not approved.",
+            "Enrichment job %s for document %s aborted: Document is not ready for enrichment.",
             job.pk, document.pk,
         )
-        job.status = Job.Status.FAILED_RETRYABLE
-        job.last_error = "Pages are not approved."
+        job.status = Job.Status.FAILED_DEAD_LETTER
+        job.last_error = "NOT_READY_FOR_ENRICHMENT: Document is not ready for enrichment."
         job.save(update_fields=("status", "last_error"))
         return
+
+    start_hash = _descriptor(document)
 
     # Early Content Gate (§3): Check academic sufficiency before expensive retrieval and LLM calls
     from apps.ai_classroom.content_gate import validate_note_academic_content
@@ -330,7 +351,7 @@ def run_enrichment_job(job: Job) -> None:
             EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
             EnrichedNote.objects.create(
                 document=document,
-                content_hash=_descriptor(document),
+                content_hash=start_hash,
                 revision_ids=[
                     str(pk)
                     for pk in document.pages.exclude(current_revision_id=None).values_list(
@@ -439,7 +460,7 @@ def run_enrichment_job(job: Job) -> None:
             EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
             note = EnrichedNote.objects.create(
                 document=document,
-                content_hash=_descriptor(document),
+                content_hash=start_hash,
                 revision_ids=[
                     str(pk)
                     for pk in document.pages.exclude(current_revision_id=None).values_list(
@@ -475,6 +496,11 @@ def run_enrichment_job(job: Job) -> None:
 
             TaggingService.extract_for_document(document, generation_job=job)
             QuestionGenerationService.generate_for_document(document)
+
+        end_hash = _descriptor(document)
+        if end_hash != start_hash:
+            logger.info("Descriptor changed during inference (%s -> %s); marking note %s stale.", start_hash, end_hash, note.pk)
+            EnrichedNote.objects.filter(pk=note.pk).update(ai_stale=True)
     except Exception as exc:
         # Log the error and re-raise to trigger job retry
         logger.error(

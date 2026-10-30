@@ -177,7 +177,10 @@ class FinalizeAndOcrTests(TestCase):
         self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
         self.assertGreater(NoteChunk.objects.filter(document_id=self.doc_id).count(), 0)
 
-        # 2. Re-run OCR after approval
+        # 2. Re-run OCR after approval requires reopening first (PR 1 specification)
+        reopen_res = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/reopen")
+        self.assertEqual(reopen_res.status_code, 200)
+
         with self.captureOnCommitCallbacks(execute=True):
             res2 = self.alice.post(f"/api/v1/documents/{self.doc_id}/pages/{self.page_id}/retry-ocr")
         self.assertEqual(res2.status_code, 202)
@@ -257,8 +260,9 @@ class FinalizeAndOcrTests(TestCase):
         new_revision = DocumentPageRevision.objects.get(pk=body["revision"]["id"])
         self.assertEqual(new_revision.lines.first().text, "Hand-corrected line")
         page = DocumentPage.objects.get(pk=self.page_id)
-        self.assertTrue(page.is_approved)
-        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.APPROVED)
+        # In PR 1: editing an unapproved page keeps it pending review until explicit approval
+        self.assertFalse(page.is_approved)
+        self.assertEqual(page.review_status, DocumentPage.ReviewStatus.PENDING_REVIEW)
         # Old revision untouched (§48 immutability)
         self.assertEqual(
             list(DocumentLine.objects.filter(page_revision=old_revision).values_list("text", flat=True)),

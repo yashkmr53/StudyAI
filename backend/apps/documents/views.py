@@ -223,11 +223,18 @@ class DocumentViewSet(
         document = self.get_object()
         serializer = RevisionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        page_id = str(serializer.validated_data["page_id"])
+        page_id = str(serializer.validated_data.get("page_id") or "")
         lines = serializer.validated_data.get("lines")
+        expected_rev = serializer.validated_data.get("expected_revision_number")
 
-        if lines:
-            revision = IngestionService.create_user_revision(request.user, str(document.pk), page_id, lines)
+        if lines is not None:
+            revision = IngestionService.create_user_revision(
+                request.user,
+                str(document.pk),
+                page_id,
+                lines,
+                expected_revision_number=expected_rev,
+            )
             return Response({
                 "revision": DocumentPageRevisionSerializer(revision).data,
                 "page": DocumentPageSerializer(revision.page).data,
@@ -443,7 +450,13 @@ class DocumentPageApproveView(APIView):
     throttle_scope = "ai"
 
     def post(self, request, document_id, page_id):
-        page, all_approved = IngestionService.approve_page(request.user, str(document_id), str(page_id))
+        expected_rev = request.data.get("expected_revision_number") if isinstance(request.data, dict) else None
+        page, all_approved = IngestionService.approve_page(
+            request.user,
+            str(document_id),
+            str(page_id),
+            expected_revision_number=expected_rev,
+        )
         return Response(
             {
                 "page_id": str(page.pk),
@@ -461,12 +474,111 @@ class DocumentPageRetryOcrView(APIView):
     throttle_scope = "ai"
 
     def post(self, request, document_id, page_id):
-        page, job = IngestionService.retry_page_ocr(request.user, str(document_id), str(page_id))
+        force = False
+        if isinstance(request.data, dict):
+            force = bool(request.data.get("force", False))
+        if not force and request.query_params.get("force") in ("true", "1", "True"):
+            force = True
+        page, job = IngestionService.retry_page_ocr(request.user, str(document_id), str(page_id), force=force)
         return Response(
             {
                 "page_id": str(page.pk),
                 "review_status": page.review_status,
                 "job": _job_payload(job),
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class DocumentPageReopenView(APIView):
+    """POST /api/v1/documents/{document_id}/pages/{page_id}/reopen."""
+    throttle_scope = "ai"
+
+    def post(self, request, document_id, page_id):
+        page = IngestionService.reopen_page(request.user, str(document_id), str(page_id))
+        return Response(
+            {
+                "page_id": str(page.pk),
+                "review_status": page.review_status,
+                "is_approved": page.is_approved,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DocumentPageIgnoreView(APIView):
+    """POST /api/v1/documents/{document_id}/pages/{page_id}/ignore."""
+    throttle_scope = "ai"
+
+    def post(self, request, document_id, page_id):
+        page = IngestionService.ignore_page(request.user, str(document_id), str(page_id))
+        return Response(
+            {
+                "page_id": str(page.pk),
+                "review_status": page.review_status,
+                "is_ignored": page.is_ignored,
+                "is_approved": page.is_approved,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DocumentPageUnignoreView(APIView):
+    """POST /api/v1/documents/{document_id}/pages/{page_id}/unignore."""
+    throttle_scope = "ai"
+
+    def post(self, request, document_id, page_id):
+        page = IngestionService.unignore_page(request.user, str(document_id), str(page_id))
+        return Response(
+            {
+                "page_id": str(page.pk),
+                "review_status": page.review_status,
+                "is_ignored": page.is_ignored,
+                "is_approved": page.is_approved,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DocumentPageRevisionsView(APIView):
+    """GET / POST /api/v1/documents/{document_id}/pages/{page_id}/revisions."""
+    throttle_scope = "ai"
+
+    def get(self, request, document_id, page_id):
+        page = IngestionService.get_owned_page(request.user, str(page_id))
+        if str(page.document_id) != str(document_id):
+            raise ValidationError("Page does not belong to this document.")
+        revisions = page.revisions.order_by("-revision_number")
+        return Response(DocumentPageRevisionSerializer(revisions, many=True).data)
+
+    def post(self, request, document_id, page_id):
+        serializer = RevisionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        lines = serializer.validated_data.get("lines")
+        expected_rev = serializer.validated_data.get("expected_revision_number")
+        if lines is not None:
+            revision = IngestionService.create_user_revision(
+                request.user,
+                str(document_id),
+                str(page_id),
+                lines,
+                expected_revision_number=expected_rev,
+            )
+            return Response(
+                {
+                    "revision": DocumentPageRevisionSerializer(revision).data,
+                    "page": DocumentPageSerializer(revision.page).data,
+                    "job": None,
+                },
+                status=status.HTTP_200_OK,
+            )
+        result = IngestionService.finalize_upload(request.user, str(page_id))
+        if str(result["revision"].page.document_id) != str(document_id):
+            raise ValidationError("Page does not belong to this document.")
+        return Response(
+            {
+                "revision": DocumentPageRevisionSerializer(result["revision"]).data,
+                "job": _job_payload(result["job"]),
             },
             status=status.HTTP_202_ACCEPTED,
         )
