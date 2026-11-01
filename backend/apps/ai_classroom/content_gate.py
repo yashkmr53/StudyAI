@@ -37,6 +37,12 @@ CODE_KEYWORDS = {
     "case", "break", "continue", "throw", "try", "catch", "lambda",
 }
 
+AMBIGUOUS_KEYWORDS = {
+    "if", "else", "for", "while", "try", "catch", "case", "break",
+    "switch", "return", "char", "double", "class", "free", "package",
+    "public", "private", "protected", "static", "throw", "continue",
+}
+
 # Common academic & domain-specific terms across CS, Math, Sciences, Engineering, Humanities
 ACADEMIC_TERMS = {
     # Computer Science & Algorithms
@@ -80,9 +86,11 @@ ACADEMIC_TERMS = {
 }
 
 # Regex patterns for formal academic / technical notation
-CODE_OPERATORS_RE = re.compile(r"(\*[\w]+|&[\w]+|->|::|!=|==|<=|>=|;|\b[\w_]+\s*\([^)]*\))")
-MATH_ASYMPTOTIC_RE = re.compile(r"\b([oOΩΘ]\s*\([^)]+\)|omega\([^)]+\)|theta\([^)]+\))", re.IGNORECASE)
-FORMULA_EQUATION_RE = re.compile(r"\b[a-zA-Z]\s*=\s*[\w\+\-\*\/\^]{2,}|\b(dx|dy|dt|lim|log|ln|sin|cos|tan)\b")
+# Ordinary prose contains '-', '/', '(', and ')'; we exclude them from standalone math markers.
+CODE_OPERATORS_RE = re.compile(r"(\*[\w]+|&[\w]+|->|::|!=|==|<=|>=|;\s*$|\bdef\s+[\w_]+\s*\()")
+MATH_ASYMPTOTIC_RE = re.compile(r"\b([oOΩΘ]\s*\([^\)]+\)|omega\([^\)]+\)|theta\([^\)]+\))", re.IGNORECASE)
+FORMULA_EQUATION_RE = re.compile(r"\b[a-zA-Z]\s*=\s*[\w\+\*\^]{2,}|\b(dx|dy|dt|lim|log|ln|sin|cos|tan)\b")
+STRONG_TECHNICAL_MARKERS_RE = re.compile(r"(=>|->|::|!=|==|<=|>=|\$|\\frac|\bdef\b|\bO\([^\)]+\)|[{};])")
 EXPLANATION_PATTERN_RE = re.compile(
     r"\b(is defined as|refers to|means that|characterized by|caused by|results in|consists of|stores|represents|computes)\b",
     re.IGNORECASE,
@@ -167,7 +175,9 @@ def validate_text_academic_content(text: str) -> Tuple[bool, str, dict]:
     # Check for explicit code syntax / keywords
     code_keyword_hits = [w for w in lower_words if w in CODE_KEYWORDS]
     if code_keyword_hits:
-        return True, "", {"matched_signal": "code_keywords", "keywords": code_keyword_hits[:5]}
+        has_unambiguous = any(w not in AMBIGUOUS_KEYWORDS for w in code_keyword_hits)
+        if has_unambiguous or len(set(code_keyword_hits)) >= 2:
+            return True, "", {"matched_signal": "code_keywords", "keywords": code_keyword_hits[:5]}
 
     if CODE_OPERATORS_RE.search(clean_text):
         return True, "", {"matched_signal": "code_operators"}
@@ -178,6 +188,10 @@ def validate_text_academic_content(text: str) -> Tuple[bool, str, dict]:
 
     if FORMULA_EQUATION_RE.search(clean_text):
         return True, "", {"matched_signal": "math_formula"}
+
+    # Notes with >= 5 words containing strong technical markers bypass generic short-content rejection
+    if word_count >= 5 and STRONG_TECHNICAL_MARKERS_RE.search(clean_text):
+        return True, "", {"matched_signal": "strong_technical_markers"}
 
     # Check for conceptual explanations or questions
     if EXPLANATION_PATTERN_RE.search(clean_text):

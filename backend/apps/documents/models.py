@@ -43,6 +43,7 @@ class Document(models.Model):
     schema_version = models.CharField(max_length=16, default="1")
     # Plain UUID until the references app gains its model (Phase 5); no FK yet.
     reference_book_id = models.UUIDField(null=True, blank=True)
+    force_include_line_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

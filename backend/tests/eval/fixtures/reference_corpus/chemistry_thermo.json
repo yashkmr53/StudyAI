@@ -1,0 +1,21 @@
+{
+  "title": "OpenStax Chemistry: Chemical Thermodynamics and Kinetics",
+  "subject": "Chemistry",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Thermochemistry",
+      "section": "Enthalpy and Calorimetry",
+      "page_number": 220,
+      "text": "Enthalpy (H) is defined as H = U + PV. The change in enthalpy (Delta H) equals the heat flow at constant pressure: q_p = Delta H. An exothermic reaction releases heat to the surroundings and has Delta H < 0, while an endothermic reaction absorbs heat from the surroundings and has Delta H > 0. Standard enthalpy of formation (Delta H_f^circ) is the enthalpy change for the formation of one mole of a substance in its standard state from its constituent elements in their reference standard states."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Chemical Equilibrium",
+      "section": "Gibbs Free Energy and Equilibrium Constant",
+      "page_number": 280,
+      "text": "Gibbs free energy change determines reaction spontaneity at constant temperature and pressure: Delta G = Delta H - T * Delta S. A process is spontaneous if Delta G < 0, non-spontaneous if Delta G > 0, and at dynamic equilibrium when Delta G = 0. The standard free energy change is related to the equilibrium constant K by Delta G^circ = -R * T * ln(K), where R = 8.314 J/(mol K). When K > 1, Delta G^circ is negative and products are favored at equilibrium."
+    }
+  ]
+}

@@ -53,8 +53,14 @@ def sync_page_approval_and_indexing(document: Document, page: DocumentPage) -> N
     from apps.retrieval.services import enqueue_page_index_job
     from apps.retrieval.models import NoteChunk
 
-    new_hash = _descriptor(document)
-    EnrichedNote.objects.filter(document=document, superseded=False).exclude(content_hash=new_hash).update(ai_stale=True)
+    # Strict locking rule: Always Page first, then Document.
+    # The caller (approve, edit, reopen) already holds the page lock if in atomic block.
+    # Now acquire the document row lock and perform two-way staleness sync.
+    with transaction.atomic():
+        doc = Document.objects.select_for_update().get(id=document.id)
+        new_hash = _descriptor(doc)
+        EnrichedNote.objects.filter(document=doc, superseded=False).exclude(content_hash=new_hash).update(ai_stale=True)
+        EnrichedNote.objects.filter(document=doc, superseded=False, content_hash=new_hash).update(ai_stale=False)
 
     if page.is_approved and not page.is_ignored:
         if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):

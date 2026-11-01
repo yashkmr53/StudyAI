@@ -18,10 +18,20 @@ from apps.subjects.models import Subject
 
 
 class EnrichedNote(models.Model):
+    class Status(models.TextChoices):
+        OK = "ok", "ok"
+        NEEDS_ATTENTION = "needs_attention", "needs_attention"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="enriched_notes")
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.OK)
     content_hash = models.CharField(max_length=64)  # sha256 of descriptor incl. prompt+model+evidence set
+    force_include_hash = models.CharField(max_length=64, blank=True, default="")
+    settings_version = models.CharField(max_length=32, blank=True, default="")
     revision_ids = models.JSONField(default=list)  # source revisions covered
+    evidence_status_by_topic = models.JSONField(default=dict, blank=True)
+    excluded_segments = models.JSONField(default=list, blank=True)
+    diagnostics = models.JSONField(default=dict, blank=True)
     generation_job = models.ForeignKey(Job, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     provider = models.CharField(max_length=64)
     model = models.CharField(max_length=128)
@@ -56,12 +66,28 @@ class EnrichedNoteBlock(models.Model):
         USER_EDITED = "user_edited", "user_edited"
         TRANSCRIBED = "transcribed", "transcribed"
 
+    class BlockKind(models.TextChoices):
+        HEADING = "heading", "heading"
+        STUDENT = "student", "student"
+        ADDITION = "addition", "addition"
+        LEGACY = "legacy", "legacy"
+
+    class RenderAs(models.TextChoices):
+        PROSE = "prose", "prose"
+        CODE = "code", "code"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     enriched_note = models.ForeignKey(EnrichedNote, on_delete=models.CASCADE, related_name="blocks")
     block_index = models.PositiveIntegerField()
+    block_kind = models.CharField(max_length=32, choices=BlockKind.choices, default=BlockKind.LEGACY)
+    render_as = models.CharField(max_length=16, choices=RenderAs.choices, default=RenderAs.PROSE)
+    topic_id = models.CharField(max_length=64, blank=True, default="")
     block_type = models.CharField(max_length=32)  # overview / key_concept / gap_fill …
     title = models.CharField(max_length=255, blank=True)
     content = models.TextField()
+    source_line_ids = models.JSONField(default=list, blank=True)
+    support_status = models.CharField(max_length=32, blank=True, default="")
+    addition_kind = models.CharField(max_length=32, blank=True, default="")
     generation_method = models.CharField(max_length=20, choices=GenerationMethod.choices)
     source_chunk_ids = models.JSONField(default=list)  # chunk ids used to produce this block
     created_at = models.DateTimeField(auto_now_add=True)

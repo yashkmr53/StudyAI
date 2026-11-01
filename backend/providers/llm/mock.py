@@ -181,7 +181,7 @@ class MockLLMProvider:
             prompt = Prompt(name="vision_structured", version="v1", user=prompt)
         return self.generate_structured(prompt=prompt, schema=schema, request_id=request_id)
 
-    def generate_structured(self, *, prompt: Prompt, schema: Union[type, dict] = None, request_id: str, disable_fallback: bool = False) -> StructuredLLMResult:
+    def generate_structured(self, *, prompt: Prompt, schema: Union[type, dict] = None, request_id: str, disable_fallback: bool = False, **kwargs) -> StructuredLLMResult:
         evidence = _evidence_from(prompt)
 
         if prompt.name == "enrichment_draft":
@@ -210,6 +210,59 @@ class MockLLMProvider:
                     "arguments": {"query": "general", "limit": 3},
                     "reasoning": "Searching user notes for grounding",
                 }
+        elif prompt.name == "segment_classifier":
+            import re
+            m = re.findall(r"L(\d+):", prompt.user or "")
+            max_line = max([int(x) for x in m]) if m else 10
+            data = {
+                "segments": [{
+                    "segment_type": "study_notes",
+                    "start_line_number": 1,
+                    "end_line_number": max_line,
+                    "topic_description": "Lecture Notes",
+                    "subject": "Computer Science",
+                    "confidence": 0.95,
+                    "rationale": "Clear academic content",
+                }]
+            }
+        elif prompt.name == "topic_planner":
+            import re
+            labels = re.findall(r"L\d+", prompt.user or "")
+            data = {
+                "topics": [{
+                    "topic_id": "t1",
+                    "title": "Core Concepts",
+                    "description": "Essential lecture topics and key definitions.",
+                    "subject": "Computer Science",
+                    "transcript_line_labels": labels or ["L1"],
+                }],
+                "diagnostics": {},
+            }
+        elif prompt.name == "topic_writer":
+            import re
+            cits = re.findall(r"\[(C\d+)\]", prompt.user or "")
+            cits = list(dict.fromkeys(cits)) or ["C1"]
+            line_ids = re.findall(r"LineID:\s*([a-f0-9\-]+)", prompt.user or "")
+            after_id = line_ids[0] if line_ids else None
+            data = {
+                "additions": [{
+                    "after_line_id": after_id,
+                    "kind": "explanation",
+                    "text": "Supplementary academic explanation grounded in textbook reference.",
+                    "citation_ids": cits[:2],
+                }]
+            }
+        elif prompt.name == "deduplication":
+            data = {
+                "decision": "keep_both",
+                "merged_text": None,
+                "rationale": "Both additions represent distinct perspectives",
+            }
+        elif "verifier" in prompt.name.lower() or "entailment" in prompt.name.lower():
+            if "contradiction" in prompt.name.lower():
+                data = {"verdict": "CONTRADICTED", "rationale": "Refutes mistake"}
+            else:
+                data = {"verdict": "ENTAILED", "rationale": "Strong semantic entailment"}
         else:
             # Default handler for unknown prompts (tests, etc.)
             data = {"result": f"Mock response for {prompt.name}", "status": "ok"}

@@ -1,0 +1,42 @@
+{
+  "title": "OpenStax Computer Science: Operating Systems and Algorithms",
+  "subject": "Computer Science",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Memory Management",
+      "section": "Virtual Memory and Paging",
+      "page_number": 105,
+      "text": "Virtual memory separates user logical memory from physical memory. Paging is a memory-management scheme that permits the physical address space of a process to be noncontiguous. Physical memory is broken into fixed-sized blocks called frames, while logical memory is broken into blocks of the same size called pages. When a CPU generates a logical address, it is divided into a page number (p) and a page offset (d). The page number is used as an index into a page table, which contains the base address of each page in physical memory."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Memory Management",
+      "section": "Page Replacement Algorithms",
+      "page_number": 112,
+      "text": "When a page fault occurs and no physical frame is free, a page replacement algorithm must select an existing frame to overwrite. Common algorithms include First-In, First-Out (FIFO) and Least Recently Used (LRU). FIFO replaces the oldest page loaded into memory, which can suffer from Belady's anomaly where increasing frames increases page faults. LRU associates with each page the time of its last use; when a page must be replaced, LRU chooses that page that has not been used for the longest period of time."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Deadlocks",
+      "section": "Deadlock Characterization and Prevention",
+      "page_number": 140,
+      "text": "A deadlock situation can arise if and only if four conditions hold simultaneously in a system: mutual exclusion, hold and wait, no preemption, and circular wait. Mutual exclusion means at least one resource must be held in a nonshareable mode. Hold and wait means a process must be currently holding at least one resource and requesting additional resources. No preemption means resources cannot be preempted; a resource can be released only voluntarily by the process holding it after that process has completed its task."
+    },
+    {
+      "chunk_index": 3,
+      "chapter": "Algorithms",
+      "section": "Binary Search Trees",
+      "page_number": 210,
+      "text": "A binary search tree (BST) is an ordered node-based binary tree data structure where each node contains a key, and each key in the left subtree is strictly less than the node's key, while each key in the right subtree is strictly greater than or equal to the node's key. Searching, insertion, and deletion operations in a balanced BST run in O(log n) time, whereas in an unbalanced degenerate tree (resembling a linked list), operations can degrade to O(n) worst-case time."
+    },
+    {
+      "chunk_index": 4,
+      "chapter": "Algorithms",
+      "section": "Dynamic Programming",
+      "page_number": 235,
+      "text": "Dynamic programming is an algorithmic paradigm that solves complex problems by breaking them into overlapping subproblems and storing the results of subproblems to avoid redundant computation. The two primary approaches are top-down memoization and bottom-up tabulation. Problems must exhibit optimal substructure and overlapping subproblems to be effectively solved by dynamic programming, such as the 0/1 knapsack problem and shortest path algorithms like Bellman-Ford and Floyd-Warshall."
+    }
+  ]
+}

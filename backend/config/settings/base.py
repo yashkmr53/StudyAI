@@ -277,6 +277,20 @@ PROMETHEUS_METRICS_ENABLED = False
 ENRICHMENT_COALESCE_WINDOW_SECONDS = 300
 ENRICHMENT_CHANGE_MAGNITUDE_THRESHOLD = 0.15
 
+# Topic-based Note Enrichment Settings (Phase 3 PR 2)
+ENRICHMENT_CONCURRENCY = int(os.environ.get("ENRICHMENT_CONCURRENCY", "4"))
+RELEVANCE_MIN_DENSE = float(os.environ.get("RELEVANCE_MIN_DENSE", "0.45"))
+SEGMENT_MIN_CONFIDENCE = float(os.environ.get("SEGMENT_MIN_CONFIDENCE", "0.70"))
+DUP_COSINE = float(os.environ.get("DUP_COSINE", "0.88"))
+RESTATE_COSINE = float(os.environ.get("RESTATE_COSINE", "0.88"))
+SUPPORT_COSINE = float(os.environ.get("SUPPORT_COSINE", "0.75"))
+SUPPORT_LEXICAL = float(os.environ.get("SUPPORT_LEXICAL", "0.30"))
+ENRICHMENT_MAX_LLM_CALLS = int(os.environ.get("ENRICHMENT_MAX_LLM_CALLS", "25"))
+MAX_DEDUPE_PAIRS = int(os.environ.get("MAX_DEDUPE_PAIRS", "6"))
+ENRICHMENT_ENABLE_POSSIBLE_ISSUE = os.environ.get("ENRICHMENT_ENABLE_POSSIBLE_ISSUE", "true").lower() in ("1", "true", "yes")
+PROMPT_VERSION = os.environ.get("ENRICHMENT_PROMPT_VERSION", "topic_enrichment:v1")
+ENRICHMENT_PROCESSING_TIMEOUT = int(os.environ.get("ENRICHMENT_PROCESSING_TIMEOUT", "300"))
+
 # Provider input limits (D5 data-minimization)
 MAX_PROVIDER_INPUT_CHARS = 8000
 

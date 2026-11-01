@@ -39,6 +39,8 @@ class Job(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
     # For enrichment coalescing (B7): link to previous job if this job coalesced
     coalesced_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="coalesced_jobs")
 
@@ -59,18 +61,18 @@ class Job(models.Model):
     def mark_succeeded(self) -> None:
         self.status = self.Status.SUCCEEDED
         self.finished_at = timezone.now()
-        self.save(update_fields=("status", "finished_at"))
+        self.save(update_fields=("status", "finished_at", "metadata"))
 
     def mark_retryable(self, error: str) -> None:
         self.status = self.Status.FAILED_RETRYABLE
         self.last_error = error[:4000]
-        self.save(update_fields=("status", "last_error"))
+        self.save(update_fields=("status", "last_error", "metadata"))
 
     def dead_letter(self, error: str) -> None:
         self.status = self.Status.FAILED_DEAD_LETTER
         self.last_error = error[:4000]
         self.finished_at = timezone.now()
-        self.save(update_fields=("status", "last_error", "finished_at"))
+        self.save(update_fields=("status", "last_error", "finished_at", "metadata"))
 
 
 class JobExecutionState(models.Model):
@@ -91,15 +93,23 @@ class JobExecutionState(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="execution_checkpoints")
     state_json = models.JSONField()  # serialized EnrichmentState at checkpoint
     completed_node = models.CharField(
-        max_length=32,
-        choices=CompletedNode.choices,
+        max_length=64,
         default=CompletedNode.RETRIEVE,
     )
+    topic_id = models.CharField(max_length=64, blank=True, default="")
+    calls_used = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("job", "completed_node", "topic_id"),
+                name="uniq_job_completed_node_topic",
+            ),
+        ]
         indexes = [
             models.Index(fields=("job", "created_at")),
+            models.Index(fields=("job", "completed_node", "topic_id")),
         ]
         ordering = ["-created_at"]
 

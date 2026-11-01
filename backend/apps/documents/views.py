@@ -305,15 +305,58 @@ class DocumentViewSet(
 
     @action(detail=True, methods=["get"], url_path="enrichment")
     def enrichment(self, request, pk=None):
-        """§60: GET /documents/{id}/enrichment."""
-        note = EnrichmentService.latest_note(request.user, str(pk))
-        if note is None:
-            from shared.exceptions import ResourceNotFound
-
-            raise ResourceNotFound("No enrichment exists for this document yet.")
+        """§60: GET /documents/{id}/enrichment — note and latest_job with progress."""
+        from apps.ai_classroom.services import EnrichmentService
         from apps.ai_classroom.views_serializers import EnrichedNoteSerializer
+        from shared.exceptions import ResourceNotFound
 
-        return Response(EnrichedNoteSerializer(note).data)
+        payload = EnrichmentService.get_latest_enrichment_payload(request.user, str(pk))
+        note = payload["note"]
+        latest_job = payload["latest_job"]
+
+        if note is None and latest_job is None:
+            raise ResourceNotFound("No enrichment exists for this document yet.")
+
+        note_data = EnrichedNoteSerializer(note).data if note else None
+        job_data = _enrichment_job_payload(latest_job)
+
+        response_data = {
+            "note": note_data,
+            "enriched_note": note_data,
+            "latest_job": job_data,
+        }
+        if note_data:
+            for k, v in note_data.items():
+                if k not in response_data:
+                    response_data[k] = v
+
+        return Response(response_data)
+
+    @action(detail=True, methods=["post"], url_path="enrichment/regenerate",
+            throttle_classes=[AIBudgetThrottle])
+    def regenerate_enrichment(self, request, pk=None):
+        """POST /documents/{id}/enrichment/regenerate — dispatches new enrichment job."""
+        from apps.ai_classroom.services import EnrichmentService
+        force_rerun = request.data.get("force_rerun", True)
+        job = EnrichmentService.regenerate_enrichment(request.user, str(pk), force_rerun=force_rerun)
+        return Response({"job": _enrichment_job_payload(job)}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["post"], url_path="enrichment/force-include",
+            throttle_classes=[AIBudgetThrottle])
+    def force_include_segments(self, request, pk=None):
+        """POST /documents/{id}/enrichment/force-include — forces segment inclusion and regenerates."""
+        from apps.ai_classroom.services import EnrichmentService
+        from shared.exceptions import ValidationError
+        line_ids = request.data.get("force_include_line_ids", [])
+        if not isinstance(line_ids, list):
+            return Response({"error": "force_include_line_ids must be a list"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            job = EnrichmentService.force_include_segments(request.user, str(pk), line_ids)
+        except ValidationError as e:
+            if getattr(e, "code", None) == "UNKNOWN_LINE_IDS":
+                return Response({"detail": str(e), "code": "UNKNOWN_LINE_IDS"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            raise
+        return Response({"job": _enrichment_job_payload(job)}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["post"], url_path="refresh-ai",
             throttle_classes=[AIBudgetThrottle])
@@ -351,6 +394,83 @@ def _job_payload(job: Job) -> dict:
         "attempt_count": job.attempt_count,
         "idempotency_key": job.idempotency_key,
         "created_at": job.created_at,
+    }
+
+
+def _enrichment_job_payload(job: Optional[Job]) -> Optional[dict]:
+    if not job:
+        return None
+    from apps.jobs.models import JobExecutionState
+
+    checkpoints = list(JobExecutionState.objects.filter(job=job).values("completed_node", "topic_id"))
+    stages = set()
+    topics_completed = set()
+    for cp in checkpoints:
+        stages.add(cp["completed_node"])
+        if cp["topic_id"]:
+            topics_completed.add(cp["topic_id"])
+
+    topics_total = len(topics_completed)
+    plan_cp = next((cp for cp in checkpoints if cp["completed_node"] == "plan"), None)
+    if plan_cp:
+        state_row = JobExecutionState.objects.filter(job=job, completed_node="plan").first()
+        if state_row and isinstance(state_row.state_json, dict):
+            topics_total = len(state_row.state_json.get("topic_plan", {}).get("topics", [])) or topics_total
+
+    OUTCOME_USER_MESSAGES = {
+        "ok": "Enrichment generated successfully.",
+        "needs_attention": "Enrichment completed with items needing review.",
+        "already_up_to_date": "Enrichment is already up to date.",
+        "not_ready": "Please review and approve all note pages first.",
+        "insufficient_content": "Not enough academic content to generate enrichment.",
+        "no_study_content": "No technical study notes identified in transcript.",
+        "coverage_bug": "An internal verification error occurred. Please retry.",
+        "soft_time_limit": "Enrichment is processing; resuming from checkpoint.",
+        "aborted_not_running": "Enrichment was cancelled or reaped.",
+        "superseded_by_newer": "Superseded by a newer enrichment.",
+    }
+    ERROR_CODE_USER_MESSAGES = {
+        "NOT_READY_FOR_ENRICHMENT": "Please review and approve all note pages first.",
+        "INSUFFICIENT_CONTENT": "Not enough academic content to generate enrichment.",
+        "NO_STUDY_CONTENT": "No technical study notes identified in transcript.",
+        "COVERAGE_INVARIANT_FAILED": "An internal verification error occurred. Please retry.",
+        "TIMEOUT_RETRYABLE": "Enrichment is processing; resuming from checkpoint.",
+        "JOB_NOT_RUNNING": "Enrichment was cancelled or reaped.",
+    }
+
+    metadata = getattr(job, "metadata", {}) or {}
+    msg = metadata.get("message")
+    if not msg:
+        err_code = metadata.get("error_code")
+        if err_code in ERROR_CODE_USER_MESSAGES:
+            msg = ERROR_CODE_USER_MESSAGES[err_code]
+        else:
+            outcome = metadata.get("outcome")
+            if outcome in OUTCOME_USER_MESSAGES:
+                msg = OUTCOME_USER_MESSAGES[outcome]
+            elif job.status == Job.Status.RUNNING:
+                msg = "Generating enrichment..."
+            elif job.status == Job.Status.QUEUED:
+                msg = "Enrichment queued..."
+            elif job.status == Job.Status.SUCCEEDED:
+                msg = "Enrichment completed."
+            else:
+                msg = "Enrichment processing failed. Please retry."
+
+    return {
+        "id": str(job.pk),
+        "job_type": job.job_type,
+        "status": job.status,
+        "outcome": metadata.get("outcome", ""),
+        "error_code": metadata.get("error_code", ""),
+        "message": msg,
+        "created_at": job.created_at,
+        "heartbeat_at": getattr(job, "heartbeat_at", None),
+        "progress": {
+            "stages_completed": sorted(list(stages)),
+            "topics_completed": len(topics_completed),
+            "topics_total": max(topics_total, len(topics_completed), 1),
+        },
     }
 
 

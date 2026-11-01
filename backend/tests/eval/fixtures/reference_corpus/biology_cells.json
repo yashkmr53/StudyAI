@@ -1,0 +1,21 @@
+{
+  "title": "OpenStax Biology: Cellular Respiration and Molecular Genetics",
+  "subject": "Biology",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Cellular Energetics",
+      "section": "Glycolysis and Citric Acid Cycle",
+      "page_number": 160,
+      "text": "Cellular respiration breaks down glucose to produce adenosine triphosphate (ATP). Glycolysis occurs in the cytoplasm and converts one glucose molecule into two molecules of pyruvate, generating a net yield of 2 ATP and 2 NADH without requiring molecular oxygen. In the presence of oxygen, pyruvate enters the mitochondrial matrix where it is converted to Acetyl-CoA and enters the citric acid cycle (Krebs cycle), generating NADH, FADH2, and ATP/GTP."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Molecular Genetics",
+      "section": "DNA Replication Machinery",
+      "page_number": 240,
+      "text": "DNA replication is semiconservative: each daughter molecule consists of one parental strand and one newly synthesized strand. DNA helicase unwinds the double helix at the replication fork. DNA polymerase III synthesizes new DNA only in the 5' to 3' direction. The leading strand is synthesized continuously toward the fork, whereas the lagging strand is synthesized discontinuously away from the fork in short Okazaki fragments, which are subsequently joined by DNA ligase."
+    }
+  ]
+}

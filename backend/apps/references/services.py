@@ -129,6 +129,7 @@ def retrieve_reference_context(
         qvec = None
 
     dense_scores: dict[str, float] = {}
+    raw_dense_similarity: dict[str, float] = {}
 
     # Dense leg: pgvector on PostgreSQL; in-memory cosine fallback for SQLite unit tests
     if qvec is not None:
@@ -142,6 +143,7 @@ def retrieve_reference_context(
             )
             for rank, chunk in enumerate(dense_qs, start=1):
                 dense_scores[str(chunk.pk)] = 1.0 / (rrf_k + rank)
+                raw_dense_similarity[str(chunk.pk)] = float(1.0 - chunk.distance)
         else:
             # Portable in-memory cosine ranking for SQLite unit tests
             candidates = list(base_qs.exclude(embedding__isnull=True)[:depth * 2])
@@ -162,11 +164,13 @@ def retrieve_reference_context(
                     sim = float(np.dot(q_arr, e_arr) / (q_norm * (np.linalg.norm(e_arr) or 1.0)))
                     scored.append((sim, ch))
                 scored.sort(key=lambda x: x[0], reverse=True)
-                for rank, (_, ch) in enumerate(scored[:depth], start=1):
+                for rank, (sim, ch) in enumerate(scored[:depth], start=1):
                     dense_scores[str(ch.pk)] = 1.0 / (rrf_k + rank)
+                    raw_dense_similarity[str(ch.pk)] = sim
 
     # 2. Keyword leg: PostgreSQL tsvector search / SQLite icontains fallback
     keyword_scores: dict[str, float] = {}
+    raw_keyword_score: dict[str, float] = {}
     if connection.vendor == "postgresql":
         from django.contrib.postgres.search import SearchQuery, SearchRank
 
@@ -177,15 +181,18 @@ def retrieve_reference_context(
             .filter(kw_rank__gt=0.0)
             .order_by("-kw_rank")[:depth]
         )
+        for rank, chunk in enumerate(keyword_qs, start=1):
+            keyword_scores[str(chunk.pk)] = 1.0 / (rrf_k + rank)
+            raw_keyword_score[str(chunk.pk)] = float(chunk.kw_rank)
     else:
         tokens = [t for t in clean_query.lower().split() if len(t) > 3][:6] or [clean_query]
         token_q = Q()
         for t in tokens:
             token_q |= Q(text__icontains=t)
         keyword_qs = base_qs.filter(token_q)[:depth]
-
-    for rank, chunk in enumerate(keyword_qs, start=1):
-        keyword_scores[str(chunk.pk)] = 1.0 / (rrf_k + rank)
+        for rank, chunk in enumerate(keyword_qs, start=1):
+            keyword_scores[str(chunk.pk)] = 1.0 / (rrf_k + rank)
+            raw_keyword_score[str(chunk.pk)] = 1.0
 
     # 3. Reciprocal Rank Fusion (§14)
     fused: dict[str, float] = {}
@@ -218,6 +225,26 @@ def retrieve_reference_context(
         if not chunk:
             continue
         doc = chunk.reference_document
+
+        # Determine dense cosine score: direct from dense search, or computed on-the-fly for keyword hits
+        if cid in raw_dense_similarity:
+            dense_score = raw_dense_similarity[cid]
+        elif qvec is not None and chunk.embedding:
+            try:
+                emb = chunk.embedding
+                if isinstance(emb, str):
+                    emb = json.loads(emb)
+                e_arr = np.array(emb, dtype=float)
+                q_arr = np.array(qvec, dtype=float)
+                denom = (np.linalg.norm(q_arr) or 1.0) * (np.linalg.norm(e_arr) or 1.0)
+                dense_score = float(np.dot(q_arr, e_arr) / denom)
+            except Exception:
+                dense_score = 0.0
+        else:
+            dense_score = 0.0
+
+        kw_score = raw_keyword_score.get(cid, 0.0)
+
         results.append({
             "chunk_id": str(chunk.pk),
             "document_id": str(doc.pk),
@@ -232,6 +259,9 @@ def retrieve_reference_context(
             "content": chunk.text,
             "snippet": chunk.text[:280],
             "score": round(fused[cid], 6),
+            "rrf_score": round(fused[cid], 6),
+            "dense_score": round(dense_score, 6),
+            "keyword_score": round(kw_score, 6),
             "subject_name": doc.subject.name if doc.subject else None,
         })
 

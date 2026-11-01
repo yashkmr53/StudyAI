@@ -34,10 +34,16 @@ CACHES = {
 STORAGE_BACKEND = "local"
 OBJECT_STORAGE_BACKEND = "local"
 
+# Use mock providers for deterministic tests
+LLM_PROVIDER = "mock"
+LLM_PROVIDER_CHAIN = "mock,mock"
+LLM_DISABLE_FALLBACK = False
+OCR_PROVIDER_CHAIN = "mock,mock"
 WEB_SEARCH_PROVIDER = "mock"
 
 LANGSMITH_TRACING = False
 
 # Use hashing embedder for CI (no ML dependencies)
 EMBEDDING_PROVIDER = "hashing"
-EMBEDDING_MODEL_VERSION = "hashing-384-v1"
+EMBEDDING_MODEL_VERSION = "hashing-1024-v1"
+RELEVANCE_MIN_DENSE = 0.10

@@ -116,3 +116,42 @@ def reap_stuck_ocr_pages_task():
     if reaped:
         logger.warning("Reaped %d stuck OCR pages", reaped)
     return reaped
+
+
+@app.task
+def reap_stuck_enrichment_jobs_task():
+    """Watchdog task reaping enrichment jobs exceeding heartbeat silence threshold (§3.8, §3.10)."""
+    from datetime import timedelta
+    from django.conf import settings
+    from django.db.models import Q
+    from apps.jobs.models import Job
+
+    now = timezone.now()
+    timeout_seconds = int(getattr(settings, "ENRICHMENT_PROCESSING_TIMEOUT", 300))
+    cutoff = now - timedelta(seconds=timeout_seconds)
+
+    stuck_jobs = Job.objects.filter(
+        status=Job.Status.RUNNING,
+    ).filter(
+        Q(job_type="enrich") | Q(job_type="enrichment")
+    ).filter(
+        Q(heartbeat_at__isnull=False, heartbeat_at__lt=cutoff)
+        | Q(heartbeat_at__isnull=True, started_at__isnull=False, started_at__lt=cutoff)
+    )
+
+    reaped = 0
+    for job in stuck_jobs:
+        job.status = Job.Status.CANCELLED
+        job.last_error = "ENRICHMENT_TIMEOUT: Heartbeat silence exceeded threshold."
+        job.metadata.update({
+            "outcome": "aborted_not_running",
+            "error_code": "JOB_NOT_RUNNING",
+            "message": "Enrichment was cancelled or reaped.",
+        })
+        job.finished_at = timezone.now()
+        job.save(update_fields=("status", "last_error", "metadata", "finished_at"))
+        reaped += 1
+
+    if reaped:
+        logger.warning("Reaped %d stuck enrichment jobs", reaped)
+    return reaped

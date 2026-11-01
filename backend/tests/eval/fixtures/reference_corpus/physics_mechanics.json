@@ -1,0 +1,28 @@
+{
+  "title": "OpenStax University Physics: Mechanics and Thermodynamics",
+  "subject": "Physics",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Newton's Laws of Motion",
+      "section": "Forces and Acceleration",
+      "page_number": 150,
+      "text": "Newton's second law of motion states that the acceleration of a system is directly proportional to and in the same direction as the net external force acting on the system, and inversely proportional to its mass: F_net = m * a. Newton's third law states that whenever one body exerts a force on a second body, the first body experiences a force that is equal in magnitude and opposite in direction to the force that it exerts: F_AB = -F_BA. Action and reaction forces act on different interacting bodies, never on the same body."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Work and Kinetic Energy",
+      "section": "The Work-Energy Theorem",
+      "page_number": 182,
+      "text": "The work done on a particle by the net force acting on it is equal to the change in the particle's kinetic energy: W_net = Delta K = 1/2 m v_f^2 - 1/2 m v_i^2. When conservative forces act, the mechanical energy E = K + U is conserved, such that Delta E = 0. Non-conservative forces like friction or air drag dissipate mechanical energy into thermal internal energy."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Thermodynamics",
+      "section": "The First and Second Laws",
+      "page_number": 310,
+      "text": "The first law of thermodynamics is an expression of the principle of conservation of energy: Delta U = Q - W, where Delta U is the change in internal energy, Q is heat added to the system, and W is work done by the system. The second law states that the total entropy of an isolated system always increases over time or remains constant in ideal reversible processes: Delta S >= 0. Heat cannot spontaneously flow from a colder body to a hotter body without external work input."
+    }
+  ]
+}

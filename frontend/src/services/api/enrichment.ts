@@ -34,20 +34,51 @@ interface WireCitation {
 
 interface WireBlock {
   block_index?: number;
+  block_kind?: "heading" | "student" | "addition" | "legacy";
+  render_as?: "prose" | "code";
+  topic_id?: string;
   block_type?: string;
   title?: string;
   content?: string;
+  source_line_ids?: string[];
+  support_status?: string;
+  addition_kind?: string;
   citation?: WireCitation | null;
 }
 
 interface WireEnrichment {
   id?: string;
+  status?: "ok" | "needs_attention";
+  content_hash?: string;
+  force_include_hash?: string;
+  settings_version?: string;
+  evidence_status_by_topic?: Record<string, string>;
+  excluded_segments?: Array<{
+    segment_type: string;
+    start_line_number: number;
+    end_line_number: number;
+    topic_description: string;
+    reason: string;
+    lineage_ids: string[];
+  }>;
   ai_stale?: boolean;
   superseded?: boolean;
   created_at?: string;
   empty_reason?: string;
   blocks?: WireBlock[];
   job_status?: string;
+  latest_job?: {
+    id: string;
+    status: string;
+    outcome?: string;
+    error_code?: string;
+    message?: string;
+    progress?: {
+      stages_completed: string[];
+      topics_completed: number;
+      topics_total: number;
+    };
+  } | null;
 }
 
 function normalizeCitations(block: WireBlock): CitationRef[] {
@@ -76,23 +107,29 @@ function normalizeCitations(block: WireBlock): CitationRef[] {
 
 function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
   let state: EnrichmentState = "not_enriched";
-  if (wire.job_status === "running" || wire.job_status === "queued") {
+  const jobStatus = wire.latest_job?.status ?? wire.job_status;
+  const outcome = wire.latest_job?.outcome;
+
+  if (jobStatus === "running" || jobStatus === "queued") {
     state = "enriching";
   } else if (wire.ai_stale) {
     state = "out_of_date";
   } else if (Array.isArray(wire.blocks) && wire.blocks.length > 0) {
     state = "enriched";
   } else if (
+    outcome === "insufficient_content" ||
+    outcome === "no_study_content" ||
     wire.empty_reason === "insufficient_content" ||
     wire.empty_reason === "blank_content" ||
     wire.empty_reason === "unreadable_content" ||
-    (wire.job_status === "succeeded" && (!wire.blocks || wire.blocks.length === 0))
+    (jobStatus === "succeeded" && (!wire.blocks || wire.blocks.length === 0))
   ) {
     state = "insufficient_content";
   } else if (
-    wire.job_status === "failed_retryable" ||
-    wire.job_status === "failed_dead_letter" ||
-    wire.job_status === "cancelled"
+    jobStatus === "failed_retryable" ||
+    jobStatus === "failed_dead_letter" ||
+    jobStatus === "cancelled" ||
+    outcome === "coverage_bug"
   ) {
     state = "failed";
   }
@@ -103,6 +140,11 @@ function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
       title: b.title ?? "",
       content: b.content ?? "",
       citations: normalizeCitations(b),
+      blockKind: b.block_kind ?? "legacy",
+      renderAs: b.render_as ?? "prose",
+      topicId: b.topic_id,
+      additionKind: b.addition_kind,
+      supportStatus: b.support_status,
     }))
     .sort((a, b) => a.index - b.index);
 
@@ -110,20 +152,25 @@ function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
     state,
     blocks,
     generatedAt: wire.created_at ?? null,
-    emptyReason: wire.empty_reason ?? null,
+    emptyReason: wire.empty_reason ?? (wire.latest_job?.message || null),
+    status: wire.status,
+    excludedSegments: wire.excluded_segments,
+    latestJob: wire.latest_job,
+    aiStale: wire.ai_stale,
   };
 }
 
 export async function parseEnrichment(payload: unknown): Promise<EnrichmentSnapshot> {
-  // The endpoint may answer with the enriched note object or a bare status.
+  // The endpoint may answer with the enriched note object or {note, latest_job}.
   if (!payload || typeof payload !== "object") {
     return { state: "not_enriched", blocks: [], generatedAt: null };
   }
   const record = payload as Record<string, unknown>;
-  const wire: WireEnrichment =
-    "ai_stale" in record || "blocks" in record
-      ? (record as WireEnrichment)
-      : ((record.enriched_note as WireEnrichment | undefined) ?? {});
+  const rawNote = (record.note ?? record.enriched_note ?? record) as WireEnrichment;
+  const wire: WireEnrichment = {
+    ...rawNote,
+    latest_job: (record.latest_job as WireEnrichment["latest_job"]) ?? rawNote.latest_job,
+  };
   return snapshotFromWire(wire);
 }
 
@@ -165,5 +212,37 @@ export const enrichmentApi = {
     } catch {
       return null;
     }
+  },
+
+  /** Dispatches an enrichment regeneration job with run nonce (§3.9). */
+  async regenerate(
+    documentId: string,
+    forceRerun: boolean = true,
+  ): Promise<{ queued: boolean; jobId: string | null }> {
+    const payload = await apiRequest<Record<string, unknown>>(
+      `/documents/${documentId}/enrichment/regenerate`,
+      { method: "POST", body: { force_rerun: forceRerun } },
+    );
+    const job = payload?.job as { id?: string } | null | undefined;
+    return {
+      queued: payload !== null,
+      jobId: job?.id ?? null,
+    };
+  },
+
+  /** Forces segment inclusion and automatically dispatches a regeneration job (§3.9). */
+  async forceInclude(
+    documentId: string,
+    lineIds: string[],
+  ): Promise<{ queued: boolean; jobId: string | null }> {
+    const payload = await apiRequest<Record<string, unknown>>(
+      `/documents/${documentId}/enrichment/force-include`,
+      { method: "POST", body: { force_include_line_ids: lineIds } },
+    );
+    const job = payload?.job as { id?: string } | null | undefined;
+    return {
+      queued: payload !== null,
+      jobId: job?.id ?? null,
+    };
   },
 };

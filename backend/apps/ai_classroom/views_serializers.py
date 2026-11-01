@@ -13,9 +13,11 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = EnrichedNote
         fields = (
-            "id", "document", "revision_ids", "provider", "model",
-            "prompt_version", "schema_version", "ai_stale", "empty_reason", "blocks",
-            "job_status", "created_at",
+            "id", "document", "status", "content_hash", "force_include_hash",
+            "settings_version", "revision_ids", "evidence_status_by_topic",
+            "excluded_segments", "diagnostics", "provider", "model",
+            "prompt_version", "schema_version", "ai_stale", "empty_reason",
+            "blocks", "job_status", "created_at",
         )
 
     def get_blocks(self, obj) -> list:
@@ -24,9 +26,15 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
             citation = getattr(block, "citation", None)
             out.append({
                 "block_index": block.block_index,
+                "block_kind": getattr(block, "block_kind", "legacy"),
+                "render_as": getattr(block, "render_as", "prose"),
+                "topic_id": getattr(block, "topic_id", ""),
                 "block_type": block.block_type,
                 "title": block.title,
                 "content": block.content,
+                "source_line_ids": getattr(block, "source_line_ids", []),
+                "support_status": getattr(block, "support_status", ""),
+                "addition_kind": getattr(block, "addition_kind", ""),
                 "generation_method": block.generation_method,
                 "source_chunk_ids": block.source_chunk_ids,
                 "citation": (
