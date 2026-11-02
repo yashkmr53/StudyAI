@@ -287,7 +287,7 @@ SUPPORT_COSINE = float(os.environ.get("SUPPORT_COSINE", "0.75"))
 SUPPORT_LEXICAL = float(os.environ.get("SUPPORT_LEXICAL", "0.30"))
 ENRICHMENT_MAX_LLM_CALLS = int(os.environ.get("ENRICHMENT_MAX_LLM_CALLS", "25"))
 MAX_DEDUPE_PAIRS = int(os.environ.get("MAX_DEDUPE_PAIRS", "6"))
-ENRICHMENT_ENABLE_POSSIBLE_ISSUE = os.environ.get("ENRICHMENT_ENABLE_POSSIBLE_ISSUE", "true").lower() in ("1", "true", "yes")
+ENRICHMENT_ENABLE_POSSIBLE_ISSUE = os.environ.get("ENRICHMENT_ENABLE_POSSIBLE_ISSUE", "false").lower() in ("1", "true", "yes")
 PROMPT_VERSION = os.environ.get("ENRICHMENT_PROMPT_VERSION", "topic_enrichment:v1")
 ENRICHMENT_PROCESSING_TIMEOUT = int(os.environ.get("ENRICHMENT_PROCESSING_TIMEOUT", "300"))
 

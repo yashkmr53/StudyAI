@@ -5,17 +5,164 @@
   "chunks": [
     {
       "chunk_index": 0,
-      "chapter": "Cellular Energetics",
-      "section": "Glycolysis and Citric Acid Cycle",
-      "page_number": 160,
-      "text": "Cellular respiration breaks down glucose to produce adenosine triphosphate (ATP). Glycolysis occurs in the cytoplasm and converts one glucose molecule into two molecules of pyruvate, generating a net yield of 2 ATP and 2 NADH without requiring molecular oxygen. In the presence of oxygen, pyruvate enters the mitochondrial matrix where it is converted to Acetyl-CoA and enters the citric acid cycle (Krebs cycle), generating NADH, FADH2, and ATP/GTP."
+      "chapter": "Cellular Metabolism",
+      "section": "Cellular Respiration Overview",
+      "page_number": 120,
+      "text": "Cellular respiration is the biochemical process by which cells extract energy from glucose and other organic molecules to produce adenosine triphosphate (ATP). The overall balanced equation for aerobic respiration is C6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + approximately 30 to 32 ATP. The process proceeds through glycolysis, pyruvate oxidation, the citric acid cycle, and oxidative phosphorylation."
     },
     {
       "chunk_index": 1,
+      "chapter": "Cellular Metabolism",
+      "section": "Glycolysis Pathway",
+      "page_number": 124,
+      "text": "Glycolysis occurs in the cytoplasm of virtually all living cells and does not require oxygen (anaerobic). It breaks down one molecule of glucose (6 carbons) into two molecules of pyruvate (3 carbons each). The pathway comprises an energy-investment phase (consuming 2 ATP) and an energy-payoff phase (producing 4 ATP via substrate-level phosphorylation and 2 NADH), yielding a net gain of 2 ATP and 2 NADH per glucose."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Cellular Metabolism",
+      "section": "Pyruvate Oxidation and Acetyl-CoA",
+      "page_number": 128,
+      "text": "In eukaryotic cells, pyruvate produced during glycolysis is transported into the mitochondrial matrix. There, the pyruvate dehydrogenase multi-enzyme complex oxidizes pyruvate, releasing one molecule of carbon dioxide (CO2), reducing NAD+ to NADH, and attaching the remaining two-carbon acetyl group to coenzyme A to form acetyl-CoA."
+    },
+    {
+      "chunk_index": 3,
+      "chapter": "Cellular Metabolism",
+      "section": "Citric Acid Cycle Krebs Cycle",
+      "page_number": 132,
+      "text": "The citric acid cycle (Krebs cycle or TCA cycle) takes place in the mitochondrial matrix. Each two-carbon acetyl unit from acetyl-CoA combines with four-carbon oxaloacetate to form six-carbon citrate. Across eight enzymatic steps, citrate is oxidized back to oxaloacetate, releasing 2 CO2 and generating 3 NADH, 1 FADH2, and 1 ATP (or GTP) per acetyl-CoA (double this per initial glucose molecule)."
+    },
+    {
+      "chunk_index": 4,
+      "chapter": "Cellular Metabolism",
+      "section": "Oxidative Phosphorylation and Electron Transport",
+      "page_number": 136,
+      "text": "Oxidative phosphorylation accounts for the majority of ATP synthesized during aerobic respiration. High-energy electrons from NADH and FADH2 are transferred through Complexes I through IV in the inner mitochondrial membrane to molecular oxygen (O2), which is reduced to water (H2O). As electrons move down the chain, protons are pumped from the matrix into the intermembrane space."
+    },
+    {
+      "chunk_index": 5,
+      "chapter": "Cellular Metabolism",
+      "section": "Chemiosmosis and ATP Synthase",
+      "page_number": 140,
+      "text": "The accumulation of protons in the intermembrane space establishes a proton-motive force (an electrochemical gradient). Protons diffuse back into the mitochondrial matrix through ATP synthase complexes. The exergonic flow of protons drives rotational catalysis in ATP synthase, phosphorylating ADP and inorganic phosphate into ATP via chemiosmosis."
+    },
+    {
+      "chunk_index": 6,
+      "chapter": "Cellular Metabolism",
+      "section": "Fermentation Pathways",
+      "page_number": 144,
+      "text": "In the absence of oxygen, cells undergo fermentation to regenerate NAD+ from NADH so that glycolysis can continue producing ATP by substrate-level phosphorylation. In lactic acid fermentation (in muscle cells and yogurt bacteria), pyruvate is reduced to lactate. In alcoholic fermentation (in yeasts), pyruvate is converted into acetaldehyde and then reduced to ethanol and CO2."
+    },
+    {
+      "chunk_index": 7,
       "chapter": "Molecular Genetics",
-      "section": "DNA Replication Machinery",
+      "section": "DNA Structure and Double Helix",
+      "page_number": 160,
+      "text": "DNA is a double-stranded helical polymer composed of four nucleotide subunits: adenine (A), thymine (T), guanine (G), and cytosine (C). The two antiparallel sugar-phosphate backbones run in opposite 5-prime to 3-prime directions. Complementary base pairing occurs via hydrogen bonds: adenine pairs with thymine (two hydrogen bonds), and guanine pairs with cytosine (three hydrogen bonds)."
+    },
+    {
+      "chunk_index": 8,
+      "chapter": "Molecular Genetics",
+      "section": "Semiconservative Replication Model",
+      "page_number": 164,
+      "text": "DNA replication is semiconservative: each of the two parental strands acts as a template for the synthesis of a new complementary daughter strand. The classic Meselson-Stahl experiment (1958) using nitrogen isotopes 15N and 14N conclusively demonstrated that replicated DNA molecules consist of one original parental strand and one newly synthesized daughter strand."
+    },
+    {
+      "chunk_index": 9,
+      "chapter": "Molecular Genetics",
+      "section": "Replication Fork and Unwinding Enzymes",
+      "page_number": 168,
+      "text": "Replication initiates at specific origins of replication. DNA helicase unwinds the double helix by breaking hydrogen bonds between base pairs, generating a Y-shaped replication fork. Single-strand binding proteins (SSBs) stabilize the separated single strands. Topoisomerase (DNA gyrase) relieves torsional strain and supercoiling ahead of the advancing replication fork."
+    },
+    {
+      "chunk_index": 10,
+      "chapter": "Molecular Genetics",
+      "section": "RNA Priming by Primase",
+      "page_number": 172,
+      "text": "DNA polymerases cannot initiate synthesis of a polynucleotide de novo; they can only add nucleotides to the free 3-prime hydroxyl (-OH) group of a pre-existing strand. RNA primase synthesizes a short RNA primer (approximately 5 to 10 nucleotides long) complementary to the DNA template, providing the essential starting 3-prime end for DNA polymerase."
+    },
+    {
+      "chunk_index": 11,
+      "chapter": "Molecular Genetics",
+      "section": "Directionality of Synthesis 5 to 3",
+      "page_number": 176,
+      "text": "DNA polymerases synthesize new DNA strands strictly in the 5-prime to 3-prime direction, reading the template strand in the 3-prime to 5-prime direction. As a consequence of the antiparallel architecture of the double helix, the leading strand is synthesized continuously toward the replication fork, whereas the lagging strand is synthesized discontinuously away from the fork in short segments called Okazaki fragments."
+    },
+    {
+      "chunk_index": 12,
+      "chapter": "Molecular Genetics",
+      "section": "Okazaki Fragment Processing and Ligase",
+      "page_number": 180,
+      "text": "On the lagging strand, each Okazaki fragment requires a distinct RNA primer. DNA polymerase I removes the RNA primers using its 5-to-3 exonuclease activity and replaces them with DNA nucleotides. DNA ligase then catalyzes the formation of covalent phosphodiester bonds between the 3-prime hydroxyl of one fragment and the 5-prime phosphate of the adjacent fragment, sealing the continuous strand."
+    },
+    {
+      "chunk_index": 13,
+      "chapter": "Molecular Genetics",
+      "section": "Proofreading and Mismatch Repair",
+      "page_number": 184,
+      "text": "DNA polymerase III exhibits high fidelity due to its intrinsic 3-prime to 5-prime exonuclease proofreading activity. When an incorrect nucleotide is incorporated, the enzyme stalls, excises the mismatched base, and resumes synthesis. Post-replication mismatch repair enzymes scan the daughter strand to correct errors that escaped proofreading, reducing error rates to approximately one in a billion base pairs."
+    },
+    {
+      "chunk_index": 14,
+      "chapter": "Molecular Genetics",
+      "section": "Telomeres and Telomerase",
+      "page_number": 188,
+      "text": "Linear eukaryotic chromosomes encounter the end-replication problem because removal of the terminal RNA primer on the lagging strand leaves a gap that standard DNA polymerases cannot fill. Telomeres are repetitive, non-coding nucleoprotein caps (TTAGGG in humans) at chromosome ends. The ribonucleoprotein enzyme telomerase extends telomeres in germ cells and stem cells using an internal RNA template."
+    },
+    {
+      "chunk_index": 15,
+      "chapter": "Gene Expression",
+      "section": "Transcription in Eukaryotes",
+      "page_number": 210,
+      "text": "Transcription is the synthesis of RNA molecules using a DNA template. RNA polymerase II binds to promoter sequences like the TATA box with the assistance of transcription factors. RNA polymerase synthesizes messenger RNA (mRNA) in the 5-prime to 3-prime direction without requiring an initial primer. In eukaryotes, primary transcripts undergo 5-prime capping, polyadenylation (poly-A tail), and splicing of introns."
+    },
+    {
+      "chunk_index": 16,
+      "chapter": "Gene Expression",
+      "section": "Genetic Code and Translation",
+      "page_number": 215,
+      "text": "The genetic code is degenerate, unambiguous, and universal: 64 triplet nucleotide codons specify 20 amino acids, including the start codon AUG (methionine) and three stop codons (UAA, UAG, UGA). Translation takes place on ribosomes in the cytoplasm, where transfer RNA (tRNA) molecules matching mRNA codons via anticodons deliver corresponding amino acids to the growing polypeptide chain."
+    },
+    {
+      "chunk_index": 17,
+      "chapter": "Cell Biology",
+      "section": "Cell Membrane Structure and Fluid Mosaic",
       "page_number": 240,
-      "text": "DNA replication is semiconservative: each daughter molecule consists of one parental strand and one newly synthesized strand. DNA helicase unwinds the double helix at the replication fork. DNA polymerase III synthesizes new DNA only in the 5' to 3' direction. The leading strand is synthesized continuously toward the fork, whereas the lagging strand is synthesized discontinuously away from the fork in short Okazaki fragments, which are subsequently joined by DNA ligase."
+      "text": "The plasma membrane is described by the fluid mosaic model as a bilayer of amphipathic phospholipids with hydrophilic phosphate heads exposed to aqueous environments and hydrophobic fatty acid tails sequestered inside. Cholesterol regulates membrane fluidity, while integral and peripheral proteins carry out transport, signal transduction, and cell-cell recognition."
+    },
+    {
+      "chunk_index": 18,
+      "chapter": "Cell Biology",
+      "section": "Passive and Active Transport",
+      "page_number": 245,
+      "text": "Passive transport (simple diffusion, facilitated diffusion, osmosis) moves solutes down their concentration gradients without cellular energy expenditure. Active transport uses ATP energy to move solutes against their electrochemical gradients, as exemplified by the sodium-potassium pump (Na+/K+ ATPase), which pumps 3 Na+ ions out of the cell and 2 K+ ions into the cell per ATP hydrolyzed."
+    },
+    {
+      "chunk_index": 19,
+      "chapter": "Cell Division",
+      "section": "Mitosis and the Cell Cycle",
+      "page_number": 270,
+      "text": "The eukaryotic cell cycle comprises interphase (G1, S, G2 phases) and M phase (mitosis and cytokinesis). Mitosis proceeds through prophase, prometaphase, metaphase, anaphase, and telophase. During anaphase, sister chromatids are pulled apart by kinetochore microtubules toward opposite centrosome poles, ensuring identical diploid genomic transmission to daughter cells."
+    },
+    {
+      "chunk_index": 20,
+      "chapter": "Cell Division",
+      "section": "Meiosis and Genetic Variation",
+      "page_number": 275,
+      "text": "Meiosis is a specialized two-stage nuclear division (meiosis I and II) that reduces chromosome number from diploid (2n) to haploid (n) to produce gametes. Crossing over between non-sister homologous chromatids during prophase I (synapsis) and independent assortment of maternal and paternal chromosomes during metaphase I generate immense genetic diversity."
+    },
+    {
+      "chunk_index": 21,
+      "chapter": "Photosynthesis",
+      "section": "Light Reactions and Thylakoids",
+      "page_number": 300,
+      "text": "Photosynthesis takes place in chloroplasts. In the light-dependent reactions within thylakoid membranes, chlorophyll pigments absorb photon energy, exciting electrons through Photosystems II and I. Photolysis of water releases oxygen (O2) and protons. The photosynthetic electron transport chain produces ATP via photophosphorylation and NADPH to power the Calvin cycle."
+    },
+    {
+      "chunk_index": 22,
+      "chapter": "Photosynthesis",
+      "section": "Calvin Cycle and Carbon Fixation",
+      "page_number": 305,
+      "text": "The light-independent reactions (Calvin cycle) occur in the chloroplast stroma. The enzyme RuBisCO fixes CO2 onto five-carbon ribulose 1,5-bisphosphate (RuBP), forming 3-phosphoglycerate (3-PGA). ATP and NADPH reduce 3-PGA into glyceraldehyde 3-phosphate (G3P), which is used to synthesize glucose and regenerate RuBP."
     }
   ]
 }

@@ -365,3 +365,276 @@ class TestRenderNode(SimpleTestCase):
         self.assertEqual(len(citations), 1)
         self.assertEqual(citations[0]["citation_number"], 1)
         self.assertEqual(citations[0]["source_title"], "Operating Systems")
+
+
+class TestBudgetAndFeatureFlagPipeline(SimpleTestCase):
+    @patch("ai.langgraph.nodes.topic_writer_node.get_embedding_provider")
+    @patch("ai.langgraph.nodes.topic_writer_node.get_llm_provider")
+    def test_possible_issue_flag_off_parity(self, mock_llm, mock_emb):
+        """When ENRICHMENT_ENABLE_POSSIBLE_ISSUE is False, possible_issue is forbidden in prompt."""
+        mock_provider = MagicMock()
+        mock_llm.return_value = mock_provider
+        mock_provider.generate_structured.return_value = MagicMock(
+            data={"additions": [{"after_line_id": None, "kind": "explanation", "text": "Valid explanation", "citation_ids": ["C1"]}]}
+        )
+        mock_embed = MagicMock()
+        mock_emb.return_value = mock_embed
+        # side_effect: 1st call = student embeddings, 2nd call = addition embedding (different vector → not restatement)
+        mock_embed.embed.side_effect = [
+            [[1.0, 0.0]],    # student text embedding
+            [[0.0, 1.0]],    # addition text embedding (cosine=0.0 with student → not a restatement)
+        ]
+
+        topic = {"topic_id": "t1", "title": "Topic 1", "lineage_ids": ["lid-1"]}
+        research = TopicResearchResult(
+            topic_id="t1",
+            evidence_status="sufficient",
+            evidence_items=[
+                EvidenceItem(
+                    citation_id="C1", chunk_id="chk-1", document_id="doc-1",
+                    source_title="Book", page_start=1, page_end=2,
+                    snippet="Textbook snippet", best_sentence="Textbook sentence",
+                    dense_score=0.85, rrf_score=0.03,
+                )
+            ],
+        )
+        all_lines = {"lid-1": {"lineage_id": "lid-1", "text": "Student note text"}}
+
+        with override_settings(ENRICHMENT_ENABLE_POSSIBLE_ISSUE=False):
+            res = topic_writer_node(topic, research, all_lines, job_id="job-1")
+            prompt_called = mock_provider.generate_structured.call_args[1]["prompt"]
+            self.assertNotIn("possible_issue", prompt_called.user)
+            self.assertIn("explanation", prompt_called.user)
+            # Should have 1 student block + 1 addition
+            student_blocks = [b for b in res.blocks if b.type == "student"]
+            addition_blocks = [b for b in res.blocks if b.type == "addition"]
+            self.assertEqual(len(student_blocks), 1)
+            self.assertEqual(len(addition_blocks), 1)
+
+    @patch("ai.langgraph.nodes.topic_writer_node.get_embedding_provider")
+    @patch("ai.langgraph.nodes.topic_writer_node.get_llm_provider")
+    def test_restatement_filter_with_correction_exemption(self, mock_llm, mock_emb):
+        """Restatement of student line is dropped for explanation, but correction survives."""
+        mock_provider = MagicMock()
+        mock_llm.return_value = mock_provider
+        mock_provider.generate_structured.return_value = MagicMock(
+            data={
+                "additions": [
+                    {"after_line_id": "lid-1", "kind": "explanation", "text": "Pointers store addresses in C", "citation_ids": ["C1"]},
+                    {"after_line_id": "lid-1", "kind": "possible_issue", "text": "Pointers do not store values", "citation_ids": ["C1"]},
+                ]
+            }
+        )
+        mock_embed = MagicMock()
+        mock_emb.return_value = mock_embed
+        # Student embedding, then addition embeddings (high similarity = restatement for explanation)
+        mock_embed.embed.return_value = [[1.0, 0.0], [0.99, 0.01], [0.99, 0.01]]
+
+        topic = {"topic_id": "t1", "title": "Topic 1", "lineage_ids": ["lid-1"]}
+        research = TopicResearchResult(
+            topic_id="t1",
+            evidence_status="sufficient",
+            evidence_items=[
+                EvidenceItem(
+                    citation_id="C1", chunk_id="chk-1", document_id="doc-1",
+                    source_title="Book", page_start=1, page_end=2,
+                    snippet="Textbook snippet", best_sentence="Textbook sentence",
+                    dense_score=0.85, rrf_score=0.03,
+                )
+            ],
+        )
+        all_lines = {"lid-1": {"lineage_id": "lid-1", "text": "Pointers store memory addresses in C."}}
+
+        with override_settings(ENRICHMENT_ENABLE_POSSIBLE_ISSUE=True):
+            res = topic_writer_node(topic, research, all_lines, job_id="job-1")
+            addition_kinds = [b.addition_kind for b in res.blocks if b.type == "addition"]
+            # Explanation should be dropped (restatement); possible_issue should survive (exempt)
+            self.assertNotIn("explanation", addition_kinds)
+
+    @patch("ai.langgraph.nodes.sanitize_dedupe_node.get_llm_provider")
+    @patch("ai.langgraph.nodes.sanitize_dedupe_node.get_embedding_provider")
+    def test_dedupe_keep_both_and_pair_capping(self, mock_emb, mock_llm):
+        """keep_both decision keeps both additions; pairs evaluated are capped at MAX_DEDUPE_PAIRS."""
+        mock_embed = MagicMock()
+        mock_emb.return_value = mock_embed
+        mock_embed.embed.return_value = [[1.0, 0.0]] * 4
+
+        mock_provider = MagicMock()
+        mock_llm.return_value = mock_provider
+        mock_provider.generate_structured.return_value = MagicMock(
+            data=MagicMock(decision="keep_both", merged_text=None, rationale="Both provide complementary value")
+        )
+
+        sections = {
+            "t1": EnrichedSection(
+                topic_id="t1",
+                title="Topic 1",
+                blocks=[
+                    SectionBlock(type="addition", text="Addition 1", citation_ids=["C1"]),
+                    SectionBlock(type="addition", text="Addition 2", citation_ids=["C1"]),
+                ],
+            ),
+            "t2": EnrichedSection(
+                topic_id="t2",
+                title="Topic 2",
+                blocks=[
+                    SectionBlock(type="addition", text="Addition 3", citation_ids=["C1"]),
+                    SectionBlock(type="addition", text="Addition 4", citation_ids=["C1"]),
+                ],
+            ),
+        }
+        # Must also provide research_by_topic with valid citation IDs for sanitization
+        research = {
+            "t1": TopicResearchResult(
+                topic_id="t1", evidence_status="sufficient",
+                evidence_items=[EvidenceItem(
+                    citation_id="C1", chunk_id="chk-1", document_id="doc-1",
+                    source_title="Book", page_start=1, page_end=2,
+                    snippet="Snippet", dense_score=0.85, rrf_score=0.03,
+                )],
+            ),
+            "t2": TopicResearchResult(
+                topic_id="t2", evidence_status="sufficient",
+                evidence_items=[EvidenceItem(
+                    citation_id="C1", chunk_id="chk-2", document_id="doc-1",
+                    source_title="Book", page_start=3, page_end=4,
+                    snippet="Snippet", dense_score=0.80, rrf_score=0.03,
+                )],
+            ),
+        }
+        state = {
+            "sections_by_topic": {k: v.model_dump() for k, v in sections.items()},
+            "research_by_topic": {k: v.model_dump() for k, v in research.items()},
+        }
+
+        res = sanitize_and_dedupe_node(state)
+        total_additions = sum(
+            len([b for b in sec["blocks"] if b["type"] == "addition"])
+            for sec in res["sections_by_topic"].values()
+        )
+        self.assertEqual(total_additions, 4)
+        self.assertLessEqual(res.get("dedupe_pairs_evaluated", 0), 6)
+
+    @patch("ai.langgraph.nodes.topic_writer_node.get_embedding_provider")
+    @patch("ai.langgraph.nodes.topic_writer_node.get_llm_provider")
+    def test_budget_exhaustion_records_dropped_for_budget(self, mock_llm, mock_emb):
+        """When evidence is 'none', writer skips and returns student blocks only."""
+        mock_provider = MagicMock()
+        mock_llm.return_value = mock_provider
+        mock_embed = MagicMock()
+        mock_emb.return_value = mock_embed
+
+        topic = {"topic_id": "t1", "title": "Topic 1", "lineage_ids": ["lid-1"]}
+        research = TopicResearchResult(
+            topic_id="t1",
+            evidence_status="none",
+            evidence_items=[],
+        )
+        all_lines = {"lid-1": {"lineage_id": "lid-1", "text": "Student note text"}}
+
+        res = topic_writer_node(topic, research, all_lines, job_id="job-1")
+        student_blocks = [b for b in res.blocks if b.type == "student"]
+        addition_blocks = [b for b in res.blocks if b.type == "addition"]
+        self.assertEqual(len(student_blocks), 1)
+        self.assertEqual(len(addition_blocks), 0)
+        self.assertTrue(res.no_reference_found)
+
+
+class TestCorrectionLanguageFilter(SimpleTestCase):
+    """Tests for the correction-language detection and filtering logic."""
+
+    def test_correction_language_detection(self):
+        """_contains_correction_language correctly identifies correction text."""
+        from ai.langgraph.nodes.verification_node import _contains_correction_language
+
+        # Should detect corrections (deictic + correction word)
+        self.assertTrue(_contains_correction_language(
+            "This statement is incorrect because Newton's third law states..."
+        ))
+        self.assertTrue(_contains_correction_language(
+            "This claim is wrong as per the textbook definition."
+        ))
+        self.assertTrue(_contains_correction_language(
+            "Your answer is not correct according to the reference material."
+        ))
+        self.assertTrue(_contains_correction_language(
+            "This assertion is a common misconception in thermodynamics."
+        ))
+
+        # Should NOT detect (no deictic reference or no correction word)
+        self.assertFalse(_contains_correction_language(
+            "The net force equals mass times acceleration."
+        ))
+        self.assertFalse(_contains_correction_language(
+            "Unlike a common misconception, entropy always increases."
+        ))
+        self.assertFalse(_contains_correction_language(
+            "Newton's third law states that action and reaction are equal and opposite."
+        ))
+        self.assertFalse(_contains_correction_language(
+            "This formula is actually derived from the Ideal Gas Law."
+        ))
+
+    def test_correction_leak_dropped_when_possible_issue_disabled(self):
+        """Explanation with correction language is dropped when ENRICHMENT_ENABLE_POSSIBLE_ISSUE=False."""
+        from ai.langgraph.nodes.verification_node import verification_node
+
+        sections = {
+            "t1": EnrichedSection(
+                topic_id="t1", title="Topic 1",
+                blocks=[
+                    SectionBlock(type="student", text="Force pairs cancel out.", line_ids=["lid-1"]),
+                    SectionBlock(
+                        type="addition", text="This statement is incorrect because Newton's third law forces act on different objects.",
+                        citation_ids=["C1"], addition_kind="explanation", support_status="unverified",
+                    ),
+                    SectionBlock(
+                        type="addition", text="In classical mechanics, F=ma defines the net force.",
+                        citation_ids=["C1"], addition_kind="explanation", support_status="unverified",
+                    ),
+                ],
+            ),
+        }
+        research = {
+            "t1": TopicResearchResult(
+                topic_id="t1", evidence_status="sufficient",
+                evidence_items=[EvidenceItem(
+                    citation_id="C1", chunk_id="chk-1", document_id="doc-1",
+                    source_title="Physics Book", page_start=1, page_end=2,
+                    snippet="Newton's third law: forces act on different objects and do not cancel.",
+                    best_sentence="Newton's third law: forces act on different objects and do not cancel.",
+                    dense_score=0.85, rrf_score=0.03,
+                )],
+            ),
+        }
+        state = {
+            "sections_by_topic": {k: v.model_dump() for k, v in sections.items()},
+            "research_by_topic": {k: v.model_dump() for k, v in research.items()},
+            "topic_plan": {"topics": [{"topic_id": "t1", "lineage_ids": ["lid-1"]}]},
+            "job_id": "job-test", "repair_pass": 0, "dropped_for_budget": 0,
+        }
+
+        with override_settings(ENRICHMENT_ENABLE_POSSIBLE_ISSUE=False), \
+             patch("ai.langgraph.nodes.verification_node.get_embedding_provider") as mock_emb, \
+             patch("ai.langgraph.nodes.verification_node.get_llm_provider") as mock_llm:
+            mock_embed = MagicMock()
+            mock_emb.return_value = mock_embed
+            # Return high-similarity vectors so both additions pass support scoring (>= 0.75)
+            # embed([addition_text, evidence_sentence]) → 2 vectors each time
+            mock_embed.embed.return_value = [[0.9, 0.1], [0.88, 0.12]]
+            mock_embed.model_version = "v1"
+
+            res = verification_node(state)
+
+        result_sections = res["sections_by_topic"]
+        t1_blocks = result_sections["t1"]["blocks"]
+        addition_blocks = [b for b in t1_blocks if b["type"] == "addition"]
+
+        # The correction-language addition should be dropped; the clean explanation should survive
+        self.assertEqual(len(addition_blocks), 1)
+        self.assertNotIn("incorrect", addition_blocks[0]["text"])
+        self.assertIn("F=ma", addition_blocks[0]["text"])
+
+        # dropped_verification should record the correction_leak
+        dropped = res.get("dropped_verification", {})
+        self.assertEqual(dropped.get("correction_leak", 0), 1)

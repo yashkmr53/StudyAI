@@ -30,6 +30,31 @@ SUPPORT_BORDERLINE = 0.60
 SUPPORT_LEXICAL = 0.30
 MAX_REPAIR_PASSES = 1
 
+# Correction-language detection: catches additions that assert a student line is wrong.
+# Requires BOTH a deictic reference (pointing to the student's text) AND a correction word.
+_DEICTIC_RE = re.compile(
+    r'(?i)\b(?:this\s+(?:statement|claim|assertion|formula|equation|definition|answer|line|idea|notion|concept)'
+    r'|the\s+(?:above|preceding)\s+(?:statement|claim|line|formula|equation)'
+    r'|your\s+(?:note|statement|claim|answer))\b'
+)
+_CORRECTION_WORD_RE = re.compile(
+    r'(?i)\b(?:incorrect|wrong|false|inaccurate|erroneous|mistake[ns]?|misconception'
+    r'|not\s+(?:correct|accurate|true|right|valid))\b'
+)
+
+
+def _contains_correction_language(text: str) -> bool:
+    """Detect if addition text asserts a student line is wrong.
+
+    Returns True only when the text contains BOTH:
+    - a deictic reference to the student's text ("this statement", "the above claim", …)
+    - a correction/error word ("incorrect", "wrong", "not correct", …)
+
+    This avoids false positives on purely additive text like
+    "Unlike a common misconception, …" (no deictic reference).
+    """
+    return bool(_DEICTIC_RE.search(text) and _CORRECTION_WORD_RE.search(text))
+
 
 class EntailmentVerdict(BaseModel):
     verdict: Literal["ENTAILED", "PARTIALLY_ENTAILED", "NEUTRAL", "CONTRADICTED"]
@@ -102,6 +127,16 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
     sup_border_thresh = float(getattr(settings, "SUPPORT_COSINE_BORDERLINE", SUPPORT_BORDERLINE))
     sup_lex_thresh = float(getattr(settings, "SUPPORT_LEXICAL", SUPPORT_LEXICAL))
 
+    dropped_stats = {
+        "total_generated": 0,
+        "uncited": 0,
+        "low_cosine": 0,
+        "neutral_entailment": 0,
+        "student_entailed": 0,
+        "correction_leak": 0,
+        "total_persisted": 0,
+    }
+
     for tid, sec in sections.items():
         res = researches.get(tid)
         evidence_by_cid = {item.citation_id: item for item in (res.evidence_items if res else [])}
@@ -113,6 +148,8 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
                 verified_blocks.append(blk)
                 continue
 
+            dropped_stats["total_generated"] += 1
+
             # Identify target reference sentences for cited IDs
             target_sentences = [
                 evidence_by_cid[cid].best_sentence or evidence_by_cid[cid].snippet
@@ -122,6 +159,7 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
 
             if not target_sentences:
                 # No grounded evidence found
+                dropped_stats["uncited"] += 1
                 continue
 
             # Compare addition against the best-matching sentence
@@ -183,14 +221,35 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
                     blk.support_status = "partial"
                 else:
                     # Unsupported; drop addition
+                    dropped_stats["neutral_entailment"] += 1
                     logger.info("Dropping addition in %s due to entailment verdict %s", tid, v)
                     continue
             else:
                 # Similarity below borderline; drop addition
+                dropped_stats["low_cosine"] += 1
                 logger.info("Dropping addition in %s due to low cosine %.2f", tid, best_sim)
                 continue
 
             blk.verification_score = round(best_sim, 4)
+
+            # Correction-language leak check (§3.6.2a):
+            # Any addition (regardless of kind) that asserts a student line is wrong
+            # must go through the possible_issue path. If possible_issue is disabled,
+            # the addition is dropped to prevent corrections from leaking as explanations.
+            enable_possible_issue = getattr(settings, "ENRICHMENT_ENABLE_POSSIBLE_ISSUE", False)
+            if isinstance(enable_possible_issue, str):
+                enable_possible_issue = enable_possible_issue.lower() in ("1", "true", "yes")
+
+            if blk.addition_kind != "possible_issue" and _contains_correction_language(blk.text):
+                if enable_possible_issue:
+                    # Reclassify as possible_issue and let the contradiction check below handle it
+                    logger.info("Reclassifying correction-language explanation as possible_issue in %s", tid)
+                    blk.addition_kind = "possible_issue"
+                else:
+                    # Corrections are disabled; drop the addition
+                    dropped_stats["correction_leak"] += 1
+                    logger.info("Dropping correction-language explanation in %s (possible_issue disabled): %.60s", tid, blk.text)
+                    continue
 
             # possible_issue Contradiction Check (§3.6.3)
             if blk.addition_kind == "possible_issue":
@@ -220,16 +279,19 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
                 if c_verdict == "CONTRADICTED":
                     blk.addition_kind = "possible_issue"
                 elif c_verdict == "PARTIALLY_ENTAILED":
-                    blk.addition_kind = "possible_issue"
+                    # Technical nuance / incomplete statement: downgrade to explanation to avoid false corrections
+                    blk.addition_kind = "explanation"
                     blk.support_status = "partial"
                 elif c_verdict == "ENTAILED":
                     # Student was correct; drop addition to prevent false correction (§3.6.3 invariant)
+                    dropped_stats["student_entailed"] += 1
                     logger.info("Dropping possible_issue in %s: student claim is correct (ENTAILED)", tid)
                     continue
                 else:
                     # NEUTRAL: downgrade to explanation
                     blk.addition_kind = "explanation"
 
+            dropped_stats["total_persisted"] += 1
             verified_blocks.append(blk)
 
         sec.blocks = verified_blocks
@@ -261,6 +323,7 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
             "status": status,
             "outcome": outcome,
             "dropped_for_budget": dropped_for_budget,
+            "dropped_verification": dropped_stats,
         }
 
     # Signal repair needed

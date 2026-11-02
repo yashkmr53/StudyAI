@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -40,6 +40,7 @@ from apps.subjects.models import Subject
 User = get_user_model()
 
 
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 class TestTopicEnrichmentIntegration(TransactionTestCase):
     def setUp(self):
         super().setUp()
@@ -386,11 +387,86 @@ class TestTopicEnrichmentIntegration(TransactionTestCase):
                     errors.append(f"Thread {thread_id} got status {res.status_code}")
             except Exception as exc:
                 errors.append(f"Thread {thread_id} exception: {exc}")
+            finally:
+                from django.db import connections
+                connections.close_all()
 
         threads = [threading.Thread(target=worker_task, args=(i,)) for i in range(4)]
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+            t.join(timeout=30.0)
 
         self.assertEqual(errors, [], f"Concurrency errors occurred: {errors}")
+
+    def test_late_finishing_job_superseded_by_newer(self):
+        """A late-finishing older job does not overwrite an active note created by a newer job."""
+        now = timezone.now()
+        older_job = Job.objects.create(
+            job_type="enrich",
+            resource_type="document",
+            resource_id=str(self.doc.id),
+            profile_id=self.profile_a.id,
+            idempotency_key=f"enrich_note:{self.doc.id}:older",
+            status=Job.Status.RUNNING,
+            created_at=now - timedelta(minutes=10),
+            metadata={"start_hash": _descriptor(self.doc)},
+        )
+
+        newer_job = Job.objects.create(
+            job_type="enrich",
+            resource_type="document",
+            resource_id=str(self.doc.id),
+            profile_id=self.profile_a.id,
+            idempotency_key=f"enrich_note:{self.doc.id}:newer",
+            status=Job.Status.SUCCEEDED,
+            created_at=now - timedelta(minutes=2),
+            metadata={"start_hash": _descriptor(self.doc), "outcome": "ok"},
+        )
+
+        # Newer job already created an active note
+        active_note = EnrichedNote.objects.create(
+            document=self.doc,
+            generation_job=newer_job,
+            status="ok",
+            superseded=False,
+            content_hash=_descriptor(self.doc),
+            force_include_hash="",
+            settings_version="topic_enrichment:v1",
+        )
+
+        mock_final_state = {
+            "status": "ok",
+            "start_hash": _descriptor(self.doc),
+            "force_include_hash": "",
+            "settings_version": "topic_enrichment:v1",
+            "sections_by_topic": {
+                "t1": {
+                    "title": "Topic 1",
+                    "blocks": [
+                        {"type": "student", "render_as": "prose", "content": "Line 1"},
+                        {"type": "addition", "render_as": "prose", "content": "Late addition"},
+                    ],
+                }
+            },
+            "evidence_status_by_topic": {"t1": "sufficient"},
+            "excluded_segments": [],
+            "diagnostics": {},
+            "llm_provider": "ollama",
+            "llm_model": "qwen3.5:4b",
+        }
+
+        with patch("ai.langgraph.graphs.enrichment_graph.invoke_enrichment_graph", return_value=mock_final_state):
+            from apps.ai_classroom.services import run_enrichment_job
+            run_enrichment_job(older_job)
+
+        older_job.refresh_from_db()
+        self.assertEqual(older_job.status, Job.Status.SUCCEEDED)
+        self.assertEqual(older_job.metadata.get("outcome"), "superseded_by_newer")
+        self.assertIn("Superseded by a newer enrichment", older_job.metadata.get("message", ""))
+
+        # The active note must still be the one from newer_job, NOT superseded
+        active_notes = list(EnrichedNote.objects.filter(document=self.doc, superseded=False))
+        self.assertEqual(len(active_notes), 1)
+        self.assertEqual(active_notes[0].id, active_note.id)
+        self.assertEqual(active_notes[0].generation_job_id, newer_job.id)

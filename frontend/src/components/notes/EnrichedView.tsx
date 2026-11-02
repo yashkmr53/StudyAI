@@ -24,12 +24,14 @@ interface Props {
   onCitation: (page: number) => void;
   /** Called to return to editing the handwritten note. */
   onEditHandwritten?: () => void;
+  /** Optional initial snapshot for testing or SSR */
+  initialSnapshot?: EnrichmentSnapshot | null;
 }
 
-export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
+export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnapshot = null }: Props) {
   const { t } = useTranslation();
   const docId = note.documentId || note.refId || note.id;
-  const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(initialSnapshot);
   const [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tags, setTags] = useState<{ stable_key: string; display_name: string }[]>([]);

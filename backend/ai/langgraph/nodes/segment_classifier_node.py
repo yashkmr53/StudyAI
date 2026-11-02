@@ -85,7 +85,10 @@ def segment_classifier_node(state: TopicEnrichmentState) -> Dict[str, Any]:
             "1. Every line from 1 to {count} must be covered.\n"
             "2. Provide start_line_number and end_line_number as 1-based local integers (e.g. 1 to {count}).\n"
             "3. Guess the academic subject (e.g. 'Computer Science', 'Linear Algebra') if study_notes, or null.\n"
-            "4. Assign a confidence score from 0.0 to 1.0.\n\n"
+            "4. Assign a confidence score from 0.0 to 1.0.\n"
+            "5. CRITICAL: Student study notes frequently contain errors, misconceptions, or incorrect formulas. "
+            "You MUST classify all technical or lecture content as 'study_notes', even if the student statement is factually wrong. "
+            "Never classify study notes as 'other' because of factual errors; 'other' is strictly for non-academic noise or banter.\n\n"
             "<student_transcript>\n{lines}\n</student_transcript>"
         ).format(count=n_win, lines="\n".join(formatted_lines))
 

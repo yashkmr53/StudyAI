@@ -24,6 +24,13 @@ from providers.registry import get_embedding_provider, get_llm_provider
 
 logger = logging.getLogger(__name__)
 
+# Deictic reference detection: additions that reference a student line
+_DEICTIC_RE = re.compile(
+    r'(?i)\b(?:this\s+(?:statement|claim|assertion|formula|equation|definition|answer|line|idea|notion|concept)'
+    r'|the\s+(?:above|preceding)\s+(?:statement|claim|line|formula|equation)'
+    r'|your\s+(?:note|statement|claim|answer))\b'
+)
+
 # Heuristic patterns for code line detection
 STRONG_CODE_START_RE = re.compile(r"^\s*(def\s+\w+|class\s+\w+|import\s+\w+|from\s+\w+\s+import|function\s+\w+)")
 CODE_SYNTAX_RE = re.compile(r"(;\s*$|[{}()\[\]=+\-*/<>!&|^~%]{2,})")
@@ -120,7 +127,7 @@ def topic_writer_node(
         )
 
     # 2. Formulate Prompt for Additions Only
-    enable_possible_issue = getattr(settings, "ENRICHMENT_ENABLE_POSSIBLE_ISSUE", True)
+    enable_possible_issue = getattr(settings, "ENRICHMENT_ENABLE_POSSIBLE_ISSUE", False)
     if isinstance(enable_possible_issue, str):
         enable_possible_issue = enable_possible_issue.lower() in ("1", "true", "yes")
 
@@ -152,13 +159,19 @@ def topic_writer_node(
     prompt_body = (
         "You are an academic textbook tutor augmenting student lecture notes.\n"
         "Review the student transcript lines and the provided reference evidence.\n"
-        "Propose 1 to 4 precise ADDITIONS to supplement the student's notes.\n\n"
+        "Propose 1 to 2 concise, high-value ADDITIONS (1 to 2 sentences each) to supplement the student's notes.\n\n"
         "STRICT CONSTRAINTS:\n"
         "1. DO NOT rewrite, summarize, or repeat the student's text.\n"
         "2. Additions must specify 'after_line_id' (the exact LineID after which to insert, or null for top of section).\n"
         "3. Each addition must have kind: \n{kind_guidance}\n"
         "4. Each addition MUST cite 1 or more citation IDs (e.g. ['C1']) from the reference evidence.\n"
-        "5. An addition of kind 'explanation' must NEVER merely restate what the student wrote.\n\n"
+        "5. An addition of kind 'explanation' must NEVER merely restate what the student wrote.\n"
+        "6. An 'explanation' must NEVER assert that a student line is wrong, incorrect, or contains an error. "
+        "Do NOT use phrases like 'this statement is incorrect', 'this is wrong', 'this claim is false', "
+        "'not correct', or any other correction. Only add supplementary context, definitions, derivations, "
+        "or clarifications that enrich the student's understanding.\n"
+        "7. 'after_line_id' must reference a student line that the addition relates to. "
+        "Do NOT set after_line_id to null if the addition references a specific student line with 'this', 'the above', or similar.\n\n"
         "<student_transcript>\n{transcript}\n</student_transcript>\n\n"
         "<reference_evidence>\n{evidence}\n</reference_evidence>"
     ).format(
@@ -232,6 +245,11 @@ def topic_writer_node(
         if add.after_line_id and add.after_line_id not in known_line_ids:
             # Fallback anchor: last line of topic
             add.after_line_id = lineage_ids[-1] if lineage_ids else None
+
+        # Deictic anchor fix: if addition references a student line ("this statement…")
+        # but has no anchor (None = top of section), re-anchor to last line of topic
+        if add.after_line_id is None and lineage_ids and _DEICTIC_RE.search(add.text):
+            add.after_line_id = lineage_ids[-1]
 
         # Restatement Filter (§3.3):
         # Exemption: 'possible_issue' additions are EXEMPT from restatement filtering!
