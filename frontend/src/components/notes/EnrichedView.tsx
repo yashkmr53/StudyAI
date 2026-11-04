@@ -361,7 +361,10 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
       const parts = currentStage.split(" ");
       stepDescription = ENRICHMENT_COPY.progress.stages.write(Number(parts[1]) || 1, Number(parts[3]) || 1);
     } else if (currentStage && currentStage in ENRICHMENT_COPY.progress.stages) {
-      stepDescription = (ENRICHMENT_COPY.progress.stages as Record<string, string>)[currentStage];
+      const val = (ENRICHMENT_COPY.progress.stages as Record<string, unknown>)[currentStage];
+      if (typeof val === "string") {
+        stepDescription = val;
+      }
     }
 
     return (
@@ -643,7 +646,7 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
                   ? ENRICHMENT_COPY.badges.none
                   : null;
 
-              const subjectName = snapshot.subjectName || note.subject || "this subject";
+              const subjectName = snapshot.subjectName || "this subject";
               const uploadRoute = snapshot.subjectId
                 ? `/subjects/${snapshot.subjectId}/references`
                 : "/references";

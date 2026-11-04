@@ -58,17 +58,13 @@ vi.mock("../../../services/api/tags", () => ({
 describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
   const mockNote: NoteMeta = {
     id: "note-123",
+    refId: "doc-123",
     documentId: "doc-123",
+    profileId: "prof-123",
+    subjectId: "sub-123",
+    folderId: "f-1",
     title: "Operating Systems Memory Management",
     source: "upload",
-    sourceType: "pdf",
-    folderId: "f-1",
-    tags: [],
-    pageCount: 1,
-    reviewStatus: "approved",
-    isApproved: true,
-    hasEnrichment: true,
-    isProcessing: false,
     createdAt: "2026-10-30T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
   };

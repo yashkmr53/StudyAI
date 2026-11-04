@@ -3,6 +3,45 @@ info:
   title: StudyAI API
   version: v1
 paths:
+  /api/v1/agents/chat/:
+    post:
+      operationId: api_v1_agents_chat_create
+      description: Process a user message through the StudyAI Agent.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/agents/executions/{request_id}/:
+    get:
+      operationId: api_v1_agents_executions_retrieve
+      description: Get execution trace for a specific agent request.
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/agents/tools/:
+    get:
+      operationId: api_v1_agents_tools_retrieve
+      description: List all available agent tools with schemas.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/audit:
     get:
       operationId: api_v1_audit_list
@@ -630,6 +669,173 @@ paths:
               schema:
                 $ref: '#/components/schemas/Document'
           description: ''
+  /api/v1/documents/{document_id}/pages/{page_id}/approve:
+    post:
+      operationId: api_v1_documents_pages_approve_create
+      description: POST /api/v1/documents/{document_id}/pages/{page_id}/approve.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{document_id}/pages/{page_id}/ignore:
+    post:
+      operationId: api_v1_documents_pages_ignore_create
+      description: POST /api/v1/documents/{document_id}/pages/{page_id}/ignore.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{document_id}/pages/{page_id}/reopen:
+    post:
+      operationId: api_v1_documents_pages_reopen_create
+      description: POST /api/v1/documents/{document_id}/pages/{page_id}/reopen.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{document_id}/pages/{page_id}/retry-ocr:
+    post:
+      operationId: api_v1_documents_pages_retry_ocr_create
+      description: POST /api/v1/documents/{document_id}/pages/{page_id}/retry-ocr.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{document_id}/pages/{page_id}/revisions:
+    get:
+      operationId: api_v1_documents_pages_revisions_retrieve
+      description: GET / POST /api/v1/documents/{document_id}/pages/{page_id}/revisions.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_v1_documents_pages_revisions_create
+      description: GET / POST /api/v1/documents/{document_id}/pages/{page_id}/revisions.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{document_id}/pages/{page_id}/unignore:
+    post:
+      operationId: api_v1_documents_pages_unignore_create
+      description: POST /api/v1/documents/{document_id}/pages/{page_id}/unignore.
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: page_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/documents/{document_id}/questions:
     get:
       operationId: api_v1_documents_questions_list
@@ -758,7 +964,8 @@ paths:
   /api/v1/documents/{id}/enrichment:
     get:
       operationId: api_v1_documents_enrichment_retrieve
-      description: '§60: GET /documents/{id}/enrichment.'
+      description: '§60: GET /documents/{id}/enrichment — note and latest_job with
+        progress.'
       parameters:
       - in: path
         name: id
@@ -767,6 +974,72 @@ paths:
         required: true
       tags:
       - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          description: ''
+  /api/v1/documents/{id}/enrichment/force-include:
+    post:
+      operationId: api_v1_documents_enrichment_force_include_create
+      description: POST /documents/{id}/enrichment/force-include — forces segment
+        inclusion and regenerates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Document'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Document'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Document'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          description: ''
+  /api/v1/documents/{id}/enrichment/regenerate:
+    post:
+      operationId: api_v1_documents_enrichment_regenerate_create
+      description: POST /documents/{id}/enrichment/regenerate — dispatches new enrichment
+        job.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Document'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Document'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Document'
       security:
       - jwtAuth: []
       responses:
@@ -2252,14 +2525,24 @@ components:
         schema_version:
           type: string
           readOnly: true
+        ready_for_enrichment:
+          type: boolean
+          readOnly: true
+        blocking_pages:
+          type: array
+          items:
+            type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
+      - blocking_pages
       - created_at
       - id
       - profile
+      - ready_for_enrichment
       - schema_version
       - source
       - source_type
@@ -2726,6 +3009,14 @@ components:
           readOnly: true
         schema_version:
           type: string
+          readOnly: true
+        ready_for_enrichment:
+          type: boolean
+          readOnly: true
+        blocking_pages:
+          type: array
+          items:
+            type: integer
           readOnly: true
         created_at:
           type: string

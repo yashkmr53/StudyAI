@@ -9,6 +9,7 @@ POST /api/v1/documents/{id}/retry-processing
 POST /api/v1/documents/pages/{page_id}/finalize-upload   (explicit §46 step)
 """
 import logging
+from typing import Any, Dict, List, Optional
 from django.conf import settings
 from django.db import transaction
 from django.http import Http404
