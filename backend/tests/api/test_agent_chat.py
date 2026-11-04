@@ -4,6 +4,7 @@ from django.test import TestCase
 from apps.accounts.models import User
 from apps.chat.models import ChatMessage, ChatSession
 from apps.profiles.models import Profile
+from shared.database.rls import profile_scoped_transaction
 from tests.api.utils import authenticated_client
 
 
@@ -22,18 +23,23 @@ class AgentChatApiTests(TestCase):
         )
         self.bob_profile = Profile.objects.filter(user=self.bob_user).first()
 
-        self.alice_session_1 = ChatSession.objects.create(
-            profile=self.alice_profile_1,
-            title="Session 1",
-        )
-        self.alice_session_2 = ChatSession.objects.create(
-            profile=self.alice_profile_2,
-            title="Session 2",
-        )
-        self.bob_session = ChatSession.objects.create(
-            profile=self.bob_profile,
-            title="Bob Session",
-        )
+        from shared.database.rls import profile_scoped_transaction
+
+        with profile_scoped_transaction(self.alice_profile_1.id):
+            self.alice_session_1 = ChatSession.objects.create(
+                profile=self.alice_profile_1,
+                title="Session 1",
+            )
+        with profile_scoped_transaction(self.alice_profile_2.id):
+            self.alice_session_2 = ChatSession.objects.create(
+                profile=self.alice_profile_2,
+                title="Session 2",
+            )
+        with profile_scoped_transaction(self.bob_profile.id):
+            self.bob_session = ChatSession.objects.create(
+                profile=self.bob_profile,
+                title="Bob Session",
+            )
 
     def test_tools_listing_endpoints(self):
         """Both /api/v1/tools/ and /api/v1/agents/tools/ return available tools."""
@@ -69,10 +75,11 @@ class AgentChatApiTests(TestCase):
         self.assertIn("tool_calls", data["assistant"])
 
         # Verify DB messages persisted
-        messages = ChatMessage.objects.filter(session=self.alice_session_1).order_by("created_at")
-        self.assertEqual(messages.count(), 2)
-        self.assertEqual(messages[0].role, ChatMessage.Role.USER)
-        self.assertEqual(messages[1].role, ChatMessage.Role.ASSISTANT)
+        with profile_scoped_transaction(self.alice_profile_1.id):
+            messages = list(ChatMessage.objects.filter(session=self.alice_session_1).order_by("created_at"))
+            self.assertEqual(len(messages), 2)
+            self.assertEqual(messages[0].role, ChatMessage.Role.USER)
+            self.assertEqual(messages[1].role, ChatMessage.Role.ASSISTANT)
 
     def test_agent_chat_prefixed_endpoint_success(self):
         """POST /api/v1/agents/chat/ (used by frontend agentApi) returns 201."""

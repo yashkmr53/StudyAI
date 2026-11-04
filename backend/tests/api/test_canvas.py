@@ -80,7 +80,9 @@ class SessionTests(CanvasBaseTestCase):
 
     def test_create_session_in_foreign_subject_rejected(self):
         from apps.subjects.models import Subject
-        bob_subject = Subject.objects.create(profile=self.bob_profile, name="Bob's Subject")
+        from shared.database.rls import profile_scoped_transaction
+        with profile_scoped_transaction(self.bob_profile.id):
+            bob_subject = Subject.objects.create(profile=self.bob_profile, name="Bob's Subject")
         response = self.alice.post(
             "/api/v1/canvas/sessions",
             {
