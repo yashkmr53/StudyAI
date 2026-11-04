@@ -5,6 +5,7 @@ and agent tools. Embeds queries with canonical qwen3-embedding:0.6b (Ollama GPU)
 hybrid pgvector dense + full-text search with Reciprocal Rank Fusion, strictly
 enforces profile and subject authorization, and returns full provenance metadata.
 """
+import hashlib
 import json
 import logging
 from typing import Optional, Union
@@ -266,3 +267,29 @@ def retrieve_reference_context(
         })
 
     return results
+
+
+def reference_library_hash(subject=None) -> str:
+    """Compute a deterministic hash of the active reference documents for a subject.
+
+    Hash changes whenever reference documents for this subject are added, updated,
+    deleted, or re-indexed (§3.3).
+    """
+    if subject is None:
+        return "no_subject"
+
+    subject_id = getattr(subject, "pk", subject)
+    docs = (
+        ReferenceDocument.objects.filter(
+            subject_id=subject_id,
+            status=ReferenceDocument.Status.READY,
+        )
+        .order_by("id")
+        .values_list("id", "updated_at", "chunk_count")
+    )
+    if not docs:
+        return "empty"
+
+    raw = ";".join(f"{d_id}:{up.isoformat() if up else ''}:{cnt}" for d_id, up, cnt in docs)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+

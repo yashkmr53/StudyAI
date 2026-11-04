@@ -131,6 +131,7 @@ class TopicEnrichmentState(TypedDict, total=False):
     start_hash: str
     force_include_hash: str
     settings_version: str
+    reference_snapshot_hash: str
     approved_lines: List[Dict[str, Any]]  # Raw line data
     force_include_line_ids: List[str]
 

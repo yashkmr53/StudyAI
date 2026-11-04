@@ -27,7 +27,8 @@ class EnrichedNote(models.Model):
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.OK)
     content_hash = models.CharField(max_length=64)  # sha256 of descriptor incl. prompt+model+evidence set
     force_include_hash = models.CharField(max_length=64, blank=True, default="")
-    settings_version = models.CharField(max_length=32, blank=True, default="")
+    settings_version = models.CharField(max_length=64, blank=True, default="")
+    reference_snapshot_hash = models.CharField(max_length=64, blank=True, default="")
     revision_ids = models.JSONField(default=list)  # source revisions covered
     evidence_status_by_topic = models.JSONField(default=dict, blank=True)
     excluded_segments = models.JSONField(default=list, blank=True)

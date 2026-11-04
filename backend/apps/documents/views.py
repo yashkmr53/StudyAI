@@ -319,11 +319,18 @@ class DocumentViewSet(
 
         note_data = EnrichedNoteSerializer(note).data if note else None
         job_data = _enrichment_job_payload(latest_job)
+        outcome = latest_job.metadata.get("outcome") if (latest_job and isinstance(latest_job.metadata, dict)) else ""
 
         response_data = {
             "note": note_data,
             "enriched_note": note_data,
             "latest_job": job_data,
+            "empty_reason": (
+                note_data.get("empty_reason")
+                if note_data
+                else (outcome if outcome == "insufficient_content" else "")
+            ),
+            "blocks": note_data.get("blocks", []) if note_data else [],
         }
         if note_data:
             for k, v in note_data.items():
@@ -417,6 +424,40 @@ def _enrichment_job_payload(job: Optional[Job]) -> Optional[dict]:
         if state_row and isinstance(state_row.state_json, dict):
             topics_total = len(state_row.state_json.get("topic_plan", {}).get("topics", [])) or topics_total
 
+    n = max(topics_total, len(topics_completed), 1)
+    research_topics = {cp["topic_id"] for cp in checkpoints if cp["completed_node"] == "research" and cp["topic_id"]}
+    write_topics = {cp["topic_id"] for cp in checkpoints if cp["completed_node"].startswith("write") and cp["topic_id"]}
+
+    stages_done = []
+    if "classify" in stages:
+        stages_done.append("classify")
+    if "plan" in stages:
+        stages_done.append("plan")
+    if research_topics:
+        stages_done.append(f"research {len(research_topics)} of {n}")
+    if write_topics:
+        stages_done.append(f"write {len(write_topics)} of {n}")
+    if any(s.startswith("verify") for s in stages):
+        stages_done.append("verify")
+
+    if job.status == Job.Status.SUCCEEDED:
+        current_stage = "complete"
+    elif any(s.startswith("verify") for s in stages):
+        current_stage = "verify"
+    elif write_topics:
+        current_stage = f"write {min(len(write_topics) + 1, n)} of {n}"
+    elif research_topics:
+        if len(research_topics) >= n:
+            current_stage = f"write 1 of {n}"
+        else:
+            current_stage = f"research {len(research_topics) + 1} of {n}"
+    elif "plan" in stages:
+        current_stage = f"research 1 of {n}"
+    elif "classify" in stages:
+        current_stage = "plan"
+    else:
+        current_stage = "classify"
+
     OUTCOME_USER_MESSAGES = {
         "ok": "Enrichment generated successfully.",
         "needs_attention": "Enrichment completed with items needing review.",
@@ -468,6 +509,8 @@ def _enrichment_job_payload(job: Optional[Job]) -> Optional[dict]:
         "heartbeat_at": getattr(job, "heartbeat_at", None),
         "progress": {
             "stages_completed": sorted(list(stages)),
+            "stages_done": stages_done,
+            "current_stage": current_stage,
             "topics_completed": len(topics_completed),
             "topics_total": max(topics_total, len(topics_completed), 1),
         },

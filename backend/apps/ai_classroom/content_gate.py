@@ -64,6 +64,9 @@ ACADEMIC_TERMS = {
     "subset", "permutation", "combination", "probability", "statistics",
     "variance", "distribution", "calculus", "algebra", "geometry",
     "topology", "asymptotic", "logarithm", "exponential", "factorial",
+    "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+    "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho",
+    "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega",
     # Physics & Engineering
     "force", "mass", "acceleration", "velocity", "momentum", "energy",
     "gravity", "quantum", "thermodynamic", "entropy", "circuit", "voltage",

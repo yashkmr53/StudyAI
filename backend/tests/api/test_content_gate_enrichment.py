@@ -130,9 +130,10 @@ class EnrichmentInsufficientContentPipelineTests(TestCase):
             mock_graph.assert_not_called()
 
         enriched = EnrichedNote.objects.filter(document=self.doc, superseded=False).first()
-        self.assertIsNotNone(enriched)
-        self.assertEqual(enriched.empty_reason, "insufficient_content")
-        self.assertEqual(enriched.blocks.count(), 0)
+        self.assertIsNone(enriched)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.SUCCEEDED)
+        self.assertEqual(job.metadata.get("outcome"), "insufficient_content")
 
         # API returns 200 with structured empty_reason
         resp = self.alice.get(f"/api/v1/documents/{self.doc.pk}/enrichment")

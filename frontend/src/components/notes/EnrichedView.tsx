@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { enrichmentApi, parseEnrichment } from "../../services/api/enrichment";
 import { documentsApi, type PageStatus } from "../../services/api/documents";
 import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
-import { AlertIcon, EditIcon, NoteIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
+import { AlertIcon, BookIcon, EditIcon, NoteIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
+import { ENRICHMENT_COPY } from "../../copy/enrichment";
 
 /**
  * Enriched tab (§17). Rendered only when EnrichmentService is enabled —
@@ -350,12 +352,31 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
 
   if (snapshot.state === "enriching") {
     const progress = snapshot.latestJob?.progress;
+    const currentStage = progress?.current_stage;
+    let stepDescription = currentStage;
+    if (currentStage?.startsWith("research")) {
+      const parts = currentStage.split(" ");
+      stepDescription = ENRICHMENT_COPY.progress.stages.research(Number(parts[1]) || 1, Number(parts[3]) || 1);
+    } else if (currentStage?.startsWith("write")) {
+      const parts = currentStage.split(" ");
+      stepDescription = ENRICHMENT_COPY.progress.stages.write(Number(parts[1]) || 1, Number(parts[3]) || 1);
+    } else if (currentStage && currentStage in ENRICHMENT_COPY.progress.stages) {
+      stepDescription = (ENRICHMENT_COPY.progress.stages as Record<string, string>)[currentStage];
+    }
+
     return (
       <div className="enrichment-progress" role="status">
-        <h3>{t("notes.enriched.generatingTitle")}</h3>
-        <p>{snapshot.latestJob?.message || t("notes.enriched.generatingBody")}</p>
+        <h3>{ENRICHMENT_COPY.progress.title}</h3>
+        <p style={{ color: "#4b5563", fontSize: "14px", margin: "4px 0 10px" }}>
+          {ENRICHMENT_COPY.progress.estimateText}
+        </p>
+        {stepDescription && (
+          <div style={{ marginTop: 10, fontSize: "13px", fontWeight: 500, color: "#4f5bd5" }}>
+            {ENRICHMENT_COPY.progress.stepPrefix}{stepDescription}
+          </div>
+        )}
         {progress && (
-          <div style={{ marginTop: 10, fontSize: "13px", color: "#4f5bd5" }}>
+          <div style={{ marginTop: 6, fontSize: "12px", color: "#6b7280" }}>
             Topics completed: {progress.topics_completed} / {progress.topics_total}
           </div>
         )}
@@ -474,6 +495,39 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
         </div>
       )}
 
+      {snapshot.referenceLibraryChanged && (
+        <div
+          className="library-changed-banner"
+          role="status"
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <BookIcon size={18} />
+            <p style={{ margin: 0, fontSize: "13px", color: "#1e40af", fontWeight: 500 }}>
+              {ENRICHMENT_COPY.libraryChanged.bannerTitle}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={() => void generate()}
+          >
+            <RefreshIcon size={13} />
+            {ENRICHMENT_COPY.libraryChanged.regenerateButton}
+          </button>
+        </div>
+      )}
+
       {snapshot.state === "failed" && (
         <ErrorState
           title={t("notes.enriched.failedTitle")}
@@ -539,26 +593,129 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
           )}
         </header>
 
+        {(() => {
+          const evidenceMap = snapshot.evidenceStatusByTopic ?? {};
+          const topicKeys = Object.keys(evidenceMap);
+          const totalTopicsCount = topicKeys.length;
+          const topicsWithRefCount = topicKeys.filter(
+            (k) => evidenceMap[k] === "sufficient" || evidenceMap[k] === "partial"
+          ).length;
+          const allTopicsNone = totalTopicsCount > 0 && topicsWithRefCount === 0;
+
+          if (totalTopicsCount === 0) return null;
+
+          return (
+            <div
+              className="coverage-summary"
+              style={{
+                margin: "4px 0 20px",
+                padding: "8px 12px",
+                borderRadius: 6,
+                background: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                fontSize: "13px",
+                color: "#4b5563",
+              }}
+            >
+              {allTopicsNone ? (
+                <span>{ENRICHMENT_COPY.summary.allTopicsNone}</span>
+              ) : (
+                <span>
+                  <strong>{ENRICHMENT_COPY.summary.topicsWithReference(topicsWithRefCount, totalTopicsCount)}</strong>
+                </span>
+              )}
+            </div>
+          );
+        })()}
+
         {snapshot.blocks.length === 0 ? (
           <p className="muted">{t("notes.enriched.nothingYet")}</p>
         ) : (
           snapshot.blocks.map((block) => {
             if (block.blockKind === "heading") {
+              const topicEvidence = (snapshot.evidenceStatusByTopic ?? {})[block.topicId ?? ""];
+              const badgeConfig =
+                topicEvidence === "sufficient"
+                  ? ENRICHMENT_COPY.badges.sufficient
+                  : topicEvidence === "partial"
+                  ? ENRICHMENT_COPY.badges.partial
+                  : topicEvidence === "none"
+                  ? ENRICHMENT_COPY.badges.none
+                  : null;
+
+              const subjectName = snapshot.subjectName || note.subject || "this subject";
+              const uploadRoute = snapshot.subjectId
+                ? `/subjects/${snapshot.subjectId}/references`
+                : "/references";
+
               return (
-                <h3
-                  key={`h-${block.index}`}
-                  style={{
-                    fontSize: "1.25rem",
-                    fontWeight: 600,
-                    marginTop: 24,
-                    marginBottom: 12,
-                    color: "#111827",
-                    borderBottom: "1px solid #e5e7eb",
-                    paddingBottom: 4,
-                  }}
-                >
-                  {block.title || block.content}
-                </h3>
+                <div key={`h-container-${block.index}`} style={{ marginTop: 24, marginBottom: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      borderBottom: "1px solid #e5e7eb",
+                      paddingBottom: 6,
+                    }}
+                  >
+                    <h3
+                      key={`h-${block.index}`}
+                      style={{
+                        fontSize: "1.25rem",
+                        fontWeight: 600,
+                        margin: 0,
+                        color: "#111827",
+                      }}
+                    >
+                      {block.title || block.content}
+                    </h3>
+                    {badgeConfig && (
+                      <span
+                        className="topic-coverage-badge"
+                        aria-label={badgeConfig.ariaLabel}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          padding: "2px 8px",
+                          borderRadius: 9999,
+                          border: "1px solid #d1d5db",
+                          background: "#f9fafb",
+                          color: "#4b5563",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {badgeConfig.label}
+                      </span>
+                    )}
+                  </div>
+                  {topicEvidence === "none" && (
+                    <div
+                      className="topic-no-coverage-hint"
+                      style={{
+                        marginTop: 6,
+                        fontSize: "12px",
+                        color: "#6b7280",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>{ENRICHMENT_COPY.topicNoCoverage.text}</span>
+                      <Link
+                        to={uploadRoute}
+                        style={{
+                          color: "#4f5bd5",
+                          fontWeight: 500,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        {ENRICHMENT_COPY.topicNoCoverage.uploadLinkPrefix}{subjectName}
+                      </Link>
+                    </div>
+                  )}
+                </div>
               );
             }
 
@@ -591,6 +748,34 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
             }
 
             if (block.blockKind === "addition") {
+              const isIssue = block.additionKind === "possible_issue";
+              const isPartial = block.supportStatus === "partial";
+              const isSupported = block.supportStatus === "supported";
+
+              let badgeText = "StudyAI Note";
+              let badgeColor = "#3b49df";
+              let borderStyle = "4px solid #4f5bd5";
+              let bgStyle = "#f0f4ff";
+              let tooltipText: string | undefined = undefined;
+
+              if (isIssue) {
+                badgeText = ENRICHMENT_COPY.additions.possibleIssue.label;
+                badgeColor = "#b45309";
+                borderStyle = "4px solid #f59e0b";
+                bgStyle = "#fffbeb";
+              } else if (isPartial) {
+                badgeText = ENRICHMENT_COPY.additions.partial.label;
+                badgeColor = "#2563eb";
+                borderStyle = "4px solid #93c5fd"; // lighter border than supported
+                bgStyle = "#f8faff";
+                tooltipText = ENRICHMENT_COPY.additions.partial.tooltip;
+              } else if (isSupported) {
+                badgeText = ENRICHMENT_COPY.additions.supported.label;
+                badgeColor = "#1e40af";
+                borderStyle = "4px solid #4f5bd5";
+                bgStyle = "#f0f4ff";
+              }
+
               return (
                 <aside
                   key={`add-${block.index}`}
@@ -599,22 +784,37 @@ export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnaps
                     margin: "12px 0",
                     padding: "10px 14px",
                     borderRadius: 6,
-                    background: block.additionKind === "possible_issue" ? "#fffbeb" : "#f0f4ff",
-                    borderLeft: `4px solid ${block.additionKind === "possible_issue" ? "#f59e0b" : "#4f5bd5"}`,
+                    background: bgStyle,
+                    borderLeft: borderStyle,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                     <span
+                      title={tooltipText}
                       style={{
                         fontSize: "11px",
                         fontWeight: 600,
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
-                        color: block.additionKind === "possible_issue" ? "#b45309" : "#3b49df",
+                        color: badgeColor,
+                        cursor: tooltipText ? "help" : "default",
                       }}
                     >
-                      {block.additionKind === "possible_issue" ? "⚠️ StudyAI Potential Issue" : "✨ StudyAI Note"}
+                      {isIssue ? "⚠️ " : isPartial ? "💡 " : isSupported ? "📖 " : "✨ "}{badgeText}
                     </span>
+                    {tooltipText && (
+                      <span
+                        title={tooltipText}
+                        aria-label={tooltipText}
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          cursor: "help",
+                        }}
+                      >
+                        ℹ️
+                      </span>
+                    )}
                   </div>
                   <div style={{ color: "#1f2937", lineHeight: 1.5 }}>
                     {block.content}

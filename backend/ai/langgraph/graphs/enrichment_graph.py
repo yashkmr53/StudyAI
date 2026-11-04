@@ -130,7 +130,7 @@ def invoke_enrichment_graph(initial_state: Union[TopicEnrichmentState, Dict[str,
     # Resolve document & profile for research
     document_id = state.get("document_id")
     try:
-        doc = Document.objects.get(pk=document_id)
+        doc = Document.objects.select_related("profile", "subject").get(pk=document_id)
     except Document.DoesNotExist:
         return {"outcome": "not_ready", "error_code": "DOCUMENT_NOT_FOUND"}
 
@@ -143,43 +143,56 @@ def invoke_enrichment_graph(initial_state: Union[TopicEnrichmentState, Dict[str,
     sections_by_topic: Dict[str, Any] = {}
 
     def _process_topic(topic: Dict[str, Any]) -> Tuple[str, Any, Any]:
-        tid = topic.get("topic_id", "t1")
-        # Research stage
-        res_obj = _checkpointed(
-            "research",
-            tid,
-            job,
-            topic_research_node,
-            topic=topic,
-            document=doc,
-            profile=profile,
-            all_lines_by_lineage=all_lines_by_lineage,
-        )
-        if isinstance(res_obj, dict):
-            res_model = TopicResearchResult(**res_obj)
-        else:
-            res_model = res_obj
+        if profile:
+            from shared.database.rls import bind_profile_session, clear_profile_context
+            bind_profile_session(profile.id)
+        try:
+            tid = topic.get("topic_id", "t1")
+            # Research stage
+            res_obj = _checkpointed(
+                "research",
+                tid,
+                job,
+                topic_research_node,
+                topic=topic,
+                document=doc,
+                profile=profile,
+                all_lines_by_lineage=all_lines_by_lineage,
+            )
+            if isinstance(res_obj, dict):
+                res_model = TopicResearchResult(**res_obj)
+            else:
+                res_model = res_obj
 
-        # Writer stage (pass 0)
-        sec_obj = _checkpointed(
-            "write#0",
-            tid,
-            job,
-            topic_writer_node,
-            topic=topic,
-            research=res_model,
-            all_lines_by_lineage=all_lines_by_lineage,
-            job_id=job_id or "",
-            repair_pass=0,
-            llm_temperature=0.0,
-        )
-        return tid, res_obj, sec_obj
+            # Writer stage (pass 0)
+            sec_obj = _checkpointed(
+                "write#0",
+                tid,
+                job,
+                topic_writer_node,
+                topic=topic,
+                research=res_model,
+                all_lines_by_lineage=all_lines_by_lineage,
+                job_id=job_id or "",
+                repair_pass=0,
+                llm_temperature=0.0,
+            )
+            return tid, res_obj, sec_obj
+        finally:
+            if profile:
+                clear_profile_context()
 
     # Step 4: Parallel Fan-Out (Send) with Dictionary Reducer
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(_process_topic, t) for t in planned_topics]
-        for f in as_completed(futures):
-            tid, res_val, sec_val = f.result()
+    if concurrency > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = [executor.submit(_process_topic, t) for t in planned_topics]
+            for f in as_completed(futures):
+                tid, res_val, sec_val = f.result()
+                research_by_topic[tid] = res_val.model_dump() if hasattr(res_val, "model_dump") else res_val
+                sections_by_topic[tid] = sec_val.model_dump() if hasattr(sec_val, "model_dump") else sec_val
+    else:
+        for t in planned_topics:
+            tid, res_val, sec_val = _process_topic(t)
             research_by_topic[tid] = res_val.model_dump() if hasattr(res_val, "model_dump") else res_val
             sections_by_topic[tid] = sec_val.model_dump() if hasattr(sec_val, "model_dump") else sec_val
 

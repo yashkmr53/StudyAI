@@ -130,8 +130,15 @@ def run_claimed_job(job: Job) -> None:
     try:
         if job.job_type in ("enrich", "enrichment"):
             # Multi-stage graph pipeline with ThreadPoolExecutor fan-out and per-stage checkpoints.
-            # Handlers manage their own scoped transactions (e.g. atomic persistence).
-            handler(job)
+            if job.profile_id:
+                from shared.database.rls import bind_profile_session, clear_profile_context
+                bind_profile_session(job.profile_id)
+                try:
+                    handler(job)
+                finally:
+                    clear_profile_context()
+            else:
+                handler(job)
         elif job.profile_id:
             # §47: workers establish the trusted transaction-local RLS context.
             from shared.database.rls import profile_scoped_transaction

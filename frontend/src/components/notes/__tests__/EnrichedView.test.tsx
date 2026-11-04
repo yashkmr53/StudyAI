@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { EnrichedView } from "../EnrichedView";
 import type { EnrichmentSnapshot, NoteMeta } from "../../../types/domain";
 
@@ -105,7 +106,9 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
     };
 
     const html = renderToStaticMarkup(
-      <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />,
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
     );
 
     // Assert student blocks have class 'student-block'
@@ -158,7 +161,9 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
     };
 
     const html = renderToStaticMarkup(
-      <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />,
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
     );
 
     // Assert both blocks are rendered as aside.addition-block
@@ -198,7 +203,9 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
     };
 
     const html = renderToStaticMarkup(
-      <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />,
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
     );
 
     // Assert stale banner is displayed
@@ -232,7 +239,9 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
     };
 
     const html = renderToStaticMarkup(
-      <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />,
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
     );
 
     // Assert legacy section with enriched-block class is rendered
@@ -244,5 +253,150 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
 
     // Student note citation chip
     expect(html).toContain("📝 Page 1");
+  });
+
+  it("renders per-topic coverage badges, note summary, and none guidance link (PR 3 §3.1)", () => {
+    const snapshot: EnrichmentSnapshot = {
+      state: "enriched",
+      generatedAt: "2026-10-30T10:00:00Z",
+      subjectId: "sub-cs-1",
+      subjectName: "Computer Science",
+      evidenceStatusByTopic: {
+        t1: "sufficient",
+        t2: "partial",
+        t3: "none",
+      },
+      blocks: [
+        {
+          index: 0,
+          title: "Virtual Memory Architecture",
+          content: "Virtual Memory Architecture",
+          blockKind: "heading",
+          topicId: "t1",
+          citations: [],
+        },
+        {
+          index: 1,
+          title: "Page Replacement Algorithms",
+          content: "Page Replacement Algorithms",
+          blockKind: "heading",
+          topicId: "t2",
+          citations: [],
+        },
+        {
+          index: 2,
+          title: "Exotic Replacement Policies",
+          content: "Exotic Replacement Policies",
+          blockKind: "heading",
+          topicId: "t3",
+          citations: [],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
+    );
+
+    // Note-level summary
+    expect(html).toContain("2 of 3 topics have reference material.");
+
+    // Coverage badges
+    expect(html).toContain("Reference found");
+    expect(html).toContain("Limited reference");
+    expect(html).toContain("No reference found");
+
+    // Guidance link for topic with 'none'
+    expect(html).toContain("No reference book covers this topic yet. Your notes are kept as written.");
+    expect(html).toContain("Add a reference book for Computer Science");
+    expect(html).toContain('href="/subjects/sub-cs-1/references"');
+  });
+
+  it("renders honest addition labels for supported and partial additions (PR 3 §3.2)", () => {
+    const snapshot: EnrichmentSnapshot = {
+      state: "enriched",
+      generatedAt: "2026-10-30T10:00:00Z",
+      blocks: [
+        {
+          index: 0,
+          title: "",
+          content: "Supported addition derived from textbook passage.",
+          blockKind: "addition",
+          supportStatus: "supported",
+          citations: [],
+        },
+        {
+          index: 1,
+          title: "",
+          content: "Partial addition extending beyond the cited reference.",
+          blockKind: "addition",
+          supportStatus: "partial",
+          citations: [],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
+    );
+
+    // Supported label
+    expect(html).toContain("From your reference");
+    expect(html).toContain("border-left:4px solid #4f5bd5");
+
+    // Partial label and lighter border
+    expect(html).toContain("Extends the reference");
+    expect(html).toContain("border-left:4px solid #93c5fd");
+    expect(html).toContain("This goes beyond the cited passage. Check it against your textbook.");
+  });
+
+  it("renders reference library changed banner when referenceLibraryChanged is true (PR 3 §3.3)", () => {
+    const snapshot: EnrichmentSnapshot = {
+      state: "enriched",
+      generatedAt: "2026-10-30T10:00:00Z",
+      referenceLibraryChanged: true,
+      blocks: [],
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain("Your reference library changed since this note was enriched.");
+    expect(html).toContain("Regenerate");
+  });
+
+  it("renders progress with estimate and stage description during run (PR 3 §3.4)", () => {
+    const snapshot: EnrichmentSnapshot = {
+      state: "enriching",
+      blocks: [],
+      generatedAt: null,
+      latestJob: {
+        id: "job-1",
+        status: "running",
+        progress: {
+          stages_completed: ["classify", "plan"],
+          current_stage: "research 2 of 3",
+          topics_completed: 1,
+          topics_total: 3,
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <EnrichedView note={mockNote} onCitation={vi.fn()} initialSnapshot={snapshot} />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain("Enriching your notes, this takes about a minute.");
+    expect(html).toContain("Current step: Researching references (2 of 3)...");
+    expect(html).toContain("Topics completed: 1 / 3");
   });
 });

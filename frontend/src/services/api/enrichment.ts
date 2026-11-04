@@ -53,6 +53,9 @@ interface WireEnrichment {
   force_include_hash?: string;
   settings_version?: string;
   evidence_status_by_topic?: Record<string, string>;
+  reference_library_changed?: boolean;
+  subject_id?: string;
+  subject_name?: string;
   excluded_segments?: Array<{
     segment_type: string;
     start_line_number: number;
@@ -75,6 +78,8 @@ interface WireEnrichment {
     message?: string;
     progress?: {
       stages_completed: string[];
+      stages_done?: string[];
+      current_stage?: string;
       topics_completed: number;
       topics_total: number;
     };
@@ -157,6 +162,10 @@ function snapshotFromWire(wire: WireEnrichment): EnrichmentSnapshot {
     excludedSegments: wire.excluded_segments,
     latestJob: wire.latest_job,
     aiStale: wire.ai_stale,
+    evidenceStatusByTopic: wire.evidence_status_by_topic,
+    referenceLibraryChanged: wire.reference_library_changed,
+    subjectId: wire.subject_id,
+    subjectName: wire.subject_name,
   };
 }
 
@@ -169,6 +178,12 @@ export async function parseEnrichment(payload: unknown): Promise<EnrichmentSnaps
   const rawNote = (record.note ?? record.enriched_note ?? record) as WireEnrichment;
   const wire: WireEnrichment = {
     ...rawNote,
+    reference_library_changed:
+      typeof record.reference_library_changed === "boolean"
+        ? record.reference_library_changed
+        : rawNote.reference_library_changed,
+    subject_id: (record.subject_id as string) ?? rawNote.subject_id,
+    subject_name: (record.subject_name as string) ?? rawNote.subject_name,
     latest_job: (record.latest_job as WireEnrichment["latest_job"]) ?? rawNote.latest_job,
   };
   return snapshotFromWire(wire);

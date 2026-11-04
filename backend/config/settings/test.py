@@ -45,3 +45,7 @@ EMBEDDING_MODEL_VERSION = "hashing-1024-v1"
 
 # Disable LangSmith tracing during tests to avoid rate limits
 LANGSMITH_TRACING = False
+
+# Sequential enrichment in tests to avoid SQLite concurrent lock collisions
+ENRICHMENT_CONCURRENCY = 1
+

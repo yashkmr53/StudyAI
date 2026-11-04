@@ -306,6 +306,10 @@ AGENT_REQUEST_TIMEOUT_SECONDS = 60
 AGENT_PER_TOOL_TIMEOUT_SECONDS = 30
 AGENT_PROMPT_VERSION = "agent_orchestrator:v1"
 
+# PR 3: Reference-Coverage Guidance & Honest Labels
+ENRICHMENT_SHOW_PARTIAL = os.environ.get("ENRICHMENT_SHOW_PARTIAL", "1").strip() in ("1", "true", "True")
+
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

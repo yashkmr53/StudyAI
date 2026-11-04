@@ -89,7 +89,7 @@ def load_and_gate_node(state: TopicEnrichmentState) -> Dict[str, Any]:
             "approved_lines": approved_lines,
         }
 
-    # 4. Capture Inputs at Job Start (§3.7.3)
+    # 4. Capture Inputs at Job Start (§3.7.3, §3.3)
     start_hash = _descriptor(document)
     norm_force_ids = sorted([str(x) for x in force_include_line_ids])
     force_include_hash = (
@@ -97,7 +97,10 @@ def load_and_gate_node(state: TopicEnrichmentState) -> Dict[str, Any]:
         if norm_force_ids
         else ""
     )
-    settings_version = getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")
+    base_version = getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")
+    from apps.references.services import reference_library_hash
+    ref_hash = reference_library_hash(document.subject)
+    settings_version = f"{base_version}:{ref_hash}"
 
     # Record captured inputs in Job.metadata
     if job_id:
@@ -108,6 +111,7 @@ def load_and_gate_node(state: TopicEnrichmentState) -> Dict[str, Any]:
                 "force_include_hash": force_include_hash,
                 "force_include_line_ids": norm_force_ids,
                 "settings_version": settings_version,
+                "reference_snapshot_hash": ref_hash,
             })
             job.save(update_fields=("metadata",))
         except Job.DoesNotExist:
@@ -115,32 +119,49 @@ def load_and_gate_node(state: TopicEnrichmentState) -> Dict[str, Any]:
 
     # 5. Early-Exit No-Op Check (§3.7.3)
     # If active, fresh note with identical inputs already exists, exit early as already_up_to_date
-    active_note = EnrichedNote.objects.filter(
-        document=document,
-        superseded=False,
-        ai_stale=False,
-        content_hash=start_hash,
-        force_include_hash=force_include_hash,
-        settings_version=settings_version,
-    ).first()
+    # Skip early exit if this job was explicitly dispatched as a refresh or forced rerun
+    is_forced_rerun = False
+    if job_id:
+        try:
+            j_obj = Job.objects.filter(pk=job_id).first()
+            if j_obj and (
+                j_obj.metadata.get("force_rerun")
+                or j_obj.metadata.get("force_refresh")
+                or ":refresh:" in (j_obj.idempotency_key or "")
+            ):
+                is_forced_rerun = True
+        except Exception:
+            pass
 
-    if active_note is not None:
-        logger.info("Document %s already has up-to-date active note %s", document_id, active_note.id)
-        return {
-            "is_ready": False,
-            "outcome": "already_up_to_date",
-            "error_code": "",
-            "start_hash": start_hash,
-            "force_include_hash": force_include_hash,
-            "settings_version": settings_version,
-            "approved_lines": approved_lines,
-        }
+    if not is_forced_rerun:
+        active_note = EnrichedNote.objects.filter(
+            document=document,
+            superseded=False,
+            ai_stale=False,
+            content_hash=start_hash,
+            force_include_hash=force_include_hash,
+            settings_version=settings_version,
+        ).first()
+
+        if active_note is not None:
+            logger.info("Document %s already has up-to-date active note %s", document_id, active_note.id)
+            return {
+                "is_ready": False,
+                "outcome": "already_up_to_date",
+                "error_code": "",
+                "start_hash": start_hash,
+                "force_include_hash": force_include_hash,
+                "settings_version": settings_version,
+                "reference_snapshot_hash": ref_hash,
+                "approved_lines": approved_lines,
+            }
 
     return {
         "is_ready": True,
         "start_hash": start_hash,
         "force_include_hash": force_include_hash,
         "settings_version": settings_version,
+        "reference_snapshot_hash": ref_hash,
         "approved_lines": approved_lines,
         "force_include_line_ids": norm_force_ids,
     }

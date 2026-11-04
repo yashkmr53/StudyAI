@@ -1,0 +1,21 @@
+note_id,mistake_line_text,addressed_by_an_addition,addition_row_id,addition_is_right
+mistake_01,Page faults occur when an address is already loaded into physical RAM.,Y,45,Y
+mistake_01,FIFO page replacement is immune to Belady's anomaly because it is optimal.,Y,22,N
+mistake_02,Deadlock can occur with only three Coffman conditions without circular wait.,Y,24,N
+mistake_02,Preemption means resources can never be taken away from any holding process.,Y,36,Y
+mistake_02,Mutual exclusion requires all resources in the system to be shared freely.,Y,12,Y
+mistake_03,Newton's third law force pairs act on the exact same single object.,Y,37,Y
+mistake_03,Action and reaction forces cancel out completely so no object can ever accelerate.,Y,5,Y
+mistake_03,Net force on an object moving at constant velocity must be non-zero.,N,,
+mistake_04,"In an isolated system, total entropy always decreases spontaneously over time.",N,,
+mistake_04,Heat naturally flows from colder objects into warmer objects without work input.,N,,
+mistake_04,Delta U equals heat added plus work done by the system: Delta U = Q + W.,Y,38,Y
+mistake_05,A chemical reaction is spontaneous when Delta G is positive.,Y,30,Y
+mistake_05,Exothermic reactions absorb heat from the surroundings and have positive Delta H.,Y,44,Y
+mistake_05,"At chemical dynamic equilibrium, Delta G is at its maximum positive value.",Y,40,Y
+mistake_06,DNA polymerase III synthesizes new daughter strands in the 3' to 5' direction.,N,,
+mistake_06,Glycolysis takes place inside the mitochondrial matrix in all cells.,N,,
+mistake_06,Okazaki fragments occur along the leading strand rather than the lagging strand.,Y,23,Y
+holdout_mistake_01,Exothermic reactions release heat and have positive delta H,Y,39,Y
+holdout_mistake_02,Light reactions occur in the stroma,Y,11,Y
+holdout_mistake_03,Objects in free fall gain potential energy as they descend,Y,8,N

@@ -157,6 +157,8 @@ export interface EnrichmentJobInfo {
   message?: string;
   progress?: {
     stages_completed: string[];
+    stages_done?: string[];
+    current_stage?: string;
     topics_completed: number;
     topics_total: number;
   };
@@ -171,6 +173,10 @@ export interface EnrichmentSnapshot {
   excludedSegments?: ExcludedSegmentItem[];
   latestJob?: EnrichmentJobInfo | null;
   aiStale?: boolean;
+  evidenceStatusByTopic?: Record<string, string>;
+  referenceLibraryChanged?: boolean;
+  subjectId?: string | null;
+  subjectName?: string | null;
 }
 
 /* ---- Practice QA / Tests / Chat DTOs used by UI ---- */
