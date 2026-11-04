@@ -113,28 +113,29 @@ def _build_ocr(name: str):
     if name == "paddleocr":
         from providers.ocr.local import PaddleOCRProvider
         return PaddleOCRProvider()
-    # Production providers (require credentials)
-    if name == "google":
-        try:
-            from providers.ocr.google import GoogleVisionOCRProvider
-        except ImportError:
-            raise ValueError("Google Vision OCR provider not available (providers.ocr.google not implemented)")
-        return GoogleVisionOCRProvider()
+    if name in ("gemini", "google", "gemini_ocr", "gemini-ocr"):
+        from providers.ocr.gemini import GeminiOCRProvider
+        return GeminiOCRProvider()
     raise ValueError(f"Unknown OCR provider: {name}")
 
 
 def get_ocr_provider() -> OCRChainProvider:
     """Get OCR provider chain (primary + fallback).
 
+    If USE_GEMINI=true, routes to GeminiOCRProvider with zero fallback.
     OCR_PROVIDER_CHAIN can be a comma-separated list: "qwen35" or "qwen35,mock"
     Defaults to "qwen35" in production, or "mock,mock" in unit tests.
     """
+    if _flag("USE_GEMINI", default="false"):
+        from providers.ocr.gemini import GeminiOCRProvider
+        return OCRChainProvider([GeminiOCRProvider()], disable_fallback=True)
+
     chain_str = _get_env("OCR_PROVIDER_CHAIN", "qwen35")
     names = [n.strip() for n in chain_str.split(",") if n.strip()]
     providers = [_build_ocr(n) for n in names]
 
-    is_qwen35 = bool(providers and getattr(providers[0], "name", "") in ("qwen35", "ollama"))
-    disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_qwen35 else "false")
+    is_single_target = bool(providers and getattr(providers[0], "name", "") in ("qwen35", "ollama", "gemini"))
+    disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_single_target else "false")
     return OCRChainProvider(providers, disable_fallback=disable_fallback)
 
 
@@ -145,7 +146,7 @@ def get_ocr_provider() -> OCRChainProvider:
 def _build_llm(name: str):
     """Build single LLM provider by name.
     
-    The StudyAI production AI stack uses qwen3.5:4b via Ollama.
+    The StudyAI production AI stack uses qwen3.5:4b via Ollama (or Gemini via Google API).
     Legacy hosted providers (OpenAI, Anthropic) are removed from the production path.
     """
     if name == "mock":
@@ -155,20 +156,30 @@ def _build_llm(name: str):
     if name in ("ollama", "qwen35", "qwen", "qwen3.5:4b", "ollama-chat"):
         from providers.llm.qwen35 import Qwen35Provider
         return Qwen35Provider()
+    if name in ("gemini", "google", "gemini_llm", "gemini-llm"):
+        from providers.llm.gemini import GeminiProvider
+        return GeminiProvider()
     if name == "openai":
         raise ValueError("OpenAI provider not available (legacy hosted provider removed in favor of qwen3.5:4b)")
     raise ValueError(
-        f"Unknown LLM provider: {name}. Production stack exclusively uses 'ollama' (qwen3.5:4b)."
+        f"Unknown LLM provider: {name}. Production stack uses 'ollama' (qwen3.5:4b) or 'gemini' (USE_GEMINI=true)."
     )
 
 
 def get_llm_provider() -> LLMChainProvider:
     """Get canonical LLM provider chain.
 
-    In production, LLM_PROVIDER=ollama and LLM_MODEL=qwen3.5:4b route
+    If USE_GEMINI=true, routes directly to GeminiProvider with zero fallback.
+    In production with USE_GEMINI=false, LLM_PROVIDER=ollama and LLM_MODEL=qwen3.5:4b route
     exclusively to Qwen35Provider with zero fallback.
     Mock providers are permitted only in isolated unit tests (Rule 5).
     """
+    if _flag("USE_GEMINI", default="false"):
+        from providers.llm.gemini import GeminiProvider
+        chain = LLMChainProvider([GeminiProvider()])
+        chain.disable_fallback = True
+        return chain
+
     provider_name = _get_env("LLM_PROVIDER")
     chain_str = _get_env("LLM_PROVIDER_CHAIN")
 
@@ -181,18 +192,26 @@ def get_llm_provider() -> LLMChainProvider:
     providers = [_build_llm(n) for n in names]
     chain = LLMChainProvider(providers)
 
-    is_ollama = bool(providers and getattr(providers[0], "name", "") == "ollama")
-    chain.disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_ollama else "false")
+    is_single_target = bool(providers and getattr(providers[0], "name", "") in ("ollama", "gemini"))
+    chain.disable_fallback = _flag("LLM_DISABLE_FALLBACK", default="true" if is_single_target else "false")
     return chain
 
 
+
 def _flag(name: str, default: str = "false") -> bool:
-    """Get a boolean environment setting."""
+    """Get a boolean setting, checking both django settings and os.environ."""
+    # Check os.environ first to allow test patch.dict and CLI overrides
+    env_val = os.environ.get(name)
+    if env_val is not None:
+        return str(env_val).strip().lower() in ("1", "true", "yes")
+
     from django.conf import settings as dj_settings
-    value = getattr(dj_settings, name, None)
-    if value is None:
-        value = os.environ.get(name, default)
-    return str(value).strip() in ("1", "true", "True", "TRUE")
+    val = getattr(dj_settings, name, None)
+    if val is not None:
+        return str(val).strip().lower() in ("1", "true", "yes")
+
+    return str(default).strip().lower() in ("1", "true", "yes")
+
 
 
 # ============================================================================

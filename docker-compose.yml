@@ -84,6 +84,10 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_SSLMODE: disable   # private docker network only
       CELERY_BROKER_URL: redis://redis:6379/0
+      # Gemini Cloud AI Provider
+      USE_GEMINI: ${USE_GEMINI:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # Phase 11: Local provider configuration
       STORAGE_BACKEND: ${STORAGE_BACKEND:-minio}
       MINIO_ENDPOINT: http://minio:9000
