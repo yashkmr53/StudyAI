@@ -64,9 +64,16 @@ class MockEmbedder:
 
 class TestReferenceModels(TestCase):
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.user = User.objects.create_user(email="ref_user@studyai.test", password="password123")
         self.profile = Profile.objects.create(user=self.user, name="Ref Profile")
+        bind_profile_session(self.profile.id)
         self.subject = Subject.objects.create(profile=self.profile, name="Machine Learning")
+
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
 
     def test_create_reference_document(self):
         doc = ReferenceDocument.objects.create(
@@ -196,9 +203,16 @@ class TestExtractionAndChunking(TestCase):
 
 class TestIngestionWorkflow(TestCase):
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.user = User.objects.create_user(email="ingest_user@studyai.test", password="password123")
         self.profile = Profile.objects.create(user=self.user, name="Ingest Profile")
+        bind_profile_session(self.profile.id)
         self.subject = Subject.objects.create(profile=self.profile, name="Data Science")
+
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
 
     @patch("apps.references.ingestion.get_object_storage")
     @patch("apps.references.ingestion.get_embedding_provider")
@@ -261,8 +275,10 @@ class TestIngestionWorkflow(TestCase):
 
 class TestSharedReferenceRetrievalService(TestCase):
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.user_a = User.objects.create_user(email="user_a@studyai.test", password="password123")
         self.profile_a = Profile.objects.create(user=self.user_a, name="Profile A")
+        bind_profile_session(self.profile_a.id)
         self.subject_cs = Subject.objects.create(profile=self.profile_a, name="Computer Science")
         self.subject_math = Subject.objects.create(profile=self.profile_a, name="Mathematics")
 
@@ -352,6 +368,9 @@ class TestSharedReferenceRetrievalService(TestCase):
         mock_embedder.embed.return_value = [[0.9] + [0.0] * 1023]
         mock_get_embedder.return_value = mock_embedder
 
+        from shared.database.rls import bind_profile_session
+        bind_profile_session(self.profile_b.id)
+
         # Profile B must NOT see Profile A's CS textbook
         results_b = retrieve_reference_context(
             "graph traversal",
@@ -367,6 +386,9 @@ class TestSharedReferenceRetrievalService(TestCase):
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [[0.5, 0.5] + [0.0] * 1022]
         mock_get_embedder.return_value = mock_embedder
+
+        from shared.database.rls import bind_profile_session
+        bind_profile_session(self.profile_b.id)
 
         # Global document accessible to Profile B
         results = retrieve_reference_context(
@@ -389,13 +411,20 @@ class TestSharedReferenceRetrievalService(TestCase):
         self.assertFalse(ReferenceDocument.objects.filter(id=doc_id).exists())
         self.assertFalse(ReferenceChunk.objects.filter(id=chunk_id).exists())
 
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
+
 
 class TestEnrichmentAndChatIntegration(TestCase):
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.user = User.objects.create_user(email="enrich_user@studyai.test", password="password123")
         self.profile = Profile.objects.create(
             user=self.user, name="Enrich Profile", module=Profile.Module.AI_CLASSROOM
         )
+        bind_profile_session(self.profile.id)
         self.subject = Subject.objects.create(profile=self.profile, name="Machine Learning")
 
         # Create textbook reference
@@ -416,6 +445,11 @@ class TestEnrichmentAndChatIntegration(TestCase):
             content_hash="prml_0",
             embedding=[0.8] + [0.0] * 1023,
         )
+
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
 
     @patch("apps.references.services.get_embedding_provider")
     def test_enrichment_incorporates_reference_chunks(self, mock_get_embedder):
@@ -538,15 +572,22 @@ class TestReferenceIngestionHardening(TestCase):
     """Regression test suite for reference ingestion transaction boundaries, RLS context, and error persistence."""
 
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.user = User.objects.create_user(email="hardening_ref@studyai.test", password="password123")
         self.profile = Profile.objects.create(user=self.user, name="Hardening Profile")
         self.other_profile = Profile.objects.create(user=self.user, name="Other Profile")
+        bind_profile_session(self.profile.id)
         self.subject = Subject.objects.create(profile=self.profile, name="Data Science")
 
         self.pdf_content = _create_sample_pdf([
             "Chapter 1: Foundations of Data Science. This chapter covers essential data science principles.",
             "Chapter 2: Machine Learning Models. Overview of supervised and unsupervised techniques.",
         ]).getvalue()
+
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=False)
     @patch("apps.references.tasks.ingest_reference_document_task.delay")

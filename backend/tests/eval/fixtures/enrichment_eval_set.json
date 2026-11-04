@@ -1,0 +1,473 @@
+[
+  {
+    "id": "clean_01",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Virtual Memory and Paging",
+    "lines": [
+      "Virtual memory separates logical memory from physical memory.",
+      "Physical memory is partitioned into frames, logical memory into pages.",
+      "A page table translates page numbers to physical frame numbers."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [
+      "Pages and frames must always be identical in size (unusual phrasing but correct)."
+    ],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_02",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Page Replacement FIFO and LRU",
+    "lines": [
+      "Page replacement occurs during a page fault when no frames are free.",
+      "FIFO replaces the oldest page in memory, which can suffer from Belady's anomaly.",
+      "LRU replaces the page that has not been referenced for the longest duration."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_03",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Four Conditions of Deadlock",
+    "lines": [
+      "Deadlock requires mutual exclusion, hold and wait, no preemption, and circular wait.",
+      "No preemption means resources cannot be forcibly confiscated.",
+      "Breaking circular wait prevents deadlocks by ordering resource acquisition."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_04",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Binary Search Tree Operations",
+    "lines": [
+      "In a BST, keys in the left subtree are smaller than the node's key.",
+      "Keys in the right subtree are greater than the node's key.",
+      "Balanced search trees guarantee logarithmic O(log n) time complexity."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_05",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Dynamic Programming Paradigms",
+    "lines": [
+      "Dynamic programming breaks complex problems into overlapping subproblems.",
+      "Memoization is a top-down approach that caches recursive subproblem results.",
+      "Tabulation solves subproblems iteratively from the bottom up."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_06",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "Newton's Second and Third Laws",
+    "lines": [
+      "Net force equals mass times acceleration: F_net = m * a.",
+      "Action and reaction forces are equal in magnitude and opposite in direction.",
+      "Action and reaction forces act on distinct bodies, never cancelling each other."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [
+      "Action and reaction forces cannot cancel because they act on different objects."
+    ],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_07",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "Work and Kinetic Energy Theorem",
+    "lines": [
+      "Net work done on an object equals its change in kinetic energy.",
+      "Conservative forces conserve total mechanical energy E = K + U.",
+      "Non-conservative forces convert mechanical energy into thermal dissipation."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_08",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "First and Second Laws of Thermodynamics",
+    "lines": [
+      "Delta U = Q - W expresses the conservation of internal energy.",
+      "Entropy in an isolated thermodynamic system cannot decrease over time.",
+      "Heat does not flow spontaneously from a cooler object to a hotter object."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_09",
+    "category": "clean",
+    "subject": "Chemistry",
+    "title": "Enthalpy and Calorimetry",
+    "lines": [
+      "Enthalpy is defined as H = U + P*V.",
+      "Exothermic reactions release heat and have negative Delta H.",
+      "Endothermic reactions absorb heat from their surroundings with Delta H > 0."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_10",
+    "category": "clean",
+    "subject": "Chemistry",
+    "title": "Gibbs Free Energy and Equilibrium",
+    "lines": [
+      "Gibbs free energy change Delta G equals Delta H minus T * Delta S.",
+      "A reaction is spontaneous when Delta G is less than zero.",
+      "Standard free energy satisfies Delta G^circ = -R * T * ln(K)."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_11",
+    "category": "clean",
+    "subject": "Biology",
+    "title": "Cellular Respiration and Glycolysis",
+    "lines": [
+      "Glycolysis occurs in the cytoplasm and breaks glucose into two pyruvates.",
+      "Net yield of glycolysis is 2 ATP and 2 NADH per glucose molecule.",
+      "Pyruvate oxidation produces Acetyl-CoA which enters the citric acid cycle."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_12",
+    "category": "clean",
+    "subject": "Biology",
+    "title": "DNA Replication Mechanism",
+    "lines": [
+      "DNA replication is semiconservative with one parental and one daughter strand.",
+      "DNA polymerase III synthesizes new DNA strictly in the 5' to 3' direction.",
+      "The lagging strand is synthesized as Okazaki fragments and sealed by ligase."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [
+      "DNA polymerase cannot synthesize 3' to 5' under any known biological circumstances."
+    ],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_13",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Process Scheduling Algorithms",
+    "lines": [
+      "Preemptive schedulers can interrupt executing processes to switch contexts.",
+      "Round robin scheduling allocates a fixed time slice to each runnable thread.",
+      "Shortest job first minimizes average waiting time across all workloads."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "clean_14",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "Simple Harmonic Motion",
+    "lines": [
+      "In simple harmonic motion, restoring force is directly proportional to displacement: F = -k * x.",
+      "Total mechanical energy in an undamped oscillator remains constant over all cycles.",
+      "The oscillation period of a mass-spring system depends on mass and spring constant."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_01",
+    "category": "mistake",
+    "subject": "Computer Science",
+    "title": "Memory Paging Inaccuracies",
+    "lines": [
+      "Virtual memory allows addresses to be contiguous in physical memory.",
+      "Page faults occur when an address is already loaded into physical RAM.",
+      "FIFO page replacement is immune to Belady's anomaly because it is optimal."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 1,
+        "student_claim": "Page faults occur when an address is already loaded into physical RAM.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "FIFO page replacement is immune to Belady's anomaly because it is optimal.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_02",
+    "category": "mistake",
+    "subject": "Computer Science",
+    "title": "Deadlock Preemption Confusion",
+    "lines": [
+      "Deadlock can occur with only three Coffman conditions without circular wait.",
+      "Preemption means resources can never be taken away from any holding process.",
+      "Mutual exclusion requires all resources in the system to be shared freely."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "Deadlock can occur with only three Coffman conditions without circular wait.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 1,
+        "student_claim": "Preemption means resources can never be taken away from any holding process.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "Mutual exclusion requires all resources in the system to be shared freely.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_03",
+    "category": "mistake",
+    "subject": "Physics",
+    "title": "Newtonian Force Pairs Inversion",
+    "lines": [
+      "Newton's third law force pairs act on the exact same single object.",
+      "Action and reaction forces cancel out completely so no object can ever accelerate.",
+      "Net force on an object moving at constant velocity must be non-zero."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "Newton's third law force pairs act on the exact same single object.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 1,
+        "student_claim": "Action and reaction forces cancel out completely so no object can ever accelerate.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "Net force on an object moving at constant velocity must be non-zero.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_04",
+    "category": "mistake",
+    "subject": "Physics",
+    "title": "Thermodynamics Sign Errors",
+    "lines": [
+      "In an isolated system, total entropy always decreases spontaneously over time.",
+      "Heat naturally flows from colder objects into warmer objects without work input.",
+      "Delta U equals heat added plus work done by the system: Delta U = Q + W."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "In an isolated system, total entropy always decreases spontaneously over time.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 1,
+        "student_claim": "Heat naturally flows from colder objects into warmer objects without work input.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "Delta U equals heat added plus work done by the system: Delta U = Q + W.",
+        "error_type": "formula_error",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_05",
+    "category": "mistake",
+    "subject": "Chemistry",
+    "title": "Gibbs Energy Spontaneity Reversal",
+    "lines": [
+      "A chemical reaction is spontaneous when Delta G is positive.",
+      "Exothermic reactions absorb heat from the surroundings and have positive Delta H.",
+      "At chemical dynamic equilibrium, Delta G is at its maximum positive value."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "A chemical reaction is spontaneous when Delta G is positive.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 1,
+        "student_claim": "Exothermic reactions absorb heat from the surroundings and have positive Delta H.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "At chemical dynamic equilibrium, Delta G is at its maximum positive value.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "mistake_06",
+    "category": "mistake",
+    "subject": "Biology",
+    "title": "DNA Replication Direction Inversion",
+    "lines": [
+      "DNA polymerase III synthesizes new daughter strands in the 3' to 5' direction.",
+      "Glycolysis takes place inside the mitochondrial matrix in all cells.",
+      "Okazaki fragments occur along the leading strand rather than the lagging strand."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "DNA polymerase III synthesizes new daughter strands in the 3' to 5' direction.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 1,
+        "student_claim": "Glycolysis takes place inside the mitochondrial matrix in all cells.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      },
+      {
+        "line_index": 2,
+        "student_claim": "Okazaki fragments occur along the leading strand rather than the lagging strand.",
+        "error_type": "factual_contradiction",
+        "expected_verdict": "CONTRADICTED"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "edge_01",
+    "category": "edge_case",
+    "subject": "Computer Science",
+    "title": "Code Only Python Binary Search",
+    "lines": [
+      "def binary_search(arr, target):",
+      "    low, high = 0, len(arr) - 1",
+      "    while low <= high:",
+      "        mid = (low + high) // 2",
+      "        if arr[mid] == target: return mid",
+      "        elif arr[mid] < target: low = mid + 1",
+      "        else: high = mid - 1",
+      "    return -1"
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient",
+    "expected_render_as": "code"
+  },
+  {
+    "id": "edge_02",
+    "category": "edge_case",
+    "subject": "Physics",
+    "title": "Formulas Only Mechanics",
+    "lines": [
+      "F_net = m * a",
+      "W = F * d * cos(theta)",
+      "Delta K = 1/2 * m * v_f^2 - 1/2 * m * v_i^2",
+      "Delta U = Q - W"
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "edge_03",
+    "category": "edge_case",
+    "subject": "Medieval History",
+    "title": "Treaty of Westphalia 1648",
+    "lines": [
+      "The Peace of Westphalia in 1648 concluded the Thirty Years War in the Holy Roman Empire.",
+      "It established the doctrine of state sovereignty and cuius regio, eius religio.",
+      "Diplomatic delegations negotiated in the Westphalian cities of Munster and Osnabruck."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "none"
+  },
+  {
+    "id": "edge_04",
+    "category": "edge_case",
+    "subject": "Art History",
+    "title": "Baroque Chiaroscuro and Caravaggio",
+    "lines": [
+      "Caravaggio pioneered dramatic tenebrism and chiaroscuro in Baroque oil painting.",
+      "The Calling of Saint Matthew employs intense directional lighting against dark shadows.",
+      "Naturalistic depiction of biblical figures rejected idealized Mannerist conventions."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "none"
+  },
+  {
+    "id": "edge_05",
+    "category": "edge_case",
+    "subject": "Ancient Archaeology",
+    "title": "Linear B Decipherment at Knossos",
+    "lines": [
+      "Michael Ventris deciphered Linear B tablets found at Knossos and Pylos in 1952.",
+      "The script was confirmed to represent an archaic dialect of Mycenaean Greek.",
+      "Linear B functioned primarily for palace administrative accounts and agricultural censuses."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "none"
+  }
+]

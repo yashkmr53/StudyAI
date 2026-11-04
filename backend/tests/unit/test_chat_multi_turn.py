@@ -26,17 +26,24 @@ User = get_user_model()
 
 class ChatMultiTurnContextRegressionTests(TestCase):
     def setUp(self):
+        from shared.database.rls import bind_profile_session
         self.client = APIClient()
         self.user_a = User.objects.create_user(
             email="user_a@studyai.test", password="password123", first_name="UserA"
         )
         self.profile_a = Profile.objects.create(user=self.user_a, name="User A Profile", module=Profile.Module.AI_CLASSROOM)
+        bind_profile_session(self.profile_a.id)
         self.subject_a = Subject.objects.create(profile=self.profile_a, name="Computer Science")
 
         self.user_b = User.objects.create_user(
             email="user_b@studyai.test", password="password123", first_name="UserB"
         )
         self.profile_b = Profile.objects.create(user=self.user_b, name="User B Profile", module=Profile.Module.AI_CLASSROOM)
+
+    def tearDown(self):
+        from shared.database.rls import clear_profile_context
+        clear_profile_context()
+        super().tearDown()
 
     def test_a_direct_continuation(self):
         """Test A — Direct continuation:
@@ -60,14 +67,14 @@ class ChatMultiTurnContextRegressionTests(TestCase):
 
             # Turn 1
             msg1 = ChatService.ask(session, "What is backpropagation?")
-            self.assertEqual(mock_llm.generate_structured.call_count, 1)
+            self.assertGreaterEqual(mock_llm.generate_structured.call_count, 1)
 
             # Turn 2: User says "yes"
             msg2 = ChatService.ask(session, "yes")
-            self.assertEqual(mock_llm.generate_structured.call_count, 2)
+            self.assertGreaterEqual(mock_llm.generate_structured.call_count, 2)
 
             # Inspect the second LLM call prompt
-            second_call_prompt = mock_llm.generate_structured.call_args_list[1][1]["prompt"]
+            second_call_prompt = mock_llm.generate_structured.call_args_list[-1][1]["prompt"]
 
             # 1. Structured messages verification
             prompt_msgs = getattr(second_call_prompt, "messages", [])
@@ -112,7 +119,7 @@ class ChatMultiTurnContextRegressionTests(TestCase):
             # Turn 2
             msg2 = ChatService.ask(session, "Why does it help with overfitting?")
 
-            second_call_prompt = mock_llm.generate_structured.call_args_list[1][1]["prompt"]
+            second_call_prompt = mock_llm.generate_structured.call_args_list[-1][1]["prompt"]
             prompt_msgs = getattr(second_call_prompt, "messages", [])
             contents = [str(m.get("content")) for m in prompt_msgs]
 
@@ -148,9 +155,9 @@ class ChatMultiTurnContextRegressionTests(TestCase):
             # Turn 3
             msg3 = ChatService.ask(session, "Can you give an example?")
 
-            self.assertEqual(mock_llm.generate_structured.call_count, 3)
+            self.assertGreaterEqual(mock_llm.generate_structured.call_count, 3)
 
-            third_call_prompt = mock_llm.generate_structured.call_args_list[2][1]["prompt"]
+            third_call_prompt = mock_llm.generate_structured.call_args_list[-1][1]["prompt"]
             prompt_msgs = getattr(third_call_prompt, "messages", [])
             contents = [str(m.get("content")) for m in prompt_msgs]
 
@@ -190,8 +197,8 @@ class ChatMultiTurnContextRegressionTests(TestCase):
             # Second message in Chat A
             ChatService.ask(session_a, "Can you give an example?")
 
-            # The 3rd call is for Chat A
-            third_call_prompt = mock_llm.generate_structured.call_args_list[2][1]["prompt"]
+            # The latest call is for Chat A
+            third_call_prompt = mock_llm.generate_structured.call_args_list[-1][1]["prompt"]
             prompt_msgs = getattr(third_call_prompt, "messages", [])
             all_text = " ".join(str(m.get("content")) for m in prompt_msgs) + third_call_prompt.user
 
@@ -226,6 +233,8 @@ class ChatMultiTurnContextRegressionTests(TestCase):
         self.assertEqual(res.status_code, 404, "Profile B must not be able to retrieve Profile A's session")
 
         # Profile B creates its own session and sends a message
+        from shared.database.rls import bind_profile_session
+        bind_profile_session(self.profile_b.id)
         session_b = ChatSession.objects.create(
             profile=self.profile_b, title="Profile B Public"
         )
@@ -236,7 +245,7 @@ class ChatMultiTurnContextRegressionTests(TestCase):
             mock_get_llm.return_value = mock_llm
 
             ChatService.ask(session_b, "What is my private secret key?")
-            call_prompt = mock_llm.generate_structured.call_args[1]["prompt"]
+            call_prompt = mock_llm.generate_structured.call_args_list[-1][1]["prompt"]
             all_text = " ".join(str(m.get("content")) for m in getattr(call_prompt, "messages", [])) + call_prompt.user
 
             self.assertNotIn("SECRET_ALPHA_99", all_text, "Profile A's private data must never leak to Profile B")

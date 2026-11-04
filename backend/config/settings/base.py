@@ -174,6 +174,14 @@ CANVAS_LOCK_TTL_SECONDS = 90
 OCR_PIPELINE_VERSION = "qwen35-v1"          # part of the OCR idempotency key (§20)
 OCR_PROVIDER_CHAIN = "qwen35"               # StudyAI canonical OCR provider (qwen3.5:4b vision)
 OCR_REVIEW_THRESHOLD = 0.80               # avg confidence below → needs_review (§48)
+MAX_OCR_ATTEMPTS = 3
+OCR_ILLEGIBLE_THRESHOLD = 0.15
+OCR_UNCERTAIN_THRESHOLD = 0.30
+OCR_LINE_UNCERTAIN_THRESHOLD = 0.80  # placeholder to calibrate on real handwritten pages
+OCR_PENDING_TIMEOUT = 1800  # 30 minutes
+OCR_PROCESSING_TIMEOUT = 600  # 10 minutes
+MAX_LINE_LENGTH = 1000
+MAX_LINES_PER_PAGE = 500
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 UPLOAD_ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"]
 # Must exceed UPLOAD_MAX_BYTES so bodies at the boundary reach our view,
@@ -269,6 +277,20 @@ PROMETHEUS_METRICS_ENABLED = False
 ENRICHMENT_COALESCE_WINDOW_SECONDS = 300
 ENRICHMENT_CHANGE_MAGNITUDE_THRESHOLD = 0.15
 
+# Topic-based Note Enrichment Settings (Phase 3 PR 2)
+ENRICHMENT_CONCURRENCY = int(os.environ.get("ENRICHMENT_CONCURRENCY", "4"))
+RELEVANCE_MIN_DENSE = float(os.environ.get("RELEVANCE_MIN_DENSE", "0.45"))
+SEGMENT_MIN_CONFIDENCE = float(os.environ.get("SEGMENT_MIN_CONFIDENCE", "0.70"))
+DUP_COSINE = float(os.environ.get("DUP_COSINE", "0.88"))
+RESTATE_COSINE = float(os.environ.get("RESTATE_COSINE", "0.88"))
+SUPPORT_COSINE = float(os.environ.get("SUPPORT_COSINE", "0.75"))
+SUPPORT_LEXICAL = float(os.environ.get("SUPPORT_LEXICAL", "0.30"))
+ENRICHMENT_MAX_LLM_CALLS = int(os.environ.get("ENRICHMENT_MAX_LLM_CALLS", "25"))
+MAX_DEDUPE_PAIRS = int(os.environ.get("MAX_DEDUPE_PAIRS", "6"))
+ENRICHMENT_ENABLE_POSSIBLE_ISSUE = os.environ.get("ENRICHMENT_ENABLE_POSSIBLE_ISSUE", "false").lower() in ("1", "true", "yes")
+PROMPT_VERSION = os.environ.get("ENRICHMENT_PROMPT_VERSION", "topic_enrichment:v1")
+ENRICHMENT_PROCESSING_TIMEOUT = int(os.environ.get("ENRICHMENT_PROCESSING_TIMEOUT", "300"))
+
 # Provider input limits (D5 data-minimization)
 MAX_PROVIDER_INPUT_CHARS = 8000
 
@@ -283,6 +305,10 @@ AGENT_MAX_TOOL_CALLS = 10
 AGENT_REQUEST_TIMEOUT_SECONDS = 60
 AGENT_PER_TOOL_TIMEOUT_SECONDS = 30
 AGENT_PROMPT_VERSION = "agent_orchestrator:v1"
+
+# PR 3: Reference-Coverage Guidance & Honest Labels
+ENRICHMENT_SHOW_PARTIAL = os.environ.get("ENRICHMENT_SHOW_PARTIAL", "1").strip() in ("1", "true", "True")
+
 
 LOGGING = {
     "version": 1,

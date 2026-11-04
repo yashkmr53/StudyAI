@@ -1,0 +1,168 @@
+{
+  "title": "OpenStax Chemistry: Chemical Thermodynamics and Kinetics",
+  "subject": "Chemistry",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Thermochemistry",
+      "section": "Internal Energy and Heat",
+      "page_number": 140,
+      "text": "Thermochemistry is the study of heat energy associated with chemical reactions and physical transformations. Heat (q) is thermal energy transferred between systems at different temperatures. Endothermic processes absorb heat from the surroundings (q > 0), while exothermic processes release heat into the surroundings (q < 0)."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Thermochemistry",
+      "section": "Enthalpy and Heat of Reaction",
+      "page_number": 144,
+      "text": "Enthalpy (H) is defined as H = U + P * V. For a process occurring at constant pressure, the change in enthalpy equals the heat transferred: Delta H = q_p. A negative Delta H denotes an exothermic reaction releasing heat, whereas a positive Delta H denotes an endothermic reaction absorbing heat."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Thermochemistry",
+      "section": "Calorimetry and Heat Capacity",
+      "page_number": 148,
+      "text": "Calorimetry is the experimental technique of measuring heat changes during chemical reactions. Heat absorbed or released is calculated using q = m * c * Delta T, where m is mass, c is specific heat capacity, and Delta T = T_final - T_initial. In a constant-pressure coffee-cup calorimeter, q_reaction = -q_calorimeter."
+    },
+    {
+      "chunk_index": 3,
+      "chapter": "Thermochemistry",
+      "section": "Hess Law of Constant Heat Summation",
+      "page_number": 152,
+      "text": "Hess law states that if a process can be written as the sum of several stepwise processes, the enthalpy change of the total process equals the sum of the enthalpy changes of the individual steps. This principle follows because enthalpy is a state function, independent of the reaction pathway."
+    },
+    {
+      "chunk_index": 4,
+      "chapter": "Thermochemistry",
+      "section": "Standard Enthalpies of Formation",
+      "page_number": 156,
+      "text": "The standard enthalpy of formation (Delta H_f^o) is the enthalpy change for the formation of one mole of a substance in its standard state from its constituent elements in their reference standard states. By definition, Delta H_f^o of any pure element in its standard state at 298.15 K and 1 bar is exactly zero."
+    },
+    {
+      "chunk_index": 5,
+      "chapter": "Chemical Thermodynamics",
+      "section": "Entropy and Disorder",
+      "page_number": 170,
+      "text": "Entropy (S) is a measure of the dispersal of matter and energy in a thermodynamic system. Microscopic entropy is defined by Boltzmann formula S = k_B * ln(W), where W is the number of accessible microstates. For a reversible process, Delta S = q_rev / T. Phase transitions from solid to liquid to gas exhibit marked increases in entropy."
+    },
+    {
+      "chunk_index": 6,
+      "chapter": "Chemical Thermodynamics",
+      "section": "Gibbs Free Energy Definition",
+      "page_number": 174,
+      "text": "Gibbs free energy (G) combines enthalpy and entropy into a single thermodynamic potential: G = H - T * S. At constant temperature and pressure, the change in Gibbs free energy is Delta G = Delta H - T * Delta S. The sign of Delta G provides a strict thermodynamic criterion for reaction spontaneity."
+    },
+    {
+      "chunk_index": 7,
+      "chapter": "Chemical Thermodynamics",
+      "section": "Criterion of Spontaneity",
+      "page_number": 178,
+      "text": "At constant temperature and pressure: a negative Delta G (Delta G < 0) indicates a thermodynamically spontaneous (exergonic) process in the forward direction. A positive Delta G (Delta G > 0) indicates a nonspontaneous (endergonic) process, meaning the reverse process is spontaneous. When Delta G = 0, the system is in dynamic equilibrium."
+    },
+    {
+      "chunk_index": 8,
+      "chapter": "Chemical Thermodynamics",
+      "section": "Temperature Dependence of Spontaneity",
+      "page_number": 182,
+      "text": "The temperature dependence of Delta G = Delta H - T * Delta S creates four thermodynamic scenarios: when Delta H < 0 and Delta S > 0, Delta G is negative at all temperatures (always spontaneous); when Delta H > 0 and Delta S < 0, Delta G is positive at all temperatures (never spontaneous); when both Delta H and Delta S are negative, spontaneous only at low T; when both are positive, spontaneous only at high T."
+    },
+    {
+      "chunk_index": 9,
+      "chapter": "Chemical Thermodynamics",
+      "section": "Relationship between Free Energy and Equilibrium",
+      "page_number": 186,
+      "text": "The standard free energy change of a reaction is linked to its thermodynamic equilibrium constant K via Delta G^o = -R * T * ln(K), where R is the universal gas constant (8.314 J / mol*K) and T is absolute temperature. If K > 1, Delta G^o < 0 and products are favored at equilibrium; if K < 1, Delta G^o > 0 and reactants are favored."
+    },
+    {
+      "chunk_index": 10,
+      "chapter": "Equilibrium",
+      "section": "Dynamic Equilibrium and Equilibrium Constant",
+      "page_number": 200,
+      "text": "Chemical equilibrium is a dynamic state in which the rate of the forward reaction equals the rate of the reverse reaction, resulting in constant concentrations of reactants and products over time. For reaction aA + bB <=> cC + dD, the equilibrium constant expression is K_c = ([C]^c * [D]^d) / ([A]^a * [B]^b). Pure solids and pure liquids are omitted from K expressions."
+    },
+    {
+      "chunk_index": 11,
+      "chapter": "Equilibrium",
+      "section": "Reaction Quotient Q vs K",
+      "page_number": 204,
+      "text": "The reaction quotient Q has the same mathematical form as the equilibrium constant expression but uses instantaneous non-equilibrium concentrations. If Q < K, the forward reaction proceeds to form more products. If Q > K, the reverse reaction proceeds to form more reactants. If Q = K, the system is at chemical equilibrium."
+    },
+    {
+      "chunk_index": 12,
+      "chapter": "Equilibrium",
+      "section": "Le Chatelier Principle",
+      "page_number": 208,
+      "text": "Le Chatelier principle states that if a system at chemical equilibrium is disturbed by a change in temperature, pressure, or concentration of one of the components, the system will shift its equilibrium position so as to counteract the effect of the disturbance. Adding a reactant shifts equilibrium right; raising temperature shifts equilibrium toward the endothermic direction."
+    },
+    {
+      "chunk_index": 13,
+      "chapter": "Kinetics",
+      "section": "Reaction Rates and Rate Laws",
+      "page_number": 230,
+      "text": "The rate of a chemical reaction is defined as the change in concentration of a reactant or product per unit time: Rate = -d[A]/dt. The rate law expresses reaction rate as a function of concentrations: Rate = k * [A]^m * [B]^n, where k is rate constant and m, n are reaction orders determined solely by experimental data, not stoichiometry."
+    },
+    {
+      "chunk_index": 14,
+      "chapter": "Kinetics",
+      "section": "Activation Energy and Arrhenius Equation",
+      "page_number": 234,
+      "text": "The Arrhenius equation describes temperature dependence of reaction rates: k = A * exp(-E_a / (R * T)), where E_a is activation energy and A is frequency factor. Catalysts accelerate reactions by providing an alternative reaction pathway with lower activation energy without being consumed or altering Delta G or equilibrium constants."
+    },
+    {
+      "chunk_index": 15,
+      "chapter": "Acid-Base Chemistry",
+      "section": "Bronsted-Lowry Acids and Bases",
+      "page_number": 260,
+      "text": "According to Bronsted-Lowry theory, an acid is a proton (H+) donor and a base is a proton acceptor. Conjugate acid-base pairs differ by a single proton: HA + H2O <=> H3O+ + A-. The autoionization of water is characterized by K_w = [H3O+] * [OH-] = 1.0e-14 at 25 degrees Celsius, defining pH = -log[H3O+]."
+    },
+    {
+      "chunk_index": 16,
+      "chapter": "Acid-Base Chemistry",
+      "section": "Buffer Solutions and Henderson-Hasselbalch",
+      "page_number": 265,
+      "text": "A buffer solution resists changes in pH when small amounts of acid or base are added; it consists of a weak acid and its conjugate base. The pH of a buffer is calculated via the Henderson-Hasselbalch equation: pH = pK_a + log([A-] / [HA]). Buffer capacity is highest when [A-] = [HA], at which point pH = pK_a."
+    },
+    {
+      "chunk_index": 17,
+      "chapter": "Electrochemistry",
+      "section": "Redox Reactions and Oxidation Numbers",
+      "page_number": 290,
+      "text": "Oxidation-reduction (redox) reactions involve the transfer of electrons between chemical species. Oxidation is the loss of electrons (increase in oxidation state), and reduction is the gain of electrons (decrease in oxidation state). In any balanced redox process, the total number of electrons lost by reducing agents equals electrons gained by oxidizing agents."
+    },
+    {
+      "chunk_index": 20,
+      "chapter": "Atomic Structure",
+      "section": "Quantum Numbers and Orbitals",
+      "page_number": 320,
+      "text": "Electrons in atoms are described by four quantum numbers: principal (n), angular momentum (l), magnetic (m_l), and spin (m_s). The Pauli exclusion principle forbids any two electrons in an atom from having identical sets of four quantum numbers. Hunds rule states that electrons occupy degenerate orbitals singly with parallel spins before pairing."
+    },
+    {
+      "chunk_index": 21,
+      "chapter": "Chemical Bonding",
+      "section": "Lewis Structures and Octet Rule",
+      "page_number": 340,
+      "text": "Chemical bonds form when atoms share or transfer valence electrons to achieve stable noble gas electronic configurations, usually eight valence electrons (octet rule). Ionic bonds form between elements of disparate electronegativity through electrostatic attraction; covalent bonds form through mutual sharing of electron pairs."
+    },
+    {
+      "chunk_index": 22,
+      "chapter": "Chemical Bonding",
+      "section": "VSEPR Theory and Molecular Geometry",
+      "page_number": 345,
+      "text": "Valence Shell Electron Pair Repulsion (VSEPR) theory predicts molecular geometry based on minimizing electrostatic repulsion between valence shell electron pairs surrounding a central atom. Geometries include linear (2 pairs, 180 degrees), trigonal planar (3 pairs, 120 degrees), tetrahedral (4 pairs, 109.5 degrees), trigonal bipyramidal, and octahedral."
+    },
+    {
+      "chunk_index": 23,
+      "chapter": "Intermolecular Forces",
+      "section": "Hydrogen Bonding and Dipole Interactions",
+      "page_number": 360,
+      "text": "Intermolecular forces (IMFs) dictate macroscopic physical properties like boiling points and viscosity. London dispersion forces exist in all molecules; dipole-dipole interactions occur between polar molecules. Hydrogen bonding is an exceptionally strong dipole-dipole attraction occurring when hydrogen is covalently bonded to highly electronegative nitrogen, oxygen, or fluorine."
+    },
+    {
+      "chunk_index": 24,
+      "chapter": "Gas Laws",
+      "section": "Ideal Gas Law and Daltons Law",
+      "page_number": 380,
+      "text": "The ideal gas law relates state variables for hypothetical non-interacting gas particles: P * V = n * R * T. Daltons law of partial pressures states that the total pressure exerted by a mixture of non-reactive gases equals the sum of the partial pressures that each individual gas would exert if it alone occupied the entire volume: P_total = P_1 + P_2 + ... + P_n."
+    }
+  ]
+}

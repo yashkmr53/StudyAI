@@ -1,0 +1,187 @@
+[
+  {
+    "id": "holdout_clean_01",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "Conservation of Momentum",
+    "lines": [
+      "In an isolated system with no external forces, total momentum is conserved.",
+      "Elastic collisions conserve both momentum and kinetic energy.",
+      "Inelastic collisions conserve momentum but not kinetic energy."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_clean_02",
+    "category": "clean",
+    "subject": "Computer Science",
+    "title": "Stack and Queue Data Structures",
+    "lines": [
+      "A stack follows LIFO ordering: last element pushed is first popped.",
+      "A queue follows FIFO ordering: first element enqueued is first dequeued.",
+      "Both can be implemented with arrays or linked lists."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_clean_03",
+    "category": "clean",
+    "subject": "Chemistry",
+    "title": "Chemical Equilibrium and Le Chatelier",
+    "lines": [
+      "At equilibrium the forward and reverse reaction rates are equal.",
+      "Le Chatelier's principle predicts shifts when a stress is applied.",
+      "Increasing concentration of a reactant shifts equilibrium toward products."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_clean_04",
+    "category": "clean",
+    "subject": "Biology",
+    "title": "DNA Replication Basics",
+    "lines": [
+      "DNA replication is semiconservative: each new double helix has one old and one new strand.",
+      "Helicase unwinds the double helix at the replication fork.",
+      "DNA polymerase synthesizes the new strand in the 5' to 3' direction."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_clean_05",
+    "category": "clean",
+    "subject": "Physics",
+    "title": "Work and Energy Theorem",
+    "lines": [
+      "Work equals force times displacement times cosine of the angle between them.",
+      "The work-energy theorem states net work equals change in kinetic energy.",
+      "Conservative forces have path-independent work."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_mistake_01",
+    "category": "mistake",
+    "subject": "Chemistry",
+    "title": "Exothermic and Endothermic Reactions",
+    "lines": [
+      "Exothermic reactions release heat and have positive delta H.",
+      "Endothermic reactions absorb heat from surroundings.",
+      "Activation energy is the minimum energy required to start a reaction."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "Exothermic reactions release heat and have positive delta H",
+        "correct_fact": "Exothermic reactions have negative delta H (they release energy)"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_mistake_02",
+    "category": "mistake",
+    "subject": "Biology",
+    "title": "Photosynthesis Light Reactions",
+    "lines": [
+      "Light reactions occur in the stroma of the chloroplast.",
+      "Water is split during photolysis releasing oxygen.",
+      "ATP and NADPH are produced for the Calvin cycle."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 0,
+        "student_claim": "Light reactions occur in the stroma",
+        "correct_fact": "Light reactions occur in the thylakoid membrane, not the stroma"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_mistake_03",
+    "category": "mistake",
+    "subject": "Physics",
+    "title": "Gravitational Potential Energy",
+    "lines": [
+      "Gravitational potential energy is mgh where h is measured from any reference level.",
+      "Objects in free fall gain potential energy as they descend.",
+      "At the lowest point of a pendulum swing kinetic energy is maximum."
+    ],
+    "seeded_mistakes": [
+      {
+        "line_index": 1,
+        "student_claim": "Objects in free fall gain potential energy as they descend",
+        "correct_fact": "Objects in free fall lose potential energy and gain kinetic energy as they descend"
+      }
+    ],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_edge_01",
+    "category": "edge_case",
+    "subject": "Computer Science",
+    "title": "Sorting Algorithm Code",
+    "lines": [
+      "def bubble_sort(arr):",
+      "    for i in range(len(arr)):",
+      "        for j in range(len(arr) - i - 1):",
+      "            if arr[j] > arr[j+1]:",
+      "                arr[j], arr[j+1] = arr[j+1], arr[j]"
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_edge_02",
+    "category": "edge_case",
+    "subject": "Computer Science",
+    "title": "Minimalist One-Liner",
+    "lines": [
+      "Hash tables provide O(1) average lookup."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "sufficient"
+  },
+  {
+    "id": "holdout_edge_03",
+    "category": "edge_case",
+    "subject": "Physics",
+    "title": "Out-of-Corpus Astrophysics",
+    "lines": [
+      "Black holes form when stellar cores exceed the Tolman-Oppenheimer-Volkoff limit.",
+      "Hawking radiation is a quantum effect near the event horizon.",
+      "Gravitational lensing bends light from distant galaxies."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "none"
+  },
+  {
+    "id": "holdout_edge_04",
+    "category": "edge_case",
+    "subject": "Biology",
+    "title": "Out-of-Corpus Marine Ecology",
+    "lines": [
+      "Coral bleaching occurs when symbiotic zooxanthellae are expelled due to thermal stress.",
+      "Ocean acidification reduces carbonate ion availability for shell-forming organisms."
+    ],
+    "seeded_mistakes": [],
+    "hard_negatives": [],
+    "expected_evidence_status": "none"
+  }
+]

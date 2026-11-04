@@ -133,6 +133,35 @@ export interface EnrichedBlock {
   title: string;
   content: string;
   citations: CitationRef[];
+  blockKind?: "heading" | "student" | "addition" | "legacy";
+  renderAs?: "prose" | "code";
+  topicId?: string;
+  additionKind?: string;
+  supportStatus?: string;
+}
+
+export interface ExcludedSegmentItem {
+  segment_type: string;
+  start_line_number: number;
+  end_line_number: number;
+  topic_description: string;
+  reason: string;
+  lineage_ids: string[];
+}
+
+export interface EnrichmentJobInfo {
+  id: string;
+  status: string;
+  outcome?: string;
+  error_code?: string;
+  message?: string;
+  progress?: {
+    stages_completed: string[];
+    stages_done?: string[];
+    current_stage?: string;
+    topics_completed: number;
+    topics_total: number;
+  };
 }
 
 export interface EnrichmentSnapshot {
@@ -140,6 +169,14 @@ export interface EnrichmentSnapshot {
   blocks: EnrichedBlock[];
   generatedAt: string | null;
   emptyReason?: string | null;
+  status?: "ok" | "needs_attention";
+  excludedSegments?: ExcludedSegmentItem[];
+  latestJob?: EnrichmentJobInfo | null;
+  aiStale?: boolean;
+  evidenceStatusByTopic?: Record<string, string>;
+  referenceLibraryChanged?: boolean;
+  subjectId?: string | null;
+  subjectName?: string | null;
 }
 
 /* ---- Practice QA / Tests / Chat DTOs used by UI ---- */

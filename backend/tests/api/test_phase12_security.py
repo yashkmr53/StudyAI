@@ -46,12 +46,13 @@ class Phase12GlobalReferenceSecurityTests(TestCase):
         )
 
         # Create private reference for normal user
-        self.private_ref_normal = ReferenceDocument.objects.create(
-            title="Student Personal Reference",
-            source_type=ReferenceDocument.SourceType.REFERENCE_PDF,
-            profile=self.normal_profile,
-            status=ReferenceDocument.Status.READY,
-        )
+        with profile_scoped_transaction(self.normal_profile.id):
+            self.private_ref_normal = ReferenceDocument.objects.create(
+                title="Student Personal Reference",
+                source_type=ReferenceDocument.SourceType.REFERENCE_PDF,
+                profile=self.normal_profile,
+                status=ReferenceDocument.Status.READY,
+            )
 
     def test_non_staff_cannot_delete_global_reference(self):
         """Normal user attempting to delete global reference receives 403 Forbidden."""
@@ -78,7 +79,8 @@ class Phase12GlobalReferenceSecurityTests(TestCase):
             HTTP_X_ACTIVE_PROFILE=str(self.normal_profile.id),
         )
         self.assertEqual(response.status_code, 204)
-        self.assertFalse(ReferenceDocument.objects.filter(id=self.private_ref_normal.id).exists())
+        with profile_scoped_transaction(self.normal_profile.id):
+            self.assertFalse(ReferenceDocument.objects.filter(id=self.private_ref_normal.id).exists())
 
     def test_user_cannot_delete_foreign_private_reference(self):
         """Another user cannot delete someone else's private reference."""
@@ -92,7 +94,8 @@ class Phase12GlobalReferenceSecurityTests(TestCase):
         )
         # get_queryset scopes to user's profiles + global, so other user receives 404 Not Found
         self.assertIn(response.status_code, (403, 404))
-        self.assertTrue(ReferenceDocument.objects.filter(id=self.private_ref_normal.id).exists())
+        with profile_scoped_transaction(self.normal_profile.id):
+            self.assertTrue(ReferenceDocument.objects.filter(id=self.private_ref_normal.id).exists())
 
 
 class Phase12SoleProfileGuardTests(TestCase):
@@ -145,64 +148,66 @@ class Phase12MultiProfileIsolationTests(TestCase):
         )
 
         # Subject and Note under Profile A
-        self.subject_a = Subject.objects.create(name="Subject A", profile=self.profile_a)
-        self.doc_a = Document.objects.create(
-            title="Note A", profile=self.profile_a, subject=self.subject_a
-        )
-        self.chunk_a = NoteChunk.objects.create(
-            document=self.doc_a,
-            profile=self.profile_a,
-            subject=self.subject_a,
-            revision_id=uuid.uuid4(),
-            page_start=1,
-            page_end=1,
-            chunk_index=0,
-            content="Binary Search Trees in Data Structures A",
-            stale=False,
-        )
+        with profile_scoped_transaction(self.profile_a.id):
+            self.subject_a = Subject.objects.create(name="Subject A", profile=self.profile_a)
+            self.doc_a = Document.objects.create(
+                title="Note A", profile=self.profile_a, subject=self.subject_a
+            )
+            self.chunk_a = NoteChunk.objects.create(
+                document=self.doc_a,
+                profile=self.profile_a,
+                subject=self.subject_a,
+                revision_id=uuid.uuid4(),
+                page_start=1,
+                page_end=1,
+                chunk_index=0,
+                content="Binary Search Trees in Data Structures A",
+                embedding=[0.1] * 1024,
+                stale=False,
+            )
+            self.ref_a = ReferenceDocument.objects.create(
+                title="Reference A Manual",
+                profile=self.profile_a,
+                status=ReferenceDocument.Status.READY,
+            )
+            self.ref_chunk_a = ReferenceChunk.objects.create(
+                reference_document=self.ref_a,
+                chunk_index=0,
+                page_number=1,
+                text="Algorithms and Big O Complexity Analysis",
+                embedding=[0.1] * 1024,
+            )
 
         # Subject and Note under Profile B
-        self.subject_b = Subject.objects.create(name="Subject B", profile=self.profile_b)
-        self.doc_b = Document.objects.create(
-            title="Note B", profile=self.profile_b, subject=self.subject_b
-        )
-        self.chunk_b = NoteChunk.objects.create(
-            document=self.doc_b,
-            profile=self.profile_b,
-            subject=self.subject_b,
-            revision_id=uuid.uuid4(),
-            page_start=1,
-            page_end=1,
-            chunk_index=0,
-            content="Quantum Physics and Superconductivity B",
-            stale=False,
-        )
-
-        # Private Reference under Profile A
-        self.ref_a = ReferenceDocument.objects.create(
-            title="Reference A Manual",
-            profile=self.profile_a,
-            status=ReferenceDocument.Status.READY,
-        )
-        self.ref_chunk_a = ReferenceChunk.objects.create(
-            reference_document=self.ref_a,
-            chunk_index=0,
-            page_number=1,
-            text="Algorithms and Big O Complexity Analysis",
-        )
-
-        # Private Reference under Profile B
-        self.ref_b = ReferenceDocument.objects.create(
-            title="Reference B Manual",
-            profile=self.profile_b,
-            status=ReferenceDocument.Status.READY,
-        )
-        self.ref_chunk_b = ReferenceChunk.objects.create(
-            reference_document=self.ref_b,
-            chunk_index=0,
-            page_number=1,
-            text="Relativity and Spacetime Curvature Mechanics",
-        )
+        with profile_scoped_transaction(self.profile_b.id):
+            self.subject_b = Subject.objects.create(name="Subject B", profile=self.profile_b)
+            self.doc_b = Document.objects.create(
+                title="Note B", profile=self.profile_b, subject=self.subject_b
+            )
+            self.chunk_b = NoteChunk.objects.create(
+                document=self.doc_b,
+                profile=self.profile_b,
+                subject=self.subject_b,
+                revision_id=uuid.uuid4(),
+                page_start=1,
+                page_end=1,
+                chunk_index=0,
+                content="Quantum Physics and Superconductivity B",
+                embedding=[0.1] * 1024,
+                stale=False,
+            )
+            self.ref_b = ReferenceDocument.objects.create(
+                title="Reference B Manual",
+                profile=self.profile_b,
+                status=ReferenceDocument.Status.READY,
+            )
+            self.ref_chunk_b = ReferenceChunk.objects.create(
+                reference_document=self.ref_b,
+                chunk_index=0,
+                page_number=1,
+                text="Relativity and Spacetime Curvature Mechanics",
+                embedding=[0.1] * 1024,
+            )
 
         # Global Reference
         self.ref_global = ReferenceDocument.objects.create(
@@ -215,6 +220,7 @@ class Phase12MultiProfileIsolationTests(TestCase):
             chunk_index=0,
             page_number=1,
             text="Linear Algebra and Matrix Calculus Operations",
+            embedding=[0.1] * 1024,
         )
 
     def test_direct_uuid_access_blocked_across_profiles(self):
@@ -235,41 +241,45 @@ class Phase12MultiProfileIsolationTests(TestCase):
 
     def test_retrieval_service_strictly_isolates_by_profile(self):
         """RetrievalService with Profile A returns only Note A, never Note B."""
-        results_a = RetrievalService.search(
-            self.user,
-            "Binary Search Trees Quantum Physics",
-            profile=self.profile_a,
-            include_reference=False,
-        )
+        with profile_scoped_transaction(self.profile_a.id):
+            results_a = RetrievalService.search(
+                self.user,
+                "Binary Search Trees Quantum Physics",
+                profile=self.profile_a,
+                include_reference=False,
+            )
         doc_ids_a = [str(r.document_id) for r in results_a]
         self.assertIn(str(self.doc_a.id), doc_ids_a)
         self.assertNotIn(str(self.doc_b.id), doc_ids_a)
 
-        results_b = RetrievalService.search(
-            self.user,
-            "Binary Search Trees Quantum Physics",
-            profile=self.profile_b,
-            include_reference=False,
-        )
+        with profile_scoped_transaction(self.profile_b.id):
+            results_b = RetrievalService.search(
+                self.user,
+                "Binary Search Trees Quantum Physics",
+                profile=self.profile_b,
+                include_reference=False,
+            )
         doc_ids_b = [str(r.document_id) for r in results_b]
         self.assertIn(str(self.doc_b.id), doc_ids_b)
         self.assertNotIn(str(self.doc_a.id), doc_ids_b)
 
     def test_reference_retrieval_isolates_private_and_shares_global(self):
         """Reference retrieval with Profile A returns Reference A + Global, never Reference B."""
-        res_a = retrieve_reference_context(
-            "Algorithms Relativity Linear Algebra",
-            profile=self.profile_a,
-        )
+        with profile_scoped_transaction(self.profile_a.id):
+            res_a = retrieve_reference_context(
+                "Algorithms Relativity Linear Algebra",
+                profile=self.profile_a,
+            )
         doc_ids_a = [r["document_id"] for r in res_a]
         self.assertIn(str(self.ref_a.id), doc_ids_a)
         self.assertIn(str(self.ref_global.id), doc_ids_a)
         self.assertNotIn(str(self.ref_b.id), doc_ids_a)
 
-        res_b = retrieve_reference_context(
-            "Algorithms Relativity Linear Algebra",
-            profile=self.profile_b,
-        )
+        with profile_scoped_transaction(self.profile_b.id):
+            res_b = retrieve_reference_context(
+                "Algorithms Relativity Linear Algebra",
+                profile=self.profile_b,
+            )
         doc_ids_b = [r["document_id"] for r in res_b]
         self.assertIn(str(self.ref_b.id), doc_ids_b)
         self.assertIn(str(self.ref_global.id), doc_ids_b)

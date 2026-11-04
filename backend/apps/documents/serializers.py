@@ -51,10 +51,46 @@ class DocumentCreateSerializer(serializers.Serializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    ready_for_enrichment = serializers.SerializerMethodField()
+    blocking_pages = serializers.SerializerMethodField()
+
     class Meta:
         model = Document
-        fields = ("id", "profile", "subject", "notebook", "title", "source", "source_type", "schema_version", "created_at")
-        read_only_fields = ("id", "profile", "source", "source_type", "schema_version", "created_at")
+        fields = (
+            "id",
+            "profile",
+            "subject",
+            "notebook",
+            "title",
+            "source",
+            "source_type",
+            "schema_version",
+            "ready_for_enrichment",
+            "blocking_pages",
+            "created_at",
+        )
+        read_only_fields = (
+            "id",
+            "profile",
+            "source",
+            "source_type",
+            "schema_version",
+            "ready_for_enrichment",
+            "blocking_pages",
+            "created_at",
+        )
+
+    def get_ready_for_enrichment(self, obj) -> bool:
+        has_approved = obj.pages.filter(is_approved=True).exists()
+        no_unapproved = not obj.pages.filter(is_approved=False, is_ignored=False).exists()
+        return has_approved and no_unapproved
+
+    def get_blocking_pages(self, obj) -> list[int]:
+        return list(
+            obj.pages.filter(is_approved=False, is_ignored=False)
+            .order_by("page_number")
+            .values_list("page_number", flat=True)
+        )
 
 
 class DocumentUpdateSerializer(serializers.ModelSerializer):
@@ -119,22 +155,43 @@ class DocumentPageSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentPage
         fields = (
-            "id", "document", "page_number", "image_ref",
-            "current_revision_id", "needs_review", "ocr_status",
-            "review_status", "is_approved", "approved_at", "created_at",
+            "id",
+            "document",
+            "page_number",
+            "image_ref",
+            "current_revision_id",
+            "needs_review",
+            "ocr_status",
+            "review_status",
+            "is_approved",
+            "approved_at",
+            "is_ignored",
+            "ocr_attempt_count",
+            "ocr_generation",
+            "index_epoch",
+            "indexed_text_hash",
+            "created_at",
         )
 
 
 class DocumentLineSerializer(serializers.Serializer):
+    lineage_id = serializers.UUIDField(required=False, allow_null=True)
     line_index = serializers.IntegerField(min_value=0)
-    text = serializers.CharField(max_length=10000)
+    text = serializers.CharField(max_length=1000, allow_blank=True, trim_whitespace=False)
     bbox = serializers.ListField(child=serializers.FloatField(), required=False, allow_null=True)
+    confidence_score = serializers.FloatField(required=False, allow_null=True)
+    is_heading = serializers.BooleanField(required=False, default=False)
+    original_text = serializers.CharField(required=False, allow_blank=True, default="")
+    is_edited = serializers.BooleanField(required=False, default=False)
+    is_user_added = serializers.BooleanField(required=False, default=False)
+    parent_line_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class RevisionCreateSerializer(serializers.Serializer):
     """Two modes (§46/§48): finalize an uploaded object, or submit edited lines."""
 
-    page_id = serializers.UUIDField()
+    page_id = serializers.UUIDField(required=False, allow_null=True)
+    expected_revision_number = serializers.IntegerField(required=False, allow_null=True)
     lines = DocumentLineSerializer(many=True, required=False)
 
     def validate(self, attrs):
@@ -151,8 +208,21 @@ class DocumentPageRevisionSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentPageRevision
         fields = (
-            "id", "page", "revision_number", "content_hash", "content_snapshot",
-            "edited_by", "ocr_status", "ocr_provider", "line_count", "lines",
+            "id",
+            "page",
+            "revision_number",
+            "parent_revision",
+            "revision_type",
+            "created_by",
+            "review_reasons",
+            "text_hash",
+            "content_hash",
+            "content_snapshot",
+            "edited_by",
+            "ocr_status",
+            "ocr_provider",
+            "line_count",
+            "lines",
             "created_at",
         )
 
@@ -162,11 +232,16 @@ class DocumentPageRevisionSerializer(serializers.ModelSerializer):
     def get_lines(self, obj) -> list:
         return [
             {
+                "lineage_id": l.lineage_id,
                 "line_index": l.line_index,
                 "text": l.text,
                 "bbox": l.bbox,
                 "confidence_score": l.confidence_score,
                 "is_heading": bool(l.is_heading),
+                "original_text": l.original_text,
+                "is_edited": l.is_edited,
+                "is_user_added": l.is_user_added,
+                "parent_line_id": l.parent_line_id,
             }
             for l in obj.lines.order_by("line_index")
         ]

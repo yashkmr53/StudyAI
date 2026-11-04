@@ -4,6 +4,7 @@ from rest_framework.test import APIClient
 def authenticated_client(email: str, password: str) -> APIClient:
     """Register/login through the real API and attach the bearer token."""
     from apps.accounts.models import User
+    from apps.profiles.models import Profile
     from django.core.cache import caches
 
     for alias in ("default", "throttle"):

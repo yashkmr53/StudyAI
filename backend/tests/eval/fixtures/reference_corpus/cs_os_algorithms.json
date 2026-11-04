@@ -1,0 +1,217 @@
+{
+  "title": "OpenStax Computer Science: Operating Systems and Algorithms",
+  "subject": "Computer Science",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Memory Management",
+      "section": "Virtual Memory Architecture",
+      "page_number": 101,
+      "text": "Virtual memory separates user logical memory from physical memory. This separation allows an extremely large virtual memory to be provided for programmers when only a smaller physical memory is available. Virtual memory abstracts main memory into an extremely large, uniform array of storage, separating logical memory as viewed by the user from physical memory."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Memory Management",
+      "section": "Paging and Address Translation",
+      "page_number": 105,
+      "text": "Paging is a memory-management scheme that permits the physical address space of a process to be noncontiguous. Physical memory is broken into fixed-sized blocks called frames, while logical memory is broken into blocks of the same size called pages. When a CPU generates a logical address, it is divided into a page number (p) and a page offset (d). The page number is used as an index into a page table, which contains the base address of each page in physical memory."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Memory Management",
+      "section": "Page Table Hardware",
+      "page_number": 108,
+      "text": "A page table translates logical page numbers to physical frame numbers. The page table entry contains the frame number and valid-invalid bits. The Translation Lookaside Buffer (TLB) is a high-speed hardware associative cache that stores recently accessed page table mappings. If a page number is found in the TLB (a TLB hit), its frame number is accessed immediately without a main-memory lookup."
+    },
+    {
+      "chunk_index": 3,
+      "chapter": "Memory Management",
+      "section": "Page Replacement Algorithms",
+      "page_number": 112,
+      "text": "When a page fault occurs and no physical frame is free, a page replacement algorithm must select an existing frame to overwrite. Common algorithms include First-In, First-Out (FIFO) and Least Recently Used (LRU). FIFO replaces the oldest page loaded into memory, which can suffer from Belady anomaly where increasing frames increases page faults. LRU associates with each page the time of its last use; when a page must be replaced, LRU chooses that page that has not been used for the longest period of time."
+    },
+    {
+      "chunk_index": 4,
+      "chapter": "Memory Management",
+      "section": "Optimal Page Replacement",
+      "page_number": 115,
+      "text": "The optimal page replacement algorithm (OPT or MIN) replaces the page that will not be used for the longest period of time in the future. Although optimal, it cannot be implemented in general-purpose systems because it requires future knowledge of reference strings. It is primarily used as a theoretical benchmark against which other page replacement algorithms such as Second-Chance, Clock, and LRU are evaluated."
+    },
+    {
+      "chunk_index": 5,
+      "chapter": "Memory Management",
+      "section": "Frame Allocation and Thrashing",
+      "page_number": 118,
+      "text": "Thrashing occurs when a computer spends more time paging than executing code. If a process does not have enough frames to hold its working set, its page-fault rate becomes very high. This leads to low CPU utilization, prompting the operating system to increase degree of multiprogramming, exacerbating the problem. Thrashing is resolved by providing processes with their required working set of pages or swapping out entire processes."
+    },
+    {
+      "chunk_index": 6,
+      "chapter": "Memory Management",
+      "section": "Segmentation Hardware",
+      "page_number": 122,
+      "text": "Segmentation is a memory-management scheme that supports user views of memory. A logical address space is a collection of segments, where each segment has a name and a length. Addresses specify both a segment number and an offset. Unlike paging which uses fixed-size blocks, segmentation partitions memory into variable-sized chunks corresponding to logical program modules such as code, data, heap, and stack."
+    },
+    {
+      "chunk_index": 7,
+      "chapter": "Deadlocks",
+      "section": "Deadlock Characterization",
+      "page_number": 138,
+      "text": "A deadlock situation can arise if and only if four Coffman conditions hold simultaneously in a system: mutual exclusion, hold and wait, no preemption, and circular wait. Mutual exclusion means at least one resource must be held in a nonshareable mode. Hold and wait means a process must be currently holding at least one resource and requesting additional resources. No preemption means resources cannot be forcibly confiscated; they can be released only voluntarily by the holding process. Circular wait requires a closed loop of processes where each waits for a resource held by the next."
+    },
+    {
+      "chunk_index": 8,
+      "chapter": "Deadlocks",
+      "section": "Deadlock Prevention",
+      "page_number": 142,
+      "text": "Deadlock prevention provides a set of methods to ensure that at least one of the necessary conditions cannot hold. By eliminating circular wait, for instance through imposing a strict linear ordering of all resource types and requiring processes to request resources in strictly increasing order, deadlocks are mathematically prevented from occurring."
+    },
+    {
+      "chunk_index": 9,
+      "chapter": "Deadlocks",
+      "section": "Deadlock Avoidance and Bankers Algorithm",
+      "page_number": 146,
+      "text": "Deadlock avoidance requires that the operating system be given advance information concerning which resources a process will request and use during its lifetime. With this knowledge, the system can determine for each request whether or not allocating the resource will leave the system in a safe state. The Banker algorithm uses matrices of resource allocation, maximum demand, and available units to dynamically avoid unsafe states."
+    },
+    {
+      "chunk_index": 10,
+      "chapter": "Deadlocks",
+      "section": "Resource Allocation Graphs",
+      "page_number": 150,
+      "text": "Deadlocks can be described more precisely in terms of a directed graph called a system resource-allocation graph. The graph consists of vertices representing processes (circles) and resource types (rectangles), and directed edges representing requests (process to resource) and assignments (resource instance to process). If a resource-allocation graph contains no cycles, no deadlock exists. If each resource has exactly one instance, a cycle implies a deadlock."
+    },
+    {
+      "chunk_index": 11,
+      "chapter": "Data Structures",
+      "section": "Binary Search Tree Properties",
+      "page_number": 208,
+      "text": "A binary search tree (BST) is an ordered node-based binary tree data structure where each node contains a key, and each key in the left subtree is strictly less than the node key, while each key in the right subtree is strictly greater than or equal to the node key. Inorder traversal of a binary search tree visits nodes in sorted ascending order."
+    },
+    {
+      "chunk_index": 12,
+      "chapter": "Data Structures",
+      "section": "BST Operations and Complexity",
+      "page_number": 212,
+      "text": "Searching, insertion, and deletion operations in a balanced binary search tree run in O(log n) time, where n is the number of nodes and the height of the tree is bounded by O(log n). However, in an unbalanced degenerate tree (resembling a singly linked list), operations degrade to O(n) worst-case time complexity."
+    },
+    {
+      "chunk_index": 13,
+      "chapter": "Data Structures",
+      "section": "Self-Balancing Trees AVL and Red-Black",
+      "page_number": 216,
+      "text": "Self-balancing binary search trees maintain logarithmic height through deterministic tree rotations during insertions and deletions. An AVL tree enforces that for every node, the heights of its two subtrees differ by at most one. A Red-Black tree maintains balance through color properties (red or black nodes) and ensures that no path from root to leaf is more than twice as long as any other path."
+    },
+    {
+      "chunk_index": 14,
+      "chapter": "Algorithms",
+      "section": "Dynamic Programming Principles",
+      "page_number": 230,
+      "text": "Dynamic programming is an algorithmic paradigm that solves complex problems by breaking them into overlapping subproblems and storing the results of subproblems to avoid redundant computation. The two key properties required for dynamic programming to apply are optimal substructure and overlapping subproblems."
+    },
+    {
+      "chunk_index": 15,
+      "chapter": "Algorithms",
+      "section": "Memoization vs Tabulation",
+      "page_number": 234,
+      "text": "The two primary approaches to dynamic programming are top-down memoization and bottom-up tabulation. Top-down memoization retains the natural recursive formulation of the problem and caches function results in an array or hash table. Bottom-up tabulation iteratively solves subproblems in order of increasing size, filling a table from base cases upward without recursion overhead."
+    },
+    {
+      "chunk_index": 16,
+      "chapter": "Algorithms",
+      "section": "Classical DP Problems",
+      "page_number": 238,
+      "text": "Classical problems effectively solved by dynamic programming include the 0/1 knapsack problem, longest common subsequence (LCS), matrix chain multiplication, edit distance (Levenshtein distance), and all-pairs shortest paths using the Floyd-Warshall algorithm. The 0/1 knapsack problem exhibits pseudo-polynomial time complexity O(nW) where W is knapsack capacity."
+    },
+    {
+      "chunk_index": 17,
+      "chapter": "CPU Scheduling",
+      "section": "Scheduling Criteria",
+      "page_number": 160,
+      "text": "CPU scheduling deals with the problem of deciding which of the processes in the ready queue is to be allocated the CPU core. Scheduling criteria used for comparison include CPU utilization, throughput, turnaround time, waiting time, and response time. The goal is typically to maximize CPU utilization and throughput while minimizing waiting time and response time."
+    },
+    {
+      "chunk_index": 18,
+      "chapter": "CPU Scheduling",
+      "section": "FCFS and SJF Scheduling",
+      "page_number": 164,
+      "text": "First-Come, First-Served (FCFS) scheduling allocates the CPU to the process that requests it first; it can cause the convoy effect where short processes wait for one long process. Shortest-Job-First (SJF) scheduling associates each process with the length of its next CPU burst, giving the minimum average waiting time for a given set of processes. SJF can be preemptive (Shortest-Remaining-Time-First) or nonpreemptive."
+    },
+    {
+      "chunk_index": 19,
+      "chapter": "CPU Scheduling",
+      "section": "Round Robin and Priority Scheduling",
+      "page_number": 168,
+      "text": "Round Robin (RR) scheduling is designed especially for time-sharing systems; it defines a small unit of time called a time quantum (or time slice). The ready queue is treated as a circular queue, preempting running processes when their time quantum expires. Priority scheduling assigns each process a priority, but can suffer from starvation (indefinite blocking), which is solved by aging."
+    },
+    {
+      "chunk_index": 20,
+      "chapter": "Algorithms",
+      "section": "Binary Search Algorithm",
+      "page_number": 240,
+      "text": "Binary search is an efficient divide-and-conquer algorithm for finding an item from a sorted list of items. It works by repeatedly dividing in half the portion of the list that could contain the item, comparing the target value to the middle element. Its time complexity is O(log n), requiring that the input array be strictly sorted prior to execution."
+    },
+    {
+      "chunk_index": 21,
+      "chapter": "Algorithms",
+      "section": "Sorting Algorithms",
+      "page_number": 245,
+      "text": "Comparison-based sorting algorithms include Mergesort, Quicksort, and Heapsort. Mergesort guarantees O(n log n) worst-case time by recursively splitting the array and merging sorted halves, requiring O(n) auxiliary space. Quicksort achieves O(n log n) average time in-place using partitioning, but can degrade to O(n^2) with poor pivot selection."
+    },
+    {
+      "chunk_index": 22,
+      "chapter": "Data Structures",
+      "section": "Hash Tables and Collision Resolution",
+      "page_number": 250,
+      "text": "A hash table is a data structure that implements an associative array abstract data type, mapping keys to values using a hash function. Collisions occur when two distinct keys hash to the same bucket. Common collision resolution strategies include separate chaining (using linked lists at each bucket) and open addressing with linear probing, quadratic probing, or double hashing."
+    },
+    {
+      "chunk_index": 23,
+      "chapter": "Computer Networks",
+      "section": "OSI Reference Model",
+      "page_number": 310,
+      "text": "The Open Systems Interconnection (OSI) model characterizes and standardizes the communication functions of a telecommunication or computing system without regard to its underlying internal structure and technology. Its seven layers from bottom to top are: Physical, Data Link, Network, Transport, Session, Presentation, and Application layers."
+    },
+    {
+      "chunk_index": 24,
+      "chapter": "Computer Networks",
+      "section": "TCP vs UDP Transport",
+      "page_number": 315,
+      "text": "The Transmission Control Protocol (TCP) provides reliable, ordered, and error-checked delivery of a stream of octets between applications running on hosts communicating via an IP network. TCP establishes connections using a three-way handshake and manages flow control via sliding windows. User Datagram Protocol (UDP) is connectionless, prioritizing speed and low latency over reliability."
+    },
+    {
+      "chunk_index": 25,
+      "chapter": "Databases",
+      "section": "ACID Properties of Transactions",
+      "page_number": 350,
+      "text": "A database transaction must possess four fundamental properties, known by the acronym ACID: Atomicity, Consistency, Isolation, and Durability. Atomicity ensures all operations in a transaction succeed or all roll back. Consistency preserves database integrity constraints. Isolation ensures concurrent transactions execute without interference. Durability guarantees committed changes survive system crashes."
+    },
+    {
+      "chunk_index": 26,
+      "chapter": "Databases",
+      "section": "Relational Normalization Forms",
+      "page_number": 355,
+      "text": "Database normalization is the process of structuring a relational database in accordance with a series of normal forms in order to reduce data redundancy and improve data integrity. First Normal Form (1NF) requires atomic attribute values. Second Normal Form (2NF) eliminates partial functional dependencies. Third Normal Form (3NF) eliminates transitive functional dependencies on candidate keys."
+    },
+    {
+      "chunk_index": 27,
+      "chapter": "Computer Architecture",
+      "section": "Pipelining and Hazards",
+      "page_number": 400,
+      "text": "Instruction pipelining is an implementation technique whereby multiple instructions are overlapped in execution. A standard pipeline consists of Instruction Fetch (IF), Instruction Decode (ID), Execute (EX), Memory Access (MEM), and Write Back (WB). Pipeline hazards prevent the next instruction from executing in its designated clock cycle: structural hazards, data hazards, and control hazards."
+    },
+    {
+      "chunk_index": 28,
+      "chapter": "Computer Architecture",
+      "section": "Memory Hierarchy and Caches",
+      "page_number": 405,
+      "text": "The memory hierarchy organizes computer storage based on speed, cost, and capacity, spanning CPU registers, Level 1 through Level 3 caches, main memory (DRAM), and non-volatile secondary storage (SSD/HDD). Caches exploit spatial and temporal locality of reference to provide rapid access to frequently referenced instructions and data."
+    },
+    {
+      "chunk_index": 29,
+      "chapter": "Operating Systems",
+      "section": "Inter-Process Communication",
+      "page_number": 130,
+      "text": "Inter-process communication (IPC) mechanisms allow cooperating processes to exchange data and information. The two fundamental models of IPC are shared-memory systems and message-passing systems. In shared memory, a region of memory is shared by cooperating processes. In message passing, communication takes place by means of messages exchanged between cooperating processes via system calls like send() and receive()."
+    }
+  ]
+}

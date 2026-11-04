@@ -1,0 +1,182 @@
+{
+  "title": "OpenStax University Physics: Mechanics and Thermodynamics",
+  "subject": "Physics",
+  "source_type": "TEXTBOOK",
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "chapter": "Dynamics",
+      "section": "Newtons First Law of Motion",
+      "page_number": 80,
+      "text": "Newtons first law of motion, often called the law of inertia, states that a body at rest remains at rest, or if in motion, remains in motion at a constant velocity unless acted on by a net external force. Inertia is the tendency of an object to resist changes in its state of motion, and mass is the quantitative measure of inertia."
+    },
+    {
+      "chunk_index": 1,
+      "chapter": "Dynamics",
+      "section": "Newtons Second Law of Motion",
+      "page_number": 84,
+      "text": "Newtons second law of motion states that the acceleration of a system is directly proportional to and in the same direction as the net external force acting on the system, and inversely proportional to its mass: F_net = m * a. In SI units, force is measured in newtons (N), where 1 N = 1 kg * m / s^2. This law is fundamental for analyzing the motion of particles and mechanical systems."
+    },
+    {
+      "chunk_index": 2,
+      "chapter": "Dynamics",
+      "section": "Newtons Third Law and Action-Reaction",
+      "page_number": 88,
+      "text": "Newtons third law of motion represents a fundamental symmetry in nature: whenever one body exerts a force on a second body, the first body experiences a force that is equal in magnitude and opposite in direction to the force that it exerts: F_AB = -F_BA. Action and reaction forces always act on different bodies, which is why action-reaction pairs never cancel each other out on a single object."
+    },
+    {
+      "chunk_index": 3,
+      "chapter": "Dynamics",
+      "section": "Frictional Forces Static and Kinetic",
+      "page_number": 92,
+      "text": "Friction is a force that opposes relative motion between systems in contact. Static friction opposes the start of motion and satisfies f_s <= mu_s * N, where mu_s is the coefficient of static friction and N is normal force. Once motion begins, kinetic friction acts with constant magnitude f_k = mu_k * N, where mu_k is typically less than mu_s."
+    },
+    {
+      "chunk_index": 4,
+      "chapter": "Dynamics",
+      "section": "Circular Motion and Centripetal Acceleration",
+      "page_number": 96,
+      "text": "An object moving in a circular path of radius r with constant speed v experiences centripetal acceleration directed toward the center of the circle: a_c = v^2 / r. According to Newtons second law, this acceleration requires a net inward force called centripetal force: F_c = m * v^2 / r, which can be provided by tension, gravity, or friction."
+    },
+    {
+      "chunk_index": 5,
+      "chapter": "Work and Energy",
+      "section": "Work Done by a Constant Force",
+      "page_number": 120,
+      "text": "Work done on a system by a constant force is defined as the product of the component of the force along the direction of displacement and the magnitude of this displacement: W = F * d * cos(theta), where theta is the angle between force vector and displacement vector. Work is a scalar quantity measured in joules (J), where 1 J = 1 N * m."
+    },
+    {
+      "chunk_index": 6,
+      "chapter": "Work and Energy",
+      "section": "Kinetic Energy and the Work-Energy Theorem",
+      "page_number": 124,
+      "text": "Kinetic energy (KE) is the energy of motion: KE = 0.5 * m * v^2. The work-energy theorem states that the net work done by all external forces on an object is equal to the change in its kinetic energy: W_net = Delta KE = KE_final - KE_initial. This theorem applies to both constant and varying forces in inertial reference frames."
+    },
+    {
+      "chunk_index": 7,
+      "chapter": "Work and Energy",
+      "section": "Conservative Forces and Potential Energy",
+      "page_number": 128,
+      "text": "A conservative force is one for which work done is path-independent and zero around any closed loop. Potential energy (PE) can be defined only for conservative forces. Common examples are gravitational potential energy near Earth surface (PE_g = m * g * h) and elastic potential energy stored in an ideal spring (PE_s = 0.5 * k * x^2)."
+    },
+    {
+      "chunk_index": 8,
+      "chapter": "Work and Energy",
+      "section": "Conservation of Mechanical Energy",
+      "page_number": 132,
+      "text": "When only conservative forces do work on a system, the total mechanical energy E = KE + PE remains constant: KE_initial + PE_initial = KE_final + PE_final. If nonconservative forces like friction do work, the mechanical energy decreases: W_nc = Delta E = Delta KE + Delta PE."
+    },
+    {
+      "chunk_index": 9,
+      "chapter": "Thermodynamics",
+      "section": "Zeroth Law and Thermal Equilibrium",
+      "page_number": 160,
+      "text": "The zeroth law of thermodynamics states that if two systems are each in thermal equilibrium with a third system, then they are in thermal equilibrium with each other. This law establishes temperature as a fundamental, measurable property of physical systems and forms the theoretical basis for thermometry."
+    },
+    {
+      "chunk_index": 10,
+      "chapter": "Thermodynamics",
+      "section": "First Law of Thermodynamics",
+      "page_number": 164,
+      "text": "The first law of thermodynamics is an expression of the principle of conservation of energy: the change in internal energy (Delta U) of a closed system is equal to the net heat (Q) added to the system minus the net work (W) done by the system: Delta U = Q - W. Internal energy is a state function depending only on current thermodynamic state."
+    },
+    {
+      "chunk_index": 11,
+      "chapter": "Thermodynamics",
+      "section": "Thermodynamic Processes",
+      "page_number": 168,
+      "text": "Four idealized quasi-static thermodynamic processes are common: isothermal (constant temperature, Delta T = 0, Delta U = 0), isobaric (constant pressure, W = P * Delta V), isochoric or isovolumetric (constant volume, Delta V = 0, W = 0), and adiabatic (no heat transfer, Q = 0, Delta U = -W)."
+    },
+    {
+      "chunk_index": 12,
+      "chapter": "Thermodynamics",
+      "section": "Second Law of Thermodynamics and Entropy",
+      "page_number": 172,
+      "text": "The second law of thermodynamics establishes the irreversibility of natural processes and introduces entropy (S). The Clausius statement affirms that heat cannot spontaneously flow from a colder body to a warmer body without external work. The Kelvin-Planck statement affirms that no heat engine can convert all absorbed heat entirely into work. For an isolated system, total entropy never decreases: Delta S_universe >= 0."
+    },
+    {
+      "chunk_index": 13,
+      "chapter": "Thermodynamics",
+      "section": "Carnot Cycle and Maximum Efficiency",
+      "page_number": 176,
+      "text": "A Carnot cycle is an idealized reversible cycle operating between two thermal reservoirs at temperatures T_hot and T_cold. Carnot theorem proves that no heat engine operating between two given temperatures can be more efficient than a Carnot engine: eta_Carnot = 1 - (T_cold / T_hot), where temperatures must be expressed in Kelvin."
+    },
+    {
+      "chunk_index": 14,
+      "chapter": "Oscillations",
+      "section": "Hookes Law and Restoring Force",
+      "page_number": 200,
+      "text": "Hookes law states that the restoring force exerted by a spring is directly proportional to its displacement from equilibrium and opposite in direction: F = -k * x, where k is the spring constant. An object attached to such a spring undergoes simple harmonic motion (SHM) if damping and friction are negligible."
+    },
+    {
+      "chunk_index": 15,
+      "chapter": "Oscillations",
+      "section": "Kinematics of Simple Harmonic Motion",
+      "page_number": 204,
+      "text": "In simple harmonic motion, position as a function of time is given by x(t) = A * cos(omega * t + phi), where A is amplitude, omega is angular frequency (omega = sqrt(k / m)), and phi is phase constant. The period of oscillation is T = 2 * pi * sqrt(m / k), and frequency is f = 1 / T. The period is completely independent of amplitude."
+    },
+    {
+      "chunk_index": 16,
+      "chapter": "Oscillations",
+      "section": "Energy in Simple Harmonic Motion",
+      "page_number": 208,
+      "text": "The total mechanical energy in simple harmonic motion is conserved and shared between kinetic energy and elastic potential energy: E = 0.5 * m * v^2 + 0.5 * k * x^2 = 0.5 * k * A^2. At the equilibrium position (x = 0), potential energy is zero and speed is maximum (v_max = omega * A). At maximum displacement (x = +/- A), speed is zero and potential energy is maximum."
+    },
+    {
+      "chunk_index": 17,
+      "chapter": "Oscillations",
+      "section": "Simple Pendulum",
+      "page_number": 212,
+      "text": "A simple pendulum consists of a point mass m suspended from a string of length L. For small angular displacements (sin(theta) approx theta in radians), the restoring torque produces simple harmonic motion with period T = 2 * pi * sqrt(L / g). The period of a simple pendulum depends only on its length and gravitational acceleration, not on its mass."
+    },
+    {
+      "chunk_index": 18,
+      "chapter": "Gravitation",
+      "section": "Newtons Universal Law of Gravitation",
+      "page_number": 220,
+      "text": "Newtons universal law of gravitation states that every point mass attracts every other point mass with a force along the line intersecting both points: F = G * (m1 * m2) / r^2, where G = 6.674e-11 N * m^2 / kg^2. Gravitational field strength at distance r from a spherical body of mass M is g = G * M / r^2."
+    },
+    {
+      "chunk_index": 19,
+      "chapter": "Gravitation",
+      "section": "Keplers Laws of Planetary Motion",
+      "page_number": 224,
+      "text": "Keplers three laws describe planetary orbits: (1) The orbit of a planet is an ellipse with the Sun at one of the two foci; (2) A line segment joining a planet and the Sun sweeps out equal areas during equal intervals of time; (3) The square of the orbital period T is directly proportional to the cube of the semi-major axis a: T^2 = (4 * pi^2 / (G * M)) * a^3."
+    },
+    {
+      "chunk_index": 20,
+      "chapter": "Rotational Dynamics",
+      "section": "Torque and Angular Acceleration",
+      "page_number": 250,
+      "text": "Torque is the rotational equivalent of linear force: tau = r * F * sin(theta) = r x F. Newtons second law for rotation states that the net torque acting on a rigid body is equal to its moment of inertia I multiplied by its angular acceleration alpha: tau_net = I * alpha. Moment of inertia measures an object rotational inertia."
+    },
+    {
+      "chunk_index": 21,
+      "chapter": "Rotational Dynamics",
+      "section": "Conservation of Angular Momentum",
+      "page_number": 254,
+      "text": "Angular momentum of a rotating rigid body is L = I * omega. In the absence of external torque (tau_net = 0), the total angular momentum of a closed system is conserved: I_initial * omega_initial = I_final * omega_final. When a spinning figure skater pulls in their arms, moment of inertia decreases and angular velocity increases."
+    },
+    {
+      "chunk_index": 22,
+      "chapter": "Fluid Mechanics",
+      "section": "Pascals Principle and Hydrostatic Pressure",
+      "page_number": 280,
+      "text": "Hydrostatic pressure in a fluid of uniform density rho at depth h is given by P = P_0 + rho * g * h, where P_0 is atmospheric surface pressure. Pascals principle states that a change in pressure applied to an enclosed fluid is transmitted undiminished to all portions of the fluid and to the walls of its container."
+    },
+    {
+      "chunk_index": 23,
+      "chapter": "Fluid Mechanics",
+      "section": "Archimedes Principle and Buoyancy",
+      "page_number": 284,
+      "text": "Archimedes principle states that any body completely or partially submerged in a fluid is buoyed up by a force equal to the weight of the fluid displaced by the body: F_b = rho_fluid * V_submerged * g. If buoyant force equals object weight, the object floats in equilibrium."
+    },
+    {
+      "chunk_index": 24,
+      "chapter": "Fluid Mechanics",
+      "section": "Bernoullis Equation",
+      "page_number": 288,
+      "text": "For steady, incompressible, nonviscous fluid flow along a streamline, Bernoullis equation expresses the conservation of energy: P + 0.5 * rho * v^2 + rho * g * h = constant. Where fluid speed increases along a horizontal streamline, fluid pressure must decrease, demonstrating the Venturi effect."
+    }
+  ]
+}

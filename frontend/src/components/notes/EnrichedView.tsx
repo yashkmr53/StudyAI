@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { enrichmentApi, parseEnrichment } from "../../services/api/enrichment";
 import { documentsApi, type PageStatus } from "../../services/api/documents";
 import { tagsApi } from "../../services/api/tags";
 import type { EnrichmentSnapshot, NoteMeta } from "../../types/domain";
 import { EmptyState, ErrorState } from "../ui/primitives";
-import { AlertIcon, EditIcon, NoteIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
+import { AlertIcon, BookIcon, EditIcon, NoteIcon, RefreshIcon, SparkleIcon } from "../ui/icons";
+import { ENRICHMENT_COPY } from "../../copy/enrichment";
 
 /**
  * Enriched tab (§17). Rendered only when EnrichmentService is enabled —
@@ -24,12 +26,14 @@ interface Props {
   onCitation: (page: number) => void;
   /** Called to return to editing the handwritten note. */
   onEditHandwritten?: () => void;
+  /** Optional initial snapshot for testing or SSR */
+  initialSnapshot?: EnrichmentSnapshot | null;
 }
 
-export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
+export function EnrichedView({ note, onCitation, onEditHandwritten, initialSnapshot = null }: Props) {
   const { t } = useTranslation();
   const docId = note.documentId || note.refId || note.id;
-  const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<EnrichmentSnapshot | null>(initialSnapshot);
   const [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tags, setTags] = useState<{ stable_key: string; display_name: string }[]>([]);
@@ -49,7 +53,6 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
   });
   const [activeCitation, setActiveCitation] = useState<any | null>(null);
   const [pages, setPages] = useState<PageStatus[]>([]);
-  const [approvingAndGenerating, setApprovingAndGenerating] = useState(false);
   const pollsLeft = useRef(MAX_POLLS);
   const pollTimer = useRef<number | null>(null);
   const jobIdRef = useRef<string | null>(jobId);
@@ -251,10 +254,10 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
       p.ocr_status === "processing",
   );
 
-  const needsApproval =
-    !isTranscribing &&
-    pages.length > 0 &&
-    pages.some((p) => !p.is_approved && p.review_status !== "approved");
+  const hasApprovedPage = pages.some((p) => p.is_approved || p.review_status === "approved");
+  const blockingPages = pages.filter((p) => !p.is_approved && p.review_status !== "approved" && !p.is_ignored);
+  const isReadyForEnrichment = hasApprovedPage && blockingPages.length === 0;
+  const needsApproval = !isTranscribing && !isReadyForEnrichment;
 
   useEffect(() => {
     if (!isTranscribing) return;
@@ -275,26 +278,15 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
     return () => window.clearInterval(interval);
   }, [isTranscribing, loadPages, refresh]);
 
-  async function handleApproveAndGenerate() {
-    setActionError(null);
-    setApprovingAndGenerating(true);
-    try {
-      const unapproved = pages.filter((p) => !p.is_approved && p.review_status !== "approved");
-      for (const p of unapproved) {
-        await documentsApi.approvePage(docId, p.id);
-      }
-      setPages((prev) =>
-        prev.map((p) => ({ ...p, is_approved: true, review_status: "approved" })),
-      );
-      await generate();
-    } catch (err: any) {
-      setActionError(err?.message || "Failed to approve transcript and start enrichment.");
-    } finally {
-      setApprovingAndGenerating(false);
-    }
-  }
-
   async function generate() {
+    if (!isReadyForEnrichment) {
+      setActionError(
+        blockingPages.length > 0
+          ? `Pages requiring review: ${blockingPages.map((p) => p.page_number).join(", ")}. Review and approve or ignore all pages before generating enrichment.`
+          : "At least one approved page is required before generating enrichment.",
+      );
+      return;
+    }
     setActionError(null);
     setIsGenerating(true);
     setSnapshot((prev) => ({
@@ -359,10 +351,38 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
   }
 
   if (snapshot.state === "enriching") {
+    const progress = snapshot.latestJob?.progress;
+    const currentStage = progress?.current_stage;
+    let stepDescription = currentStage;
+    if (currentStage?.startsWith("research")) {
+      const parts = currentStage.split(" ");
+      stepDescription = ENRICHMENT_COPY.progress.stages.research(Number(parts[1]) || 1, Number(parts[3]) || 1);
+    } else if (currentStage?.startsWith("write")) {
+      const parts = currentStage.split(" ");
+      stepDescription = ENRICHMENT_COPY.progress.stages.write(Number(parts[1]) || 1, Number(parts[3]) || 1);
+    } else if (currentStage && currentStage in ENRICHMENT_COPY.progress.stages) {
+      const val = (ENRICHMENT_COPY.progress.stages as Record<string, unknown>)[currentStage];
+      if (typeof val === "string") {
+        stepDescription = val;
+      }
+    }
+
     return (
       <div className="enrichment-progress" role="status">
-        <h3>{t("notes.enriched.generatingTitle")}</h3>
-        <p>{t("notes.enriched.generatingBody")}</p>
+        <h3>{ENRICHMENT_COPY.progress.title}</h3>
+        <p style={{ color: "#4b5563", fontSize: "14px", margin: "4px 0 10px" }}>
+          {ENRICHMENT_COPY.progress.estimateText}
+        </p>
+        {stepDescription && (
+          <div style={{ marginTop: 10, fontSize: "13px", fontWeight: 500, color: "#4f5bd5" }}>
+            {ENRICHMENT_COPY.progress.stepPrefix}{stepDescription}
+          </div>
+        )}
+        {progress && (
+          <div style={{ marginTop: 6, fontSize: "12px", color: "#6b7280" }}>
+            Topics completed: {progress.topics_completed} / {progress.topics_total}
+          </div>
+        )}
         <div className="pulse" aria-hidden />
       </div>
     );
@@ -389,33 +409,22 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
       <EmptyState
         icon={<NoteIcon size={24} />}
         title={t("notes.enriched.needsApprovalTitle", "Review your transcript first")}
-        description={t(
-          "notes.enriched.needsApprovalDescription",
-          "To ensure high-quality AI notes and accurate textbook citations, review and approve your note transcript before generating enrichment.",
-        )}
+        description={
+          blockingPages.length > 0
+            ? `Pages requiring review: ${blockingPages.map((p) => p.page_number).join(", ")}. Review and approve or ignore all pages before generating enrichment.`
+            : "At least one approved page is required before generating enrichment."
+        }
         action={
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             {onEditHandwritten && (
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="btn btn--primary"
                 onClick={onEditHandwritten}
               >
                 <EditIcon size={14} /> {t("notes.enriched.reviewTranscript", "Review Transcript")}
               </button>
             )}
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => void handleApproveAndGenerate()}
-              disabled={approvingAndGenerating}
-              style={{ background: "#059669", borderColor: "#059669" }}
-            >
-              <SparkleIcon size={14} />{" "}
-              {approvingAndGenerating
-                ? t("notes.enriched.approvingAndEnriching", "Approving & Enriching…")
-                : t("notes.enriched.approveAndEnrich", "Approve & Generate Enrichment")}
-            </button>
           </div>
         }
       />
@@ -429,7 +438,17 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
         title={t("notes.enriched.emptyTitle")}
         description={t("notes.enriched.emptyDescription")}
         action={
-          <button type="button" className="btn btn--primary" onClick={() => void generate()}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => void generate()}
+            disabled={!isReadyForEnrichment || isGenerating}
+            title={
+              !isReadyForEnrichment
+                ? "All pages must be approved or ignored before generating enrichment."
+                : undefined
+            }
+          >
             <SparkleIcon size={14} />
             {t("notes.enriched.generate")}
           </button>
@@ -479,6 +498,39 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
         </div>
       )}
 
+      {snapshot.referenceLibraryChanged && (
+        <div
+          className="library-changed-banner"
+          role="status"
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <BookIcon size={18} />
+            <p style={{ margin: 0, fontSize: "13px", color: "#1e40af", fontWeight: 500 }}>
+              {ENRICHMENT_COPY.libraryChanged.bannerTitle}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={() => void generate()}
+          >
+            <RefreshIcon size={13} />
+            {ENRICHMENT_COPY.libraryChanged.regenerateButton}
+          </button>
+        </div>
+      )}
+
       {snapshot.state === "failed" && (
         <ErrorState
           title={t("notes.enriched.failedTitle")}
@@ -494,6 +546,44 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
         </p>
       )}
 
+      {snapshot.excludedSegments && snapshot.excludedSegments.length > 0 && (
+        <div
+          className="excluded-segments-banner"
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div>
+            <strong style={{ color: "#92400e", fontSize: "13px" }}>
+              {snapshot.excludedSegments.length} non-study segment(s) excluded
+            </strong>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#b45309" }}>
+              Filtered out non-academic content ({snapshot.excludedSegments.map((s) => s.topic_description || s.segment_type).join(", ")}).
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={async () => {
+              const allLineIds = snapshot.excludedSegments!.flatMap((s) => s.lineage_ids);
+              await enrichmentApi.forceInclude(docId, allLineIds);
+              setIsGenerating(true);
+              setSnapshot((prev) => (prev ? { ...prev, state: "enriching" } : null));
+            }}
+          >
+            Include in Notes
+          </button>
+        </div>
+      )}
+
       <article className="enriched-body">
         <header style={{ marginBottom: 22 }}>
           <h2 style={{ fontSize: 20, letterSpacing: "-0.02em" }}>{note.title}</h2>
@@ -506,109 +596,376 @@ export function EnrichedView({ note, onCitation, onEditHandwritten }: Props) {
           )}
         </header>
 
+        {(() => {
+          const evidenceMap = snapshot.evidenceStatusByTopic ?? {};
+          const topicKeys = Object.keys(evidenceMap);
+          const totalTopicsCount = topicKeys.length;
+          const topicsWithRefCount = topicKeys.filter(
+            (k) => evidenceMap[k] === "sufficient" || evidenceMap[k] === "partial"
+          ).length;
+          const allTopicsNone = totalTopicsCount > 0 && topicsWithRefCount === 0;
+
+          if (totalTopicsCount === 0) return null;
+
+          return (
+            <div
+              className="coverage-summary"
+              style={{
+                margin: "4px 0 20px",
+                padding: "8px 12px",
+                borderRadius: 6,
+                background: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                fontSize: "13px",
+                color: "#4b5563",
+              }}
+            >
+              {allTopicsNone ? (
+                <span>{ENRICHMENT_COPY.summary.allTopicsNone}</span>
+              ) : (
+                <span>
+                  <strong>{ENRICHMENT_COPY.summary.topicsWithReference(topicsWithRefCount, totalTopicsCount)}</strong>
+                </span>
+              )}
+            </div>
+          );
+        })()}
+
         {snapshot.blocks.length === 0 ? (
           <p className="muted">{t("notes.enriched.nothingYet")}</p>
         ) : (
-          snapshot.blocks.map((block) => (
-            <section key={`${block.index}-${block.title}`} className="enriched-block">
-              {block.title && (
-                <h3 className="enriched-block__title">
-                  <span className="faint">{block.index + 1}.</span> {block.title}
-                </h3>
-              )}
-              <div className="enriched-block__content">
-                {block.content.split(/\n{2,}/).map((para, i) => (
-                  <p key={i}>{para}</p>
-                ))}
-              </div>
-              {block.citations.length > 0 && (
-                <div className="citations-container" style={{ marginTop: 12 }}>
-                  <div className="citations-row" aria-label={t("notes.enriched.sourcesAria")}>
-                    {block.citations.map((citation, i) => {
-                      const isRef = citation.sourceType === "reference";
-                      const isSelected = activeCitation === citation;
-                      if (isRef) {
-                        return (
-                          <button
-                            key={`ref-${citation.page}-${i}`}
-                            type="button"
-                            className={`citation-chip ${isSelected ? "citation-chip--active" : ""}`}
-                            style={{
-                              background: isSelected ? "#eef0fc" : "#f4f5f7",
-                              borderColor: isSelected ? "#4f5bd5" : "#d1d5db",
-                              color: isSelected ? "#4f5bd5" : "#374151",
-                            }}
-                            onClick={() => setActiveCitation(isSelected ? null : citation)}
-                            title={`Reference textbook citation (page ${citation.page})`}
-                          >
-                            <span>📖 Ref: p. {citation.page}</span>
-                          </button>
-                        );
-                      }
-                      return (
-                        <button
-                          key={`note-${citation.page}-${i}`}
-                          type="button"
-                          className="citation-chip"
-                          onClick={() => onCitation(citation.page)}
-                          title={t("notes.enriched.citationTooltip", { page: citation.page })}
-                        >
-                          <span>📝 {t("notes.enriched.citation", { page: citation.page })}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+          snapshot.blocks.map((block) => {
+            if (block.blockKind === "heading") {
+              const topicEvidence = (snapshot.evidenceStatusByTopic ?? {})[block.topicId ?? ""];
+              const badgeConfig =
+                topicEvidence === "sufficient"
+                  ? ENRICHMENT_COPY.badges.sufficient
+                  : topicEvidence === "partial"
+                  ? ENRICHMENT_COPY.badges.partial
+                  : topicEvidence === "none"
+                  ? ENRICHMENT_COPY.badges.none
+                  : null;
 
-                  {activeCitation && block.citations.includes(activeCitation) && activeCitation.sourceType === "reference" && (
-                    <div
-                      className="citation-detail-card"
+              const subjectName = snapshot.subjectName || "this subject";
+              const uploadRoute = snapshot.subjectId
+                ? `/subjects/${snapshot.subjectId}/references`
+                : "/references";
+
+              return (
+                <div key={`h-container-${block.index}`} style={{ marginTop: 24, marginBottom: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      borderBottom: "1px solid #e5e7eb",
+                      paddingBottom: 6,
+                    }}
+                  >
+                    <h3
+                      key={`h-${block.index}`}
                       style={{
-                        marginTop: 8,
-                        padding: "10px 14px",
-                        borderRadius: 8,
-                        background: "#f8f9fc",
-                        border: "1px solid #e2e6fa",
-                        fontSize: "12.5px",
+                        fontSize: "1.25rem",
+                        fontWeight: 600,
+                        margin: 0,
+                        color: "#111827",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <span style={{ fontWeight: 600, color: "#1f2937" }}>
-                          📖 {activeCitation.title || "Reference Textbook"} {activeCitation.page ? `· Page ${activeCitation.page}` : ""}
-                        </span>
-                        {activeCitation.verificationStatus && (
-                          <span
-                            className="chip chip--ghost"
-                            style={{
-                              fontSize: "11px",
-                              padding: "1px 6px",
-                              color: activeCitation.verificationStatus === "supported" ? "#188554" : "#9a6700",
-                            }}
-                          >
-                            {activeCitation.verificationStatus.replace("_", " ")}
-                          </span>
-                        )}
-                      </div>
-                      {activeCitation.content && (
-                        <blockquote
-                          style={{
-                            margin: 0,
-                            padding: "6px 10px",
-                            borderLeft: "3px solid #4f5bd5",
-                            background: "#ffffff",
-                            fontStyle: "italic",
-                            color: "#4b5563",
-                            lineHeight: 1.45,
-                          }}
-                        >
-                          "{activeCitation.content}"
-                        </blockquote>
-                      )}
+                      {block.title || block.content}
+                    </h3>
+                    {badgeConfig && (
+                      <span
+                        className="topic-coverage-badge"
+                        aria-label={badgeConfig.ariaLabel}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          padding: "2px 8px",
+                          borderRadius: 9999,
+                          border: "1px solid #d1d5db",
+                          background: "#f9fafb",
+                          color: "#4b5563",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {badgeConfig.label}
+                      </span>
+                    )}
+                  </div>
+                  {topicEvidence === "none" && (
+                    <div
+                      className="topic-no-coverage-hint"
+                      style={{
+                        marginTop: 6,
+                        fontSize: "12px",
+                        color: "#6b7280",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>{ENRICHMENT_COPY.topicNoCoverage.text}</span>
+                      <Link
+                        to={uploadRoute}
+                        style={{
+                          color: "#4f5bd5",
+                          fontWeight: 500,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        {ENRICHMENT_COPY.topicNoCoverage.uploadLinkPrefix}{subjectName}
+                      </Link>
                     </div>
                   )}
                 </div>
-              )}
-            </section>
-          ))
+              );
+            }
+
+            if (block.blockKind === "student") {
+              return (
+                <div key={`stud-${block.index}`} className="student-block" style={{ margin: "10px 0" }}>
+                  {block.renderAs === "code" ? (
+                    <pre
+                      style={{
+                        background: "#f8f9fa",
+                        border: "1px solid #e9ecef",
+                        borderRadius: 6,
+                        padding: "10px 14px",
+                        fontFamily: "monospace",
+                        fontSize: "13px",
+                        overflowX: "auto",
+                      }}
+                    >
+                      <code>{block.content}</code>
+                    </pre>
+                  ) : (
+                    <div style={{ color: "#374151", lineHeight: 1.6 }}>
+                      {block.content.split(/\n{2,}/).map((para, i) => (
+                        <p key={i} style={{ margin: "6px 0" }}>{para}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (block.blockKind === "addition") {
+              const isIssue = block.additionKind === "possible_issue";
+              const isPartial = block.supportStatus === "partial";
+              const isSupported = block.supportStatus === "supported";
+
+              let badgeText = "StudyAI Note";
+              let badgeColor = "#3b49df";
+              let borderStyle = "4px solid #4f5bd5";
+              let bgStyle = "#f0f4ff";
+              let tooltipText: string | undefined = undefined;
+
+              if (isIssue) {
+                badgeText = ENRICHMENT_COPY.additions.possibleIssue.label;
+                badgeColor = "#b45309";
+                borderStyle = "4px solid #f59e0b";
+                bgStyle = "#fffbeb";
+              } else if (isPartial) {
+                badgeText = ENRICHMENT_COPY.additions.partial.label;
+                badgeColor = "#2563eb";
+                borderStyle = "4px solid #93c5fd"; // lighter border than supported
+                bgStyle = "#f8faff";
+                tooltipText = ENRICHMENT_COPY.additions.partial.tooltip;
+              } else if (isSupported) {
+                badgeText = ENRICHMENT_COPY.additions.supported.label;
+                badgeColor = "#1e40af";
+                borderStyle = "4px solid #4f5bd5";
+                bgStyle = "#f0f4ff";
+              }
+
+              return (
+                <aside
+                  key={`add-${block.index}`}
+                  className="addition-block"
+                  style={{
+                    margin: "12px 0",
+                    padding: "10px 14px",
+                    borderRadius: 6,
+                    background: bgStyle,
+                    borderLeft: borderStyle,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span
+                      title={tooltipText}
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        color: badgeColor,
+                        cursor: tooltipText ? "help" : "default",
+                      }}
+                    >
+                      {isIssue ? "⚠️ " : isPartial ? "💡 " : isSupported ? "📖 " : "✨ "}{badgeText}
+                    </span>
+                    {tooltipText && (
+                      <span
+                        title={tooltipText}
+                        aria-label={tooltipText}
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          cursor: "help",
+                        }}
+                      >
+                        ℹ️
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ color: "#1f2937", lineHeight: 1.5 }}>
+                    {block.content}
+                  </div>
+                  {block.citations.length > 0 && (
+                    <div className="citations-container" style={{ marginTop: 8 }}>
+                      <div className="citations-row" aria-label={t("notes.enriched.sourcesAria")}>
+                        {block.citations.map((citation, i) => {
+                          const isRef = citation.sourceType === "reference";
+                          const isSelected = activeCitation === citation;
+                          if (isRef) {
+                            return (
+                              <button
+                                key={`ref-${citation.page}-${i}`}
+                                type="button"
+                                className={`citation-chip ${isSelected ? "citation-chip--active" : ""}`}
+                                style={{
+                                  background: isSelected ? "#eef0fc" : "#ffffff",
+                                  borderColor: isSelected ? "#4f5bd5" : "#cbd5e1",
+                                  color: isSelected ? "#4f5bd5" : "#374151",
+                                }}
+                                onClick={() => setActiveCitation(isSelected ? null : citation)}
+                                title={`Reference textbook citation (page ${citation.page})`}
+                              >
+                                <span>📖 Ref: p. {citation.page}</span>
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              key={`note-${citation.page}-${i}`}
+                              type="button"
+                              className="citation-chip"
+                              onClick={() => onCitation(citation.page)}
+                              title={t("notes.enriched.citationTooltip", { page: citation.page })}
+                            >
+                              <span>📝 {t("notes.enriched.citation", { page: citation.page })}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </aside>
+              );
+            }
+
+            return (
+              <section key={`${block.index}-${block.title}`} className="enriched-block">
+                {block.title && (
+                  <h3 className="enriched-block__title">
+                    <span className="faint">{block.index + 1}.</span> {block.title}
+                  </h3>
+                )}
+                <div className="enriched-block__content">
+                  {block.content.split(/\n{2,}/).map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                </div>
+                {block.citations.length > 0 && (
+                  <div className="citations-container" style={{ marginTop: 12 }}>
+                    <div className="citations-row" aria-label={t("notes.enriched.sourcesAria")}>
+                      {block.citations.map((citation, i) => {
+                        const isRef = citation.sourceType === "reference";
+                        const isSelected = activeCitation === citation;
+                        if (isRef) {
+                          return (
+                            <button
+                              key={`ref-${citation.page}-${i}`}
+                              type="button"
+                              className={`citation-chip ${isSelected ? "citation-chip--active" : ""}`}
+                              style={{
+                                background: isSelected ? "#eef0fc" : "#f4f5f7",
+                                borderColor: isSelected ? "#4f5bd5" : "#d1d5db",
+                                color: isSelected ? "#4f5bd5" : "#374151",
+                              }}
+                              onClick={() => setActiveCitation(isSelected ? null : citation)}
+                              title={`Reference textbook citation (page ${citation.page})`}
+                            >
+                              <span>📖 Ref: p. {citation.page}</span>
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            key={`note-${citation.page}-${i}`}
+                            type="button"
+                            className="citation-chip"
+                            onClick={() => onCitation(citation.page)}
+                            title={t("notes.enriched.citationTooltip", { page: citation.page })}
+                          >
+                            <span>📝 {t("notes.enriched.citation", { page: citation.page })}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeCitation && block.citations.includes(activeCitation) && activeCitation.sourceType === "reference" && (
+                      <div
+                        className="citation-detail-card"
+                        style={{
+                          marginTop: 8,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          background: "#f8f9fc",
+                          border: "1px solid #e2e6fa",
+                          fontSize: "12.5px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontWeight: 600, color: "#1f2937" }}>
+                            📖 {activeCitation.title || "Reference Textbook"} {activeCitation.page ? `· Page ${activeCitation.page}` : ""}
+                          </span>
+                          {activeCitation.verificationStatus && (
+                            <span
+                              className="chip chip--ghost"
+                              style={{
+                                fontSize: "11px",
+                                padding: "1px 6px",
+                                color: activeCitation.verificationStatus === "supported" ? "#188554" : "#9a6700",
+                              }}
+                            >
+                              {activeCitation.verificationStatus.replace("_", " ")}
+                            </span>
+                          )}
+                        </div>
+                        {activeCitation.content && (
+                          <blockquote
+                            style={{
+                              margin: 0,
+                              padding: "6px 10px",
+                              borderLeft: "3px solid #4f5bd5",
+                              background: "#ffffff",
+                              fontStyle: "italic",
+                              color: "#4b5563",
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            "{activeCitation.content}"
+                          </blockquote>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })
         )}
       </article>
       {tags.length > 0 && (

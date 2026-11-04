@@ -11,6 +11,8 @@ export interface DocumentInfo {
   created_at: string;
   title?: string;
   filename?: string;
+  ready_for_enrichment?: boolean;
+  blocking_pages?: number[];
 }
 
 export interface PageStatus {
@@ -22,22 +24,37 @@ export interface PageStatus {
   review_status?: string;
   is_approved?: boolean;
   approved_at?: string | null;
+  is_ignored?: boolean;
+  ocr_attempt_count?: number;
+  ocr_generation?: number;
+  index_epoch?: number;
+  indexed_text_hash?: string;
   current_revision_id: string | null;
   image_ref?: string | null;
 }
 
 export interface LinePayload {
+  lineage_id?: string | null;
   line_index: number;
   text: string;
   bbox?: number[] | null;
   confidence_score?: number | null;
   is_heading?: boolean;
+  original_text?: string;
+  is_edited?: boolean;
+  is_user_added?: boolean;
+  parent_line_id?: string | null;
 }
 
 export interface RevisionInfo {
   id: string;
   page: string;
   revision_number: number;
+  parent_revision?: string | null;
+  revision_type?: string;
+  created_by?: string | null;
+  review_reasons?: string[];
+  text_hash?: string;
   content_hash: string;
   ocr_status: string;
   ocr_provider?: string | null;
@@ -144,14 +161,33 @@ export const documentsApi = {
     return apiRequest<RevisionInfo[]>(`/documents/${documentId}/revisions${q}`);
   },
 
-  submitEdit(documentId: string, pageId: string, lines: { line_index: number; text: string; is_heading?: boolean }[]) {
+  submitEdit(
+    documentId: string,
+    pageId: string,
+    lines: {
+      lineage_id?: string | null;
+      line_index: number;
+      text: string;
+      bbox?: number[] | null;
+      is_heading?: boolean;
+    }[],
+    expectedRevisionNumber?: number,
+  ) {
+    const body: Record<string, unknown> = { page_id: pageId, lines };
+    if (expectedRevisionNumber !== undefined) {
+      body.expected_revision_number = expectedRevisionNumber;
+    }
     return apiRequest<{ revision: RevisionInfo; page?: PageStatus; job: null }>(`/documents/${documentId}/revisions`, {
       method: "POST",
-      body: { page_id: pageId, lines },
+      body,
     });
   },
 
-  approvePage(documentId: string, pageId: string) {
+  approvePage(documentId: string, pageId: string, expectedRevisionNumber?: number) {
+    const body: Record<string, unknown> = {};
+    if (expectedRevisionNumber !== undefined) {
+      body.expected_revision_number = expectedRevisionNumber;
+    }
     return apiRequest<{
       page_id: string;
       review_status: string;
@@ -160,15 +196,49 @@ export const documentsApi = {
       all_pages_approved: boolean;
     }>(`/documents/${documentId}/pages/${pageId}/approve`, {
       method: "POST",
+      body: Object.keys(body).length > 0 ? body : undefined,
     });
   },
 
-  retryPageOcr(documentId: string, pageId: string) {
+  retryPageOcr(documentId: string, pageId: string, force = false) {
     return apiRequest<{
       page_id: string;
       review_status: string;
       job: JobInfo;
     }>(`/documents/${documentId}/pages/${pageId}/retry-ocr`, {
+      method: "POST",
+      body: { force },
+    });
+  },
+
+  reopenPage(documentId: string, pageId: string) {
+    return apiRequest<{
+      page_id: string;
+      review_status: string;
+      is_approved: boolean;
+    }>(`/documents/${documentId}/pages/${pageId}/reopen`, {
+      method: "POST",
+    });
+  },
+
+  ignorePage(documentId: string, pageId: string) {
+    return apiRequest<{
+      page_id: string;
+      review_status: string;
+      is_ignored: boolean;
+      is_approved: boolean;
+    }>(`/documents/${documentId}/pages/${pageId}/ignore`, {
+      method: "POST",
+    });
+  },
+
+  unignorePage(documentId: string, pageId: string) {
+    return apiRequest<{
+      page_id: string;
+      review_status: string;
+      is_ignored: boolean;
+      is_approved: boolean;
+    }>(`/documents/${documentId}/pages/${pageId}/unignore`, {
       method: "POST",
     });
   },

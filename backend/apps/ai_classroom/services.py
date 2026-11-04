@@ -16,7 +16,10 @@ persist EnrichedNote/Blocks/CitationBlocks.
   canonical document or NoteSpace artifacts.
 """
 import hashlib
+import json
 import logging
+import time
+import uuid
 
 from django.conf import settings
 from django.db import transaction
@@ -47,13 +50,21 @@ def _partial_threshold() -> float:
 
 
 def _descriptor(document: Document) -> str:
-    revision_ids = sorted(
-        document.pages.exclude(current_revision_id=None).values_list("current_revision_id", flat=True)
+    approved_pages = list(
+        document.pages.filter(is_approved=True, is_ignored=False)
+        .prefetch_related("current_revision__lines")
+        .order_by("page_number")
     )
-    prompt_versions = ",".join(sorted(QUALIFIED.values()))
-    model = getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")
-    payload = f"{document.pk}|{revision_ids}|{prompt_versions}|{model}"
-    return hashlib.sha256(payload.encode()).hexdigest()
+    if not approved_pages:
+        return ""
+    parts = []
+    for p in approved_pages:
+        rev = p.current_revision
+        if rev:
+            for l in rev.lines.order_by("line_index"):
+                parts.append(f"{p.page_number}:{l.line_index}:{l.text}")
+    payload = "|".join(parts)
+    return "v2:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:61]
 
 
 def _get_next_node(current_node: str) -> str:
@@ -220,10 +231,20 @@ class EnrichmentService:
             if processing_pages.exists():
                 raise ValidationError("Note transcription is still processing. Please wait for transcription to complete before enriching.")
 
-            # Check 2: Transcript Approval Gating
-            unapproved_pages = document.pages.filter(is_approved=False)
-            if unapproved_pages.exists():
-                raise ValidationError("Note transcript must be approved before generating enrichment.")
+            # Check 2: Transcript Approval & Readiness Gating
+            approved_pages_count = document.pages.filter(is_approved=True).count()
+            unapproved_unignored = document.pages.filter(is_approved=False, is_ignored=False).count()
+            if approved_pages_count == 0 or unapproved_unignored > 0:
+                blocking = list(
+                    document.pages.filter(is_approved=False, is_ignored=False)
+                    .order_by("page_number")
+                    .values_list("page_number", flat=True)
+                )
+                raise ValidationError(
+                    "Note transcript must be approved before generating enrichment. Document is not ready for enrichment: all pages must be approved or ignored, and at least one page must be approved.",
+                    code="NOT_READY_FOR_ENRICHMENT",
+                    details={"blocking_pages": blocking},
+                )
 
             from apps.ai_classroom.budget import assert_within_budget
 
@@ -262,6 +283,9 @@ class EnrichmentService:
                 profile_id=document.profile_id,
                 idempotency_key=job_key,
             )
+            if force_refresh:
+                job.metadata["force_refresh"] = True
+                job.save(update_fields=("metadata",))
             if created or job.status in (Job.Status.FAILED_RETRYABLE, Job.Status.FAILED_DEAD_LETTER):
                 if not created:
                     Job.objects.filter(pk=job.pk).update(status=Job.Status.QUEUED, next_retry_at=None, last_error="")
@@ -278,10 +302,147 @@ class EnrichmentService:
         document = EnrichmentService.get_owned_document(user, document_id)
         return EnrichedNote.objects.filter(document=document, superseded=False).order_by("-created_at").first()
 
+    @staticmethod
+    def get_latest_enrichment_payload(user, document_id: str) -> dict:
+        document = EnrichmentService.get_owned_document(user, document_id)
+        note = EnrichedNote.objects.filter(document=document, superseded=False).order_by("-created_at").first()
+        job = (
+            Job.objects.filter(resource_type="document", resource_id=str(document.pk))
+            .filter(Q(job_type="enrich") | Q(job_type="enrichment"))
+            .order_by("-created_at")
+            .first()
+        )
+        return {
+            "note": note,
+            "latest_job": job,
+        }
+
+    @staticmethod
+    def regenerate_enrichment(user, document_id: str, *, force_rerun: bool = False) -> Job:
+        document = EnrichmentService.get_owned_document(user, document_id)
+        return dispatch_enrichment_job(document, user, force_rerun=force_rerun)
+
+    @staticmethod
+    def force_include_segments(user, document_id: str, line_ids: list[str]) -> Job:
+        document = EnrichmentService.get_owned_document(user, document_id)
+
+        # Validate line IDs against document's approved transcript lines
+        approved_line_ids = set()
+        for p in document.pages.filter(is_approved=True, is_ignored=False):
+            if p.current_revision:
+                for l in p.current_revision.lines.all():
+                    approved_line_ids.add(str(l.lineage_id))
+
+        unknown_ids = [lid for lid in line_ids if str(lid) not in approved_line_ids]
+        if unknown_ids:
+            from shared.exceptions import ValidationError
+            raise ValidationError(
+                f"Unknown or unapproved line IDs: {unknown_ids}",
+                code="UNKNOWN_LINE_IDS",
+            )
+
+        document.force_include_line_ids = [str(x) for x in line_ids]
+        document.save(update_fields=("force_include_line_ids",))
+
+        # Automatically dispatch regenerate run in the same API call (§3.9)
+        return dispatch_enrichment_job(document, user, force_rerun=True)
+
+
+def sync_enrichment_staleness(document_id: str) -> None:
+    """Two-way staleness sync helper respecting Page then Document lock ordering."""
+    with transaction.atomic():
+        try:
+            doc = Document.objects.select_for_update().get(id=document_id)
+        except Document.DoesNotExist:
+            return
+        current_hash = _descriptor(doc)
+        EnrichedNote.objects.filter(document=doc, superseded=False).exclude(content_hash=current_hash).update(ai_stale=True)
+        EnrichedNote.objects.filter(document=doc, superseded=False, content_hash=current_hash).update(ai_stale=False)
+
+
+def dispatch_enrichment_job(document: Document, user, force_rerun: bool = False) -> Job:
+    """Dispatch an enrichment job with unique run nonce and in-flight query deduplication (§3.8.3)."""
+    if document.profile and document.profile.user_id != user.id:
+        from shared.exceptions import PermissionDenied
+        raise PermissionDenied("You do not have access to this document.")
+
+    # Readiness validation (§3.1)
+    has_unapproved = document.pages.filter(is_approved=False, is_ignored=False).exists()
+    has_approved = document.pages.filter(is_approved=True, is_ignored=False).exists()
+    if has_unapproved or not has_approved:
+        from shared.exceptions import ValidationError
+        blocking = list(
+            document.pages.filter(is_approved=False, is_ignored=False)
+            .order_by("page_number")
+            .values_list("page_number", flat=True)
+        )
+        raise ValidationError(
+            "Note transcript must be approved before generating enrichment.",
+            code="NOT_READY_FOR_ENRICHMENT",
+            details={"blocking_pages": blocking},
+        )
+
+    # In-flight deduplication: QUEUED, RUNNING, or FAILED_RETRYABLE
+    in_flight = Job.objects.filter(
+        resource_type="document",
+        resource_id=str(document.pk),
+        status__in=[Job.Status.QUEUED, Job.Status.RUNNING, Job.Status.FAILED_RETRYABLE],
+    ).filter(Q(job_type="enrich") | Q(job_type="enrichment")).order_by("-created_at").first()
+
+    if in_flight and not force_rerun:
+        return in_flight
+
+    start_hash = _descriptor(document)
+    run_nonce = uuid.uuid4().hex[:8]
+    idempotency_key = f"enrich_note:{document.id}:{start_hash[:24]}:{run_nonce}"
+
+    norm_force_ids = sorted([str(x) for x in (document.force_include_line_ids or [])])
+    force_include_hash = (
+        hashlib.sha256(json.dumps(norm_force_ids).encode("utf-8")).hexdigest()[:16]
+        if norm_force_ids
+        else ""
+    )
+    base_version = getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")
+    from apps.references.services import reference_library_hash
+    ref_hash = reference_library_hash(document.subject)
+    settings_version = f"{base_version}:{ref_hash}"
+
+    job = Job.objects.create(
+        job_type="enrich",
+        resource_type="document",
+        resource_id=str(document.pk),
+        profile_id=document.profile_id,
+        idempotency_key=idempotency_key,
+        status=Job.Status.QUEUED,
+        metadata={
+            "start_hash": start_hash,
+            "force_include_hash": force_include_hash,
+            "force_include_line_ids": norm_force_ids,
+            "settings_version": settings_version,
+            "reference_snapshot_hash": ref_hash,
+            "outcome": "",
+            "error_code": "",
+            "message": "Enrichment queued...",
+        },
+    )
+
+    from apps.jobs.tasks import process_job_task
+    if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        process_job_task.delay(str(job.pk))
+    else:
+        transaction.on_commit(lambda: process_job_task.delay(str(job.pk)))
+
+    return job
+
 
 def run_enrichment_job(job: Job) -> None:
+    """Execute durable Topic-Based Note Enrichment Job (§3.7, §3.8)."""
     from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
-    from ai.langgraph.state.enrichment_state import EnrichmentState
+    from ai.langgraph.state.topic_enrichment_state import TopicEnrichmentState
+
+    if job.status == Job.Status.QUEUED:
+        job.claim()
+        job.refresh_from_db()
 
     try:
         document = Document.objects.select_related("profile").get(pk=job.resource_id)
@@ -291,29 +452,15 @@ def run_enrichment_job(job: Job) -> None:
         job.save(update_fields=("status",))
         return
 
-    # Guard: If OCR is still in-flight or pages are unapproved, abort without marking as blank/insufficient!
+    # Check for in-flight OCR
     processing_pages = document.pages.filter(
         Q(review_status__in=[DocumentPage.ReviewStatus.OCR_PENDING, DocumentPage.ReviewStatus.OCR_PROCESSING])
         | Q(ocr_status__in=[DocumentPage.OcrStatus.PENDING, DocumentPage.OcrStatus.PROCESSING])
     )
     if processing_pages.exists():
-        logger.warning(
-            "Enrichment job %s for document %s aborted: OCR is still processing on some pages.",
-            job.pk, document.pk,
-        )
+        logger.warning("Enrichment job %s aborted: OCR is still processing.", job.pk)
         job.status = Job.Status.FAILED_RETRYABLE
         job.last_error = "OCR is still processing on some pages."
-        job.save(update_fields=("status", "last_error"))
-        return
-
-    unapproved_pages = document.pages.filter(is_approved=False)
-    if unapproved_pages.exists():
-        logger.warning(
-            "Enrichment job %s for document %s aborted: Pages are not approved.",
-            job.pk, document.pk,
-        )
-        job.status = Job.Status.FAILED_RETRYABLE
-        job.last_error = "Pages are not approved."
         job.save(update_fields=("status", "last_error"))
         return
 
@@ -326,165 +473,320 @@ def run_enrichment_job(job: Job) -> None:
             "Enrichment job %s document %s skipped due to insufficient content (%s): %s",
             job.pk, document.pk, gate_reason, gate_details,
         )
-        with transaction.atomic():
-            EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
-            EnrichedNote.objects.create(
-                document=document,
-                content_hash=_descriptor(document),
-                revision_ids=[
-                    str(pk)
-                    for pk in document.pages.exclude(current_revision_id=None).values_list(
-                        "current_revision_id", flat=True
-                    )
-                ],
-                generation_job=job,
-                provider="content_gate",
-                model=getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b"),
-                prompt_version="content_gate:v1",
-                schema_version="v1",
-                empty_reason=gate_reason,
-            )
+        job.metadata.update({
+            "outcome": "insufficient_content",
+            "error_code": "INSUFFICIENT_CONTENT",
+            "message": "Not enough academic content to generate enrichment.",
+        })
+        job.mark_succeeded()
         return
 
-    # --- Checkpoint recovery (§28/§52): resume from last completed node --
-    last_checkpoint = JobExecutionState.objects.filter(job=job).order_by("-created_at").first()
-    initial_state = EnrichmentState(
+    # Initialize graph state
+    initial_state = TopicEnrichmentState(
         document_id=str(document.pk),
         job_id=str(job.pk),
-        user_chunks=[],
-        reference_chunks=[],
-        evidence_payload={},
-        draft_result={},
-        gaps_result={},
-        fill_result={},
-        all_blocks=[],
-        stitched_blocks=[],
-        llm_provider="",
-        llm_model="",
-        errors=[],
-        execution_metadata={},
+        profile_id=str(document.profile_id) if document.profile_id else None,
+        force_include_line_ids=document.force_include_line_ids or [],
     )
-    start_node = "retrieve"
 
-    if last_checkpoint:
-        checkpoint_state = last_checkpoint.get_state()
-        start_node = _get_next_node(checkpoint_state.get("completed_node", "retrieve"))
-        # Merge checkpoint state into initial state, preserving any computed values
-        for key, value in checkpoint_state.items():
-            if key != "completed_node" and key != "id" and key != "job" and key != "created_at":
-                initial_state[key] = value
-    else:
-        initial_state = EnrichmentState(
-            document_id=str(document.pk),
-            job_id=str(job.pk),
-            user_chunks=[],
-            reference_chunks=[],
-            evidence_payload={},
-            draft_result={},
-            gaps_result={},
-            fill_result={},
-            all_blocks=[],
-            stitched_blocks=[],
-            llm_provider="",
-            llm_model="",
-            errors=[],
-            execution_metadata={},
-        )
+    job_start_time = time.perf_counter()
+    final_state = invoke_enrichment_graph(initial_state)
 
-    # Execute from the appropriate starting node
-    if start_node == "retrieve":
-        final_state = invoke_enrichment_graph(initial_state)
-    else:
-        final_state = invoke_enrichment_graph(initial_state)
+    outcome = final_state.get("outcome", "ok")
+    error_code = final_state.get("error_code", "")
 
-    # Save checkpoint after successful graph execution
-    completed_node_map = {
-        "format_output": "format_output",
-        "evidence_verification": "evidence_verification",
-        "citation_stitch": "citation_stitch",
-        "gap_fill": "gap_fill",
-        "gap_detection": "gap_detection",
-        "draft": "draft",
-        "retrieve": "retrieve",
-    }
-    last_node = completed_node_map.get("format_output", "retrieve")
+    # Non-note outcomes mapping table (§3.7.2)
+    if outcome == "already_up_to_date":
+        job.metadata.update({
+            "outcome": "already_up_to_date",
+            "error_code": "",
+            "message": "Enrichment is already up to date.",
+        })
+        job.mark_succeeded()
+        return
 
-    JobExecutionState.objects.create(
-        job=job,
-        state_json=final_state,
-        completed_node=last_node,
-    )
-    # -------------------------------------------------------------------------
+    if outcome == "not_ready":
+        job.metadata.update({
+            "outcome": "not_ready",
+            "error_code": "NOT_READY_FOR_ENRICHMENT",
+            "message": "Please review and approve all note pages first.",
+        })
+        job.mark_succeeded()
+        return
 
-    stitched = final_state.get("stitched_blocks", [])
-    draft_prompt = active_prompt("enrichment_draft")
-    llm = get_llm_provider()
+    if outcome == "insufficient_content":
+        job.metadata.update({
+            "outcome": "insufficient_content",
+            "error_code": "INSUFFICIENT_CONTENT",
+            "message": "Not enough academic content to generate enrichment.",
+        })
+        job.mark_succeeded()
+        return
 
-    # Use actual provider/model from the enrichment execution, falling back
-    # to the chain name / settings default only if not tracked in state.
-    actual_provider = final_state.get("llm_provider", llm.name)
-    actual_model = final_state.get("llm_model") or getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")
+    if outcome == "no_study_content":
+        job.metadata.update({
+            "outcome": "no_study_content",
+            "error_code": "NO_STUDY_CONTENT",
+            "message": "No technical study notes identified in transcript.",
+        })
+        job.mark_succeeded()
+        return
 
-    # ---- Persist atomically (§67-style boundary) --------------------------
-    # Tagging and question generation are now inside the transaction (§53/§54):
-    # if they fail, the entire enrichment (note + blocks + citations + tags + questions)
-    # is rolled back and retried, avoiding inconsistent state.
+    if outcome == "coverage_bug":
+        job.metadata.update({
+            "outcome": "coverage_bug",
+            "error_code": "COVERAGE_INVARIANT_FAILED",
+            "message": "An internal verification error occurred. Please retry.",
+        })
+        job.dead_letter("COVERAGE_INVARIANT_FAILED")
+        return
+
+    if outcome == "aborted_not_running":
+        job.metadata.update({
+            "outcome": "aborted_not_running",
+            "error_code": "JOB_NOT_RUNNING",
+            "message": "Enrichment was cancelled or reaped.",
+        })
+        job.status = Job.Status.CANCELLED
+        job.save(update_fields=("status", "metadata"))
+        return
+
+    # Atomic Persistence for "ok" and "needs_attention" (§3.7.3)
     try:
         with transaction.atomic():
-            if not Document.objects.filter(pk=document.pk).exists():
-                logger.info("Document %s was deleted during enrichment inference; aborting persistence.", document.pk)
-                job.status = Job.Status.CANCELLED
-                job.save(update_fields=("status",))
+            # 1. Lock Job row
+            locked_job = Job.objects.select_for_update().get(pk=job.pk)
+            if locked_job.status != Job.Status.RUNNING:
+                logger.warning("Job %s is no longer RUNNING (status=%s); aborting persistence", job.pk, locked_job.status)
+                locked_job.metadata.update({
+                    "outcome": "aborted_not_running",
+                    "error_code": "JOB_NOT_RUNNING",
+                    "message": "Enrichment was cancelled or reaped.",
+                })
+                locked_job.save(update_fields=("metadata",))
                 return
-            EnrichedNote.objects.filter(document=document, superseded=False).update(superseded=True)
+
+            # 2. Lock Document row (Page first, then Document)
+            doc = Document.objects.select_for_update().get(pk=document.pk)
+
+            # 3. Check if a newer job already persisted a note
+            active_note = EnrichedNote.objects.filter(document=doc, superseded=False).first()
+            if active_note and active_note.generation_job and active_note.generation_job_id != locked_job.pk:
+                newer = active_note.generation_job.created_at > locked_job.created_at
+                if newer:
+                    logger.info("A newer job %s already persisted note for %s; aborting note creation", active_note.generation_job.pk, doc.pk)
+                    locked_job.metadata.update({
+                        "outcome": "superseded_by_newer",
+                        "error_code": "",
+                        "message": "Superseded by a newer enrichment.",
+                    })
+                    locked_job.mark_succeeded()
+                    return
+
+            # 4. Supersede old active notes
+            EnrichedNote.objects.filter(document=doc, superseded=False).update(superseded=True)
+
+            note_status = final_state.get("status", "ok")
+
+            # 3.5 Privacy-Safe Telemetry (§3.5)
+            from apps.references.services import reference_library_hash
+            ref_hash = final_state.get("reference_snapshot_hash") or reference_library_hash(doc.subject)
+
+            evidence_status_by_topic = final_state.get("evidence_status_by_topic", {})
+            sections_by_topic = final_state.get("sections_by_topic", {})
+            topic_plan = final_state.get("topic_plan", {})
+            planned_topics = topic_plan.get("topics", [])
+
+            topics_total = len(planned_topics) or len(sections_by_topic)
+            topics_by_evidence = {
+                "sufficient": sum(1 for v in evidence_status_by_topic.values() if v == "sufficient"),
+                "partial": sum(1 for v in evidence_status_by_topic.values() if v == "partial"),
+                "none": sum(1 for v in evidence_status_by_topic.values() if v == "none"),
+            }
+
+            additions_by_support = {
+                "supported": 0,
+                "partial": 0,
+            }
+            for sec in sections_by_topic.values():
+                for blk in sec.get("blocks", []):
+                    if blk.get("type") == "addition":
+                        sup = blk.get("support_status")
+                        if sup in additions_by_support:
+                            additions_by_support[sup] += 1
+
+            dropped_v = final_state.get("dropped_verification", {})
+            drops_by_reason = {
+                "unanchored": 0,
+                "low_similarity": dropped_v.get("low_cosine", 0),
+                "unsupported": dropped_v.get("neutral_entailment", 0) + dropped_v.get("uncited", 0),
+                "contradicted": dropped_v.get("correction_leak", 0),
+                "duplicate": final_state.get("dropped_duplicates", 0),
+            }
+
+            elapsed_seconds = round(time.perf_counter() - job_start_time, 2)
+            llm_calls = final_state.get("llm_calls_used", 0)
+
+            telemetry_diagnostics = {
+                "topics_total": topics_total,
+                "topics_by_evidence": topics_by_evidence,
+                "additions_by_support": additions_by_support,
+                "drops_by_reason": drops_by_reason,
+                "llm_calls": llm_calls,
+                "seconds": elapsed_seconds,
+                "planner_fallback": final_state.get("planner_fallback", False),
+            }
+
             note = EnrichedNote.objects.create(
-                document=document,
-                content_hash=_descriptor(document),
+                document=doc,
+                generation_job=locked_job,
+                status=note_status,
+                content_hash=final_state.get("start_hash") or _descriptor(doc),
+                force_include_hash=final_state.get("force_include_hash", ""),
+                settings_version=final_state.get("settings_version", getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")),
+                reference_snapshot_hash=ref_hash,
                 revision_ids=[
                     str(pk)
-                    for pk in document.pages.exclude(current_revision_id=None).values_list(
-                        "current_revision_id", flat=True
-                    )
+                    for pk in doc.pages.exclude(current_revision_id=None).values_list("current_revision_id", flat=True)
                 ],
-                generation_job=job,
-                provider=actual_provider,
-                model=actual_model,
-                prompt_version=";".join(QUALIFIED.values()),
-                schema_version=draft_prompt.output_schema_version,
+                evidence_status_by_topic=final_state.get("evidence_status_by_topic", {}),
+                excluded_segments=final_state.get("excluded_segments", []),
+                diagnostics=telemetry_diagnostics,
+                provider=final_state.get("llm_provider", "ollama"),
+                model=final_state.get("llm_model", getattr(settings, "ENRICHMENT_MODEL", "qwen3.5:4b")),
+                prompt_version=getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1"),
+                schema_version="v2",
             )
-            for item in stitched:
-                block = EnrichedNoteBlock.objects.create(
+
+            # 5. Create EnrichedNoteBlocks
+            sections_by_topic = final_state.get("sections_by_topic", {})
+            topic_plan = final_state.get("topic_plan", {})
+            planned_topics = topic_plan.get("topics", [])
+            topic_order = [t.get("topic_id") for t in planned_topics] or list(sections_by_topic.keys())
+            doc_chunk_ids = [str(pk) for pk in doc.chunks.filter(stale=False).values_list("id", flat=True)]
+
+            block_index = 1
+            for tid in topic_order:
+                sec_data = sections_by_topic.get(tid)
+                if not sec_data:
+                    continue
+                title = sec_data.get("title", f"Topic {tid}")
+                EnrichedNoteBlock.objects.create(
                     enriched_note=note,
-                    block_index=item["index"],
-                    block_type=item["block_type"],
-                    title=item.get("title", ""),
-                    content=item["content"],
-                    generation_method=item["generation_method"],
-                    source_chunk_ids=item["source_chunk_ids"],
+                    block_index=block_index,
+                    block_kind=EnrichedNoteBlock.BlockKind.HEADING,
+                    render_as=EnrichedNoteBlock.RenderAs.PROSE,
+                    topic_id=tid,
+                    block_type="topic_heading",
+                    title=title,
+                    content=title,
+                    generation_method=EnrichedNoteBlock.GenerationMethod.RULE_BASED,
                 )
+                block_index += 1
+
+                for blk in sec_data.get("blocks", []):
+                    blk_type = blk.get("type", "student")
+                    blk_kind = (
+                        EnrichedNoteBlock.BlockKind.STUDENT
+                        if blk_type == "student"
+                        else (EnrichedNoteBlock.BlockKind.ADDITION if blk_type == "addition" else EnrichedNoteBlock.BlockKind.HEADING)
+                    )
+                    render_as = (
+                        EnrichedNoteBlock.RenderAs.CODE
+                        if blk.get("render_as") == "code"
+                        else EnrichedNoteBlock.RenderAs.PROSE
+                    )
+                    gen_method = (
+                        EnrichedNoteBlock.GenerationMethod.TRANSCRIBED
+                        if blk_kind == EnrichedNoteBlock.BlockKind.STUDENT
+                        else EnrichedNoteBlock.GenerationMethod.LLM
+                    )
+                    src_chunk_ids = blk.get("chunk_ids") or (doc_chunk_ids if blk_kind == EnrichedNoteBlock.BlockKind.STUDENT else [])
+                    EnrichedNoteBlock.objects.create(
+                        enriched_note=note,
+                        block_index=block_index,
+                        block_kind=blk_kind,
+                        render_as=render_as,
+                        topic_id=tid,
+                        block_type="student_notes" if blk_kind == EnrichedNoteBlock.BlockKind.STUDENT else "addition",
+                        title="",
+                        content=blk.get("text", ""),
+                        source_line_ids=blk.get("line_ids", []),
+                        support_status=blk.get("support_status", ""),
+                        addition_kind=blk.get("addition_kind") or "",
+                        generation_method=gen_method,
+                        source_chunk_ids=src_chunk_ids,
+                    )
+                    block_index += 1
+
+            # 6. Citation Blocks (OneToOne per block)
+            global_citations = final_state.get("global_citations", [])
+            for b in note.blocks.all():
+                if hasattr(b, "citation"):
+                    continue
+                if b.block_kind == EnrichedNoteBlock.BlockKind.STUDENT:
+                    refs = [
+                        {
+                            "source_type": "note",
+                            "chunk_id": cid,
+                            "document_id": str(doc.pk),
+                        }
+                        for cid in b.source_chunk_ids
+                    ]
+                    status = CitationBlock.VerificationStatus.SUPPORTED
+                elif b.block_kind == EnrichedNoteBlock.BlockKind.ADDITION:
+                    refs = global_citations
+                    status = (
+                        CitationBlock.VerificationStatus.SUPPORTED
+                        if b.support_status == "supported"
+                        else CitationBlock.VerificationStatus.PARTIALLY_SUPPORTED
+                    )
+                else:  # Heading
+                    refs = global_citations
+                    status = (
+                        CitationBlock.VerificationStatus.SUPPORTED
+                        if note_status == "ok"
+                        else CitationBlock.VerificationStatus.PARTIALLY_SUPPORTED
+                    )
+
                 CitationBlock.objects.create(
-                    enriched_note_block=block,
-                    source_refs=item["refs"],
-                    verification_status=item["status"],
-                    verification_score=item["score"],
-                    verifier_version=EvidenceVerifier.VERSION,
+                    enriched_note_block=b,
+                    source_refs=refs,
+                    verification_status=status,
+                    verifier_version=_verifier_version(),
                 )
-            # ---- §53/§54 learning-feature hooks (now inside transaction) ----
-            from apps.ai_classroom.tagging import TaggingService
-            from apps.questions.services import QuestionGenerationService
 
-            TaggingService.extract_for_document(document, generation_job=job)
-            QuestionGenerationService.generate_for_document(document)
+            # 7. Check in-transaction staleness
+            cur_hash = _descriptor(doc)
+            if note.content_hash != cur_hash:
+                note.ai_stale = True
+                note.save(update_fields=("ai_stale",))
+
+            # 8. Two-way post-commit hook
+            transaction.on_commit(lambda: sync_enrichment_staleness(str(doc.id)))
+
+            # 9. §53/§54 learning-feature hooks
+            try:
+                from apps.ai_classroom.tagging import TaggingService
+                from apps.questions.services import QuestionGenerationService
+
+                TaggingService.extract_for_document(doc, generation_job=locked_job)
+                QuestionGenerationService.generate_for_document(doc)
+            except Exception as e:
+                logger.warning("Learning feature generation tail failed: %s", e)
+
+            locked_job.metadata.update({
+                "outcome": note_status,
+                "error_code": "",
+                "message": (
+                    "Enrichment generated successfully."
+                    if note_status == "ok"
+                    else "Enrichment completed with items needing review."
+                ),
+            })
+            locked_job.mark_succeeded()
+
     except Exception as exc:
-        # Log the error and re-raise to trigger job retry
-        logger.error(
-            "Enrichment failed during atomic block for document %s: %s",
-            document.pk,
-            exc,
-        )
+        logger.error("Enrichment persistence failed for %s: %s", document.pk, exc)
+        job.dead_letter(str(exc))
         raise
-
-    logger.info(
-        "Enriched document %s: %s blocks (%s verified)",
-        document.pk, len(stitched), sum(1 for s in stitched if s["status"] == "supported"),
-    )

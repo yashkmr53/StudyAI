@@ -82,7 +82,9 @@ def _handler_for(job: Job):
         "ocr": run_ocr_job,
         "pdf_render": _run_pdf_render,
         "index": _run_index,
+        "index_page": _run_index_page,
         "enrich": _run_enrich,
+        "enrichment": _run_enrich,
     }
     handler = handlers.get(job.job_type)
     if handler is None:
@@ -100,6 +102,12 @@ def _run_index(job: Job):
     from apps.retrieval.services import run_index_job
 
     run_index_job(job)
+
+
+def _run_index_page(job: Job):
+    from apps.retrieval.services import run_page_index_job
+
+    run_page_index_job(job)
 
 
 def _run_enrich(job: Job):
@@ -120,7 +128,18 @@ def run_claimed_job(job: Job) -> None:
     """Execute a job already transitioned to RUNNING (post-claim path)."""
     handler = _handler_for(job)
     try:
-        if job.profile_id:
+        if job.job_type in ("enrich", "enrichment"):
+            # Multi-stage graph pipeline with ThreadPoolExecutor fan-out and per-stage checkpoints.
+            if job.profile_id:
+                from shared.database.rls import bind_profile_session, clear_profile_context
+                bind_profile_session(job.profile_id)
+                try:
+                    handler(job)
+                finally:
+                    clear_profile_context()
+            else:
+                handler(job)
+        elif job.profile_id:
             # §47: workers establish the trusted transaction-local RLS context.
             from shared.database.rls import profile_scoped_transaction
 
@@ -133,6 +152,8 @@ def run_claimed_job(job: Job) -> None:
             job.status = Job.Status.CANCELLED
             job.finished_at = timezone.now()
             job.save(update_fields=("status", "finished_at"))
+        elif job.status in (Job.Status.SUCCEEDED, Job.Status.FAILED_RETRYABLE, Job.Status.FAILED_DEAD_LETTER, Job.Status.CANCELLED):
+            pass
         else:
             job.mark_succeeded()
     except Exception as exc:  # noqa: BLE001 — job failures are data, not crashes
