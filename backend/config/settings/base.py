@@ -210,6 +210,13 @@ CHUNK_OVERLAP_WORDS = 30                # carried context window across chunk/pa
 RETRIEVAL_RRF_K = 60                    # Reciprocal Rank Fusion constant
 RETRIEVAL_CANDIDATES = 50               # per-channel depth before fusion
 
+# Gemini API Configuration (Alternative Cloud AI Provider)
+USE_GEMINI = os.environ.get("USE_GEMINI", "0").strip().lower() in ("1", "true", "yes")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_OCR_MODEL = os.environ.get("GEMINI_OCR_MODEL", GEMINI_MODEL)
+GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "120"))
+
 # LLM Provider Configuration (StudyAI Target Stack: qwen3.5:4b via Native Host Ollama)
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.5:4b")

@@ -3,6 +3,7 @@ from providers.llm.local import OllamaLLMProvider, OllamaChatProvider
 from providers.llm.mock import MockLLMProvider
 from providers.llm.failing import FailingLLMProvider
 from providers.llm.chain import LLMChainProvider
+from providers.llm.gemini import GeminiProvider
 from providers.llm.qwen35 import Qwen35Provider
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "OllamaLLMProvider",
     "OllamaChatProvider",
     "Qwen35Provider",
+    "GeminiProvider",
 ]
