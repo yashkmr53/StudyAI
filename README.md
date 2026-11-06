@@ -55,19 +55,21 @@ Approved Note ──► Content Gate ──► Segment Classifier ──► Topi
 
 1. **Academic Content Gate:** Validates note text against academic terminology. Non-academic content (noise, blank pages, personal greetings) exits early without charging AI budget or creating stub notes.
 2. **Windowed Segment Classification:** Identifies semantic concept boundaries across transcript lines using sliding window context.
-3. **Topic Planning:** Assigns transcript segments into discrete, cohesive learning topics (capped at 6) with explicit learning goals and search queries.
+3. **Topic Planning:** Assigns transcript segments into discrete, cohesive learning topics (capped at 6) with titles and line references, falling back to a single topic if planning fails.
 4. **Decoupled Reference Retrieval:** Vectorized dense retrieval and lexical BM25/tsvector search run against the student's active subject textbooks, retrieving high-relevance textbook passages with page numbers.
-5. **Topic Writer (Verbatim Student Preservation):** Generates structured topic sections. **Student notes are preserved 100% verbatim** as `student` blocks, while supplementary concept explanations, formulas, or mistake corrections are generated as `addition` blocks.
+5. **Topic Writer (Verbatim Student Preservation):** Generates structured topic sections. **Student notes are preserved 100% verbatim** as `student` blocks, while supplementary concept explanations and clarifications are generated as cited `addition` blocks. (Enrichment adds cited explanations, not adversarial error checking; writer rules strictly forbid accepting or building on student false premises).
 6. **Guarded Deduplication & Sanitization:** Strips ungrounded additions and eliminates redundant concept additions across topics.
-7. **Verifier & Sentence Support Scoring:** Compares each generated addition against cited textbook passages:
-   - **`supported`**: Additions strictly substantiated by the cited reference passage.
-   - **`partial`**: Additions that factually extend beyond the passage.
-   - **`unsupported`**: Statements not found in or contradicted by references (dropped).
-8. **Topic Coverage Badges & Empty State Guidance:** Headings display coverage indicators (`Reference found`, `Limited reference`, or `No reference found`). Topics without reference material feature direct links to upload textbooks for that subject.
+7. **Quote-or-Drop Verifier & Contradiction Checking:** Grounding integrity is enforced through code-checked verification:
+   - **Extractive Auto-Certification:** Additions with $\ge 0.70$ lexical overlap from a single cited sentence, matching negation polarity, and matching qualifiers are auto-certified as `supported`.
+   - **Deterministic Qualifier Guard:** Additions asserting absolute qualifiers (`only`, `always`, `never`, `all`, `none`, `must`, `cannot`, `solely`) or numbers not present in the cited quote cannot be `supported`. Absolute claims like row 24 (*"the only condition"*) are dropped deterministically without relying on LLM entailment.
+   - **Quote-and-Contradiction LLM Check:** All non-extractive additions require the verifier to extract the exact supporting sentence from the cited passage. Code verifies the quote appears verbatim in the passage, shares key terms with the addition, matches polarity, and does not contradict reference evidence. Additions that contradict references or lack verified quote anchors are dropped immediately.
+   - **`supported`**: Additions backed by verified quotes from the cited reference passage.
+   - **`partial`**: Additions that extend the reference without contradicting it, anchored in a verified passage quote.
+8. **Topic Coverage Badges & Empty State Guidance:** Headings display topic evidence availability (`Reference found`, `Limited reference`, or `No reference found`). Topics without reference material feature direct links to upload textbooks for that subject.
 9. **Honest Addition Labels:** Additions are labeled transparently:
    - `supported` ➔ **"From your reference"**
    - `partial` ➔ **"Extends the reference"** with warning tooltip (*"This goes beyond the cited passage. Check it against your textbook."*).
-10. **Reference Library Change Detection:** Hashes active textbooks at generation time (`reference_snapshot_hash`). If new textbooks are uploaded to the subject, notes with missing or partial coverage display a prompt: *"Your reference library changed since this note was enriched [Regenerate]"*.
+10. **Reference Library Change Detection:** Hashes active textbooks at generation time (`reference_snapshot_hash`), covering subject documents and unscoped global books scoped strictly to the student's profile. If new textbooks are uploaded to the subject, notes with missing or partial coverage display a prompt: *"Your reference library changed since this note was enriched [Regenerate]"*. Legacy notes with blank hashes are treated as unknown.
 11. **Durable Checkpoints:** Every stage and topic checkpoints in `JobExecutionState`, enabling real-time stage progress derivation in the UI (`classify` ➔ `plan` ➔ `research k of n` ➔ `write k of n` ➔ `verify`).
 
 ---
@@ -88,13 +90,13 @@ Approved Note ──► Content Gate ──► Segment Classifier ──► Topi
 
 ### Topic-Based Note Enrichment
 - **100% Verbatim Student Text Preservation:** Student handwriting and transcribed prose are never altered, overwritten, or hallucinated away.
-- **Topic Coverage Badges:** Immediate visual clarity on evidence grounding per topic:
-  - `Reference found` (`sufficient`): Grounded in subject textbooks.
-  - `Limited reference` (`partial`): Extends beyond cited textbook passages.
-  - `No reference found` (`none`): Clearly styled with inline links to add subject textbooks.
-- **Honest Grounding Labels:** Distinguishes verified additions (*"From your reference"*) from extrapolated concepts (*"Extends the reference"* with tooltip guidance). Gated by `ENRICHMENT_SHOW_PARTIAL`.
+- **Topic Coverage Badges:** Immediate visual clarity on reference evidence availability per topic:
+  - `Reference found` (`sufficient`): Subject textbooks provide strong evidence for the topic.
+  - `Limited reference` (`partial`): Topic evidence is partial or incomplete in available textbooks.
+  - `No reference found` (`none`): No matching reference material covers the topic, featuring inline links to upload textbooks.
+- **Honest Grounding Labels for Additions:** Distinguishes verified additions (*"From your reference"*, backed by verified passage quotes) from legitimate contextual extensions (*"Extends the reference"* with tooltip guidance). Gated by `ENRICHMENT_SHOW_PARTIAL`.
 - **Dynamic Multi-Stage Progress:** Derives real-time stage progress (`classify`, `plan`, `research`, `write`, `verify`) from background execution checkpoints.
-- **Privacy-Safe Numeric Telemetry:** Records numeric-only diagnostics on `EnrichedNote.diagnostics` (no student note text) with management reporting (`report_enrichment_coverage`).
+- **Privacy-Safe Numeric Telemetry & Tracing Redaction:** Diagnostics record strictly numeric counters (`drops_by_reason` tracking `uncited`, `low_cosine`, `neutral_entailment`, `contradicted`, `correction_leak`, `student_entailed`, `restatement`, `budget_cap`, `duplicate`) with no student note text. Note: If third-party LLM tracing (`LANGSMITH_TRACING=true`) is explicitly enabled by an operator, student handwriting text and note lines are automatically redacted by default (`LANGSMITH_REDACT_STUDENT_TEXT=true`), preventing third-party data leaks. By default, LangSmith tracing is disabled.
 
 ### Grounded Chat & Agent Mode
 - **Conversational Study Assistant:** Students can ask questions about their notes or reference textbooks with full conversational context.
@@ -350,22 +352,20 @@ Key environment variables configured in `.env` (or inherited by Docker Compose):
 StudyAI maintains a test suite across backend unit tests, PostgreSQL RLS integration tests, frontend unit tests, and real-browser Playwright E2E suites.
 
 ### Backend Unit & API Test Suite
-Run the 453-test unit and API test suite (pinned to isolated test settings via `pytest.ini`):
+Run the 467-test unit and API test suite:
 
 ```bash
 docker compose exec api pytest tests/unit tests/api --reuse-db
 ```
 
-To run the full project test suite across all apps:
-```bash
-docker compose exec api pytest --tb=short
-```
+> [!NOTE]
+> `pytest.ini` pins `--ds=config.settings.test`, which isolates unit test runs with in-memory execution, mock AI providers, and `ALLOW_SINGLE_PROFILE_FALLBACK = True` (allowing test fixtures without HTTP headers to run). In production (`config.settings.prod`), `ALLOW_SINGLE_PROFILE_FALLBACK = False` is strictly enforced: any request without a valid `X-Active-Profile` header fails closed with HTTP 403 Forbidden.
 
 ### PostgreSQL & RLS Integration Tests
-To test live Row-Level Security, multi-profile isolation, and pgvector retrieval against real PostgreSQL:
+To test live Row-Level Security, multi-profile isolation, and pgvector retrieval against real PostgreSQL under unprivileged role `studyai_app`:
 
 ```bash
-docker compose exec api pytest tests/api/test_phase12_security.py tests/api/test_canvas.py --ds=config.settings.prod
+docker compose exec api pytest tests/api/test_phase12_security.py tests/api/test_canvas.py tests/api/test_profiles_subjects.py --ds=config.settings.prod
 ```
 
 ### Enrichment Telemetry Reporting
