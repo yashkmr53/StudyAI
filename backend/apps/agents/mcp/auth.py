@@ -145,7 +145,10 @@ class MCPAuthenticator:
         """Get user context from validated token."""
         try:
             user = User.objects.get(pk=token.user_id)
-            profile = Profile.objects.get(user=user)
+            from shared.authorization.services import ProfileAuthorizationService
+            profile = ProfileAuthorizationService.get_active_profile(user)
+            if not profile:
+                raise ValueError("Active profile context not found")
         except (User.DoesNotExist, Profile.DoesNotExist):
             raise ValueError("User or profile not found")
         

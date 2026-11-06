@@ -47,7 +47,11 @@ class GetMasteryTool(BaseTool):
         from apps.profiles.models import Profile
         from apps.revision.services import RevisionPlanningService
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         if input.subject_id:
             from apps.subjects.models import Subject
@@ -120,7 +124,11 @@ class GetRevisionPlanTool(BaseTool):
         from apps.revision.services import RevisionPlanningService
         from datetime import date
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         subject = None
         if input.subject_id:
@@ -192,7 +200,11 @@ class GetPreviousQuestionsTool(BaseTool):
         from apps.questions.models import Question, QuestionTagLink
         from apps.ai_classroom.models import Tag
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         qs = Question.objects.filter(
             document__profile=profile,
@@ -265,7 +277,11 @@ class GenerateQuestionsTool(BaseTool):
         from apps.tests.services import TestGenerationService
         from apps.tests.models import TestInstance
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         try:
             document = Document.objects.get(pk=input.document_id, profile=profile)
@@ -320,7 +336,11 @@ class CreateTestTool(BaseTool):
         from apps.tests.services import TestGenerationService
         from apps.tests.models import TestInstance, TestQuestion
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         subject = None
         if input.subject_id:
@@ -388,7 +408,11 @@ class MasteryAwareTestGenerationTool(BaseTool):
         from ai.langgraph.graphs.adaptive_test_graph import invoke_adaptive_test_graph
         from ai.langgraph.state.adaptive_test_state import AdaptiveTestState
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         initial_state = AdaptiveTestState(
             profile_id=str(profile.pk),

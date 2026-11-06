@@ -29,6 +29,7 @@ from apps.profiles.models import Profile
 from apps.retrieval.models import NoteChunk
 from apps.retrieval.services import enqueue_page_index_job, index_document, index_page
 from providers.base import OCRResult
+from shared.database.rls import bind_profile_session
 from shared.exceptions import RevisionConflict
 from tests.api.utils import authenticated_client
 
@@ -38,6 +39,7 @@ def _make_test_doc(client, profile, pages_lines: list[list[str]]) -> tuple[Docum
         "/api/v1/documents",
         {"profile": str(profile.id), "source_type": "image", "filename": "notes.png"},
         content_type="application/json",
+        HTTP_X_ACTIVE_PROFILE=str(profile.id),
     ).json()
     document = Document.objects.get(pk=doc_res["document"]["id"])
 
@@ -47,7 +49,6 @@ def _make_test_doc(client, profile, pages_lines: list[list[str]]) -> tuple[Docum
             page = DocumentPage.objects.get(document=document, page_number=1)
         else:
             page = DocumentPage.objects.create(document=document, page_number=idx + 1)
-        created_pages.append(page)
 
         text_content = "\n".join(lines)
         rev = DocumentPageRevision.objects.create(
@@ -73,6 +74,7 @@ def _make_test_doc(client, profile, pages_lines: list[list[str]]) -> tuple[Docum
         page.is_approved = False
         page.ocr_attempt_count = 1
         page.save()
+        created_pages.append(page)
 
     return document, created_pages
 
@@ -775,6 +777,7 @@ class RealThreadConcurrencyTests(TransactionTestCase):
 
         def worker_approve():
             connection.close()  # Force a separate PostgreSQL connection for this thread
+            bind_profile_session(self.profile.id)
             try:
                 p, all_app = IngestionService.approve_page(
                     user=self.user,
@@ -826,6 +829,7 @@ class RealThreadConcurrencyTests(TransactionTestCase):
 
         def worker_edit(worker_id: int):
             connection.close()  # Independent PostgreSQL connection
+            bind_profile_session(self.profile.id)
             try:
                 lines = [
                     {"lineage_id": lid0, "line_index": 0, "text": f"Worker {worker_id} text 0"},
@@ -882,6 +886,7 @@ class RealThreadConcurrencyTests(TransactionTestCase):
 
         def worker_index(page_id):
             connection.close()
+            bind_profile_session(self.profile.id)
             try:
                 p = DocumentPage.objects.get(id=page_id)
                 index_page(p)
@@ -934,12 +939,14 @@ class RealThreadConcurrencyTests(TransactionTestCase):
 
         def worker_edit():
             connection.close()
+            bind_profile_session(self.profile.id)
             try:
-                orig_line = self.page.current_revision.lines.order_by("line_index").first()
+                page = DocumentPage.objects.get(id=self.page.id)
+                orig_line = page.current_revision.lines.order_by("line_index").first()
                 IngestionService.create_user_revision(
                     user=self.user,
                     document_id=self.doc.id,
-                    page_id=self.page.id,
+                    page_id=page.id,
                     lines=[{"lineage_id": str(orig_line.lineage_id), "line_index": 0, "text": "Modified content concurrently"}],
                     expected_revision_number=1,
                 )

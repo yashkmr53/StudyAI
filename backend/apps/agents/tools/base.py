@@ -71,16 +71,22 @@ class BaseTool:
             # 2. Authorization
             if self.metadata.requires_auth:
                 if profile is None and user:
-                    user_profiles = list(Profile.objects.filter(user=user)[:2])
-                    if len(user_profiles) == 1:
-                        profile = user_profiles[0]
-                    elif len(user_profiles) > 1:
-                        raise Forbidden("Active profile context is required for multi-profile user")
+                    from django.conf import settings
+                    if getattr(settings, "ALLOW_SINGLE_PROFILE_FALLBACK", False):
+                        user_profiles = list(Profile.objects.filter(user=user)[:2])
+                        if len(user_profiles) == 1:
+                            profile = user_profiles[0]
+                        elif len(user_profiles) > 1:
+                            raise Forbidden("Active profile context is required for multi-profile user")
+                    else:
+                        raise Forbidden("Active profile context is required")
                 if profile is None:
                     raise Forbidden("No profile found for user")
                 ProfileAuthorizationService.ensure_profile_access(user, profile)
 
             # 3. Execute tool logic
+            if profile is not None:
+                user.active_profile = profile
             result = self._execute(validated_input, user=user, request_id=request_id)
 
             # 4. Validate output schema

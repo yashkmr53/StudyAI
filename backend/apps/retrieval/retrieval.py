@@ -118,11 +118,15 @@ class RetrievalService:
             return []
 
         if profile is None and user:
-            user_profiles = list(Profile.objects.filter(user=user)[:2])
-            if len(user_profiles) == 1:
-                profile = user_profiles[0]
-            elif len(user_profiles) > 1:
-                raise ValueError("Explicit profile context is required for multi-profile user retrieval.")
+            from django.conf import settings
+            if getattr(settings, "ALLOW_SINGLE_PROFILE_FALLBACK", False):
+                user_profiles = list(Profile.objects.filter(user=user)[:2])
+                if len(user_profiles) == 1:
+                    profile = user_profiles[0]
+                elif len(user_profiles) > 1:
+                    raise ValueError("Explicit profile context is required for multi-profile user retrieval.")
+            else:
+                raise ValueError("Explicit profile context is required for retrieval.")
         elif isinstance(profile, (str, uuid.UUID)):
             profile = Profile.objects.get(pk=profile)
 

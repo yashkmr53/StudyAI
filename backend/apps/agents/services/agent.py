@@ -37,10 +37,11 @@ class StudyAIAgent:
         from apps.ai_classroom.budget import assert_within_budget
         profile = getattr(session, "profile", None)
         if not profile:
-            active = getattr(user, "active_profile", None)
-            profile = active or Profile.objects.filter(user=user).first()
+            profile = getattr(user, "active_profile", None)
+        if not profile and getattr(settings, "ALLOW_SINGLE_PROFILE_FALLBACK", False):
+            profile = Profile.objects.filter(user=user).first()
         if not profile:
-            raise ValueError(f"No profile available for user {user}")
+            raise ValueError(f"No profile available for user {user}. Active profile header is required.")
         assert_within_budget(profile.pk)
 
         initial_state = AgentState(

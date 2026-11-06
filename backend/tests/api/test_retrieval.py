@@ -14,6 +14,7 @@ from apps.jobs.models import Job
 from apps.profiles.models import Profile
 from apps.retrieval.models import NoteChunk
 from providers.registry import get_embedding_provider
+from shared.database.rls import profile_scoped_transaction
 from shared.exceptions import ProviderError
 from tests.api.utils import authenticated_client
 
@@ -24,35 +25,37 @@ def _make_ocr_document(client, profile, page_texts: list[list[str]]) -> str:
         "/api/v1/documents",
         {"profile": str(profile.id), "source_type": "image", "filename": "n.png"},
         content_type="application/json",
+        HTTP_X_ACTIVE_PROFILE=str(profile.id),
     ).json()
     doc_id = body["document"]["id"]
 
     # Replace single default page flow: use the created page for first text set,
     # then create extra pages via model layer for multi-page docs.
-    for idx, lines in enumerate(page_texts):
-        if idx == 0:
-            page = __import__("apps.documents.models", fromlist=["DocumentPage"]).DocumentPage.objects.get(
-                document_id=doc_id, page_number=1
+    with profile_scoped_transaction(profile.id):
+        for idx, lines in enumerate(page_texts):
+            if idx == 0:
+                page = __import__("apps.documents.models", fromlist=["DocumentPage"]).DocumentPage.objects.get(
+                    document_id=doc_id, page_number=1
+                )
+            else:
+                page = __import__("apps.documents.models", fromlist=["DocumentPage"]).DocumentPage.objects.create(
+                    document_id=doc_id, page_number=idx + 1
+                )
+            revision = DocumentPageRevision.objects.create(
+                page=page,
+                revision_number=1,
+                content_hash=hashlib.sha256("\n".join(lines).encode()).hexdigest(),
+                ocr_status=DocumentPageRevision.OcrStatus.COMPLETED,
             )
-        else:
-            page = __import__("apps.documents.models", fromlist=["DocumentPage"]).DocumentPage.objects.create(
-                document_id=doc_id, page_number=idx + 1
-            )
-        revision = DocumentPageRevision.objects.create(
-            page=page,
-            revision_number=1,
-            content_hash=hashlib.sha256("\n".join(lines).encode()).hexdigest(),
-            ocr_status=DocumentPageRevision.OcrStatus.COMPLETED,
-        )
-        for i, t in enumerate(lines):
-            __import__("apps.documents.models", fromlist=["DocumentLine"]).DocumentLine.objects.create(
-                page_revision=revision, line_index=i, text=t, confidence_score=0.95
-            )
-        page.current_revision_id = revision.pk
-        page.ocr_status = "completed"
-        page.review_status = "approved"
-        page.is_approved = True
-        page.save(update_fields=("current_revision_id", "ocr_status", "review_status", "is_approved"))
+            for i, t in enumerate(lines):
+                __import__("apps.documents.models", fromlist=["DocumentLine"]).DocumentLine.objects.create(
+                    page_revision=revision, line_index=i, text=t, confidence_score=0.95
+                )
+            page.current_revision_id = revision.pk
+            page.ocr_status = "completed"
+            page.review_status = "approved"
+            page.is_approved = True
+            page.save(update_fields=("current_revision_id", "ocr_status", "review_status", "is_approved"))
     return doc_id
 
 
@@ -264,6 +267,7 @@ class HybridRetrievalTests(TestCase):
             "/api/v1/search",
             {"query": "shortest paths"},
             content_type="application/json",
+            HTTP_X_ACTIVE_PROFILE=str(self.profile.id),
         )
         self.assertEqual(response.status_code, 200)
         results = response.json()["results"]
@@ -273,7 +277,13 @@ class HybridRetrievalTests(TestCase):
         self.assertIn("Dijkstra", top["snippet"])
 
     def test_profile_isolation(self):
-        response = self.bob.post("/api/v1/search", {"query": "Dijkstra"}, content_type="application/json")
+        bob_profile = Profile.objects.get(user__email="bob@example.com")
+        response = self.bob.post(
+            "/api/v1/search",
+            {"query": "Dijkstra"},
+            content_type="application/json",
+            HTTP_X_ACTIVE_PROFILE=str(bob_profile.id),
+        )
         results = response.json()["results"]
         self.assertEqual(len(results), 0)  # bob cannot retrieve alice's notes
 
@@ -287,10 +297,9 @@ class HybridRetrievalTests(TestCase):
 
         if connection.vendor != "postgresql":
             self.skipTest("dense channel requires PostgreSQL")
-        evidence = None
         from apps.retrieval.retrieval import RetrievalService
 
-        results = RetrievalService.search(self.alice_user(), "shortest paths graphs")
+        results = RetrievalService.search(self.alice_user(), "shortest paths graphs", profile=self.profile)
         self.assertGreaterEqual(len(results), 1)
         self.assertIsNotNone(results[0].dense_rank)
 

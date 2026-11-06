@@ -41,7 +41,11 @@ class GetDocumentTool(BaseTool):
         from apps.documents.models import Document
         from apps.profiles.models import Profile
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         try:
             document = Document.objects.select_related("subject").get(pk=input.document_id, profile=profile)
@@ -94,7 +98,11 @@ class GetSubjectContextTool(BaseTool):
         from apps.ai_classroom.models import Tag, DocumentTag
         from apps.profiles.models import Profile
 
-        profile = Profile.objects.get(user=user)
+        from shared.authorization.services import ProfileAuthorizationService
+
+        profile = getattr(user, "active_profile", None) or ProfileAuthorizationService.get_active_profile(user)
+        if not profile:
+            raise ValidationError("Active profile context is required")
 
         try:
             subject = Subject.objects.get(pk=input.subject_id, profile=profile)
