@@ -258,8 +258,21 @@ class MockLLMProvider:
                 "merged_text": None,
                 "rationale": "Both additions represent distinct perspectives",
             }
-        elif "verifier" in prompt.name.lower() or "entailment" in prompt.name.lower():
-            if "contradiction" in prompt.name.lower():
+        elif "quote" in prompt.name.lower() or "verifier" in prompt.name.lower() or "entailment" in prompt.name.lower():
+            if schema and getattr(schema, "__name__", "") == "QuoteVerificationVerdict":
+                passage_match = re.search(r'Cited Reference Passage:\s*"""(.*?)"""', prompt.user or "", re.DOTALL)
+                first_sent = ""
+                if passage_match:
+                    passage_raw = passage_match.group(1).strip()
+                    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage_raw) if len(s.strip()) > 15]
+                    first_sent = sentences[0] if sentences else ""
+                data = {
+                    "exact_quote": first_sent,
+                    "is_claim_stated": bool(first_sent),
+                    "does_passage_contradict": False,
+                    "rationale": "Directly grounded in textbook passage excerpt",
+                }
+            elif "contradiction" in prompt.name.lower():
                 data = {"verdict": "CONTRADICTED", "rationale": "Refutes mistake"}
             else:
                 data = {"verdict": "ENTAILED", "rationale": "Strong semantic entailment"}

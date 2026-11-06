@@ -638,3 +638,136 @@ class TestCorrectionLanguageFilter(SimpleTestCase):
         # dropped_verification should record the correction_leak
         dropped = res.get("dropped_verification", {})
         self.assertEqual(dropped.get("correction_leak", 0), 1)
+
+
+class TestQualifierGuard(TestCase):
+    def test_qualifier_guard_detects_missing_absolute_words(self):
+        from ai.langgraph.nodes.verification_node import _check_qualifier_guard
+
+        # Addition has "only", quote does not
+        add = "Circular wait is the only condition that can be eliminated."
+        quote = "Circular wait involves a closed chain of threads holding resources."
+        ok, missing = _check_qualifier_guard(add, quote)
+        self.assertFalse(ok)
+        self.assertIn("only", missing)
+
+        # Addition has "impossible", quote does not
+        add2 = "Deadlock prevention is impossible under hold-and-wait."
+        quote2 = "Deadlock prevention can be achieved by negating Coffman conditions."
+        ok2, missing2 = _check_qualifier_guard(add2, quote2)
+        self.assertFalse(ok2)
+        self.assertIn("impossible", missing2)
+
+        # Addition has "guarantees", quote does not
+        add3 = "This scheduling algorithm guarantees zero wait time."
+        quote3 = "This scheduling algorithm minimizes average latency."
+        ok3, missing3 = _check_qualifier_guard(add3, quote3)
+        self.assertFalse(ok3)
+        self.assertIn("guarantees", missing3)
+
+    def test_qualifier_guard_bound_phrases(self):
+        from ai.langgraph.nodes.verification_node import _check_qualifier_guard
+
+        add = "A pipeline requires at least three distinct stages."
+        quote_without = "A pipeline separates instruction execution into distinct stages."
+        ok, missing = _check_qualifier_guard(add, quote_without)
+        self.assertFalse(ok)
+        self.assertIn("at least", missing)
+
+        quote_with = "A pipeline requires at least three distinct stages for concurrency."
+        ok2, missing2 = _check_qualifier_guard(add, quote_with)
+        self.assertTrue(ok2)
+        self.assertEqual(missing2, [])
+
+    def test_qualifier_guard_passes_when_quote_contains_qualifier(self):
+        from ai.langgraph.nodes.verification_node import _check_qualifier_guard
+
+        add = "Circular wait is the only condition eliminated."
+        quote = "Circular wait is the only condition eliminated in this architecture."
+        ok, missing = _check_qualifier_guard(add, quote)
+        self.assertTrue(ok)
+        self.assertEqual(missing, [])
+
+    def test_qualifier_guard_detects_unsupported_numbers(self):
+        from ai.langgraph.nodes.verification_node import _check_qualifier_guard
+
+        add = "There are four Coffman conditions necessary for deadlock."
+        quote = "The Coffman conditions are necessary for deadlock."
+        ok, missing = _check_qualifier_guard(add, quote)
+        self.assertFalse(ok)
+        self.assertIn("four", missing)
+
+    def test_qualifier_guard_passes_when_numbers_match(self):
+        from ai.langgraph.nodes.verification_node import _check_qualifier_guard
+
+        add = "There are 4 conditions that hold simultaneously."
+        quote = "Deadlock requires 4 conditions to hold simultaneously."
+        ok, missing = _check_qualifier_guard(add, quote)
+        self.assertTrue(ok)
+        self.assertEqual(missing, [])
+
+    def test_row_24_absolute_qualifier_dropped_by_qualifier_guard(self):
+        """Additions with absolute qualifiers ('only') missing from quote are dropped deterministically."""
+        from ai.langgraph.nodes.verification_node import verification_node
+
+        sections = {
+            "t1": EnrichedSection(
+                topic_id="t1", title="Deadlock",
+                blocks=[
+                    SectionBlock(type="student", text="Deadlock conditions include circular wait.", line_ids=["lid-1"]),
+                    SectionBlock(
+                        type="addition",
+                        text="Circular wait is the only condition that can be eliminated to prevent deadlock.",
+                        citation_ids=["C1"], addition_kind="explanation", support_status="unverified",
+                    ),
+                ],
+            ),
+        }
+        research = {
+            "t1": TopicResearchResult(
+                topic_id="t1", evidence_status="sufficient",
+                evidence_items=[EvidenceItem(
+                    citation_id="C1", chunk_id="chk-1", document_id="doc-1",
+                    source_title="Operating Systems", page_start=10, page_end=12,
+                    snippet="A deadlock situation can arise if circular wait holds in the system.",
+                    best_sentence="A deadlock situation can arise if circular wait holds in the system.",
+                    dense_score=0.85, rrf_score=0.03,
+                )],
+            ),
+        }
+        state = {
+            "sections_by_topic": {k: v.model_dump() for k, v in sections.items()},
+            "research_by_topic": {k: v.model_dump() for k, v in research.items()},
+            "topic_plan": {"topics": [{"topic_id": "t1", "lineage_ids": ["lid-1"]}]},
+            "job_id": "job-test", "repair_pass": 0, "dropped_for_budget": 0,
+        }
+
+        with patch("ai.langgraph.nodes.verification_node.get_embedding_provider") as mock_emb, \
+             patch("ai.langgraph.nodes.verification_node.get_llm_provider") as mock_llm:
+            mock_embed = MagicMock()
+            mock_emb.return_value = mock_embed
+            mock_embed.embed.return_value = [[0.9, 0.1], [0.88, 0.12]]
+            mock_embed.model_version = "v1"
+
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            # Return an exact quote from the snippet that does NOT contain "only"
+            mock_provider.generate_structured.return_value = MagicMock(
+                data={
+                    "exact_quote": "A deadlock situation can arise if circular wait holds in the system.",
+                    "is_claim_stated": True,
+                    "does_passage_contradict": False,
+                    "rationale": "Matches circular wait",
+                }
+            )
+
+            res = verification_node(state)
+
+        result_sections = res["sections_by_topic"]
+        t1_blocks = result_sections["t1"]["blocks"]
+        addition_blocks = [b for b in t1_blocks if b["type"] == "addition"]
+
+        # The addition with ungrounded "only" must be dropped
+        self.assertEqual(len(addition_blocks), 0)
+        dropped = res.get("dropped_verification", {})
+        self.assertEqual(dropped.get("neutral_entailment", 0), 1)

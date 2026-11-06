@@ -171,7 +171,11 @@ def topic_writer_node(
         "'not correct', or any other correction. Only add supplementary context, definitions, derivations, "
         "or clarifications that enrich the student's understanding.\n"
         "7. 'after_line_id' must reference a student line that the addition relates to. "
-        "Do NOT set after_line_id to null if the addition references a specific student line with 'this', 'the above', or similar.\n\n"
+        "Do NOT set after_line_id to null if the addition references a specific student line with 'this', 'the above', or similar.\n"
+        "8. CONFLICTS WITH REFERENCE: If a student statement conflicts with, contradicts, or contains a misconception "
+        "refuted by the reference evidence (such as potential energy increasing during descent, FIFO avoiding Belady's anomaly, "
+        "or a necessary condition being the only eliminable one), DO NOT accept, echo, repeat, or build upon the student's false premise. "
+        "Either skip the addition entirely, or state what the reference explicitly says with a citation without validating the student's false premise.\n\n"
         "<student_transcript>\n{transcript}\n</student_transcript>\n\n"
         "<reference_evidence>\n{evidence}\n</reference_evidence>"
     ).format(
