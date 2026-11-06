@@ -145,7 +145,9 @@ class MCPAuthenticator:
         """Get user context from validated token."""
         try:
             user = User.objects.get(pk=token.user_id)
-            profile = Profile.objects.get(user=user)
+            profile = Profile.objects.filter(user=user).first()
+            if not profile:
+                raise ValueError("Active profile context not found")
         except (User.DoesNotExist, Profile.DoesNotExist):
             raise ValueError("User or profile not found")
         

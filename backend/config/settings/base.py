@@ -316,6 +316,13 @@ AGENT_PROMPT_VERSION = "agent_orchestrator:v1"
 # PR 3: Reference-Coverage Guidance & Honest Labels
 ENRICHMENT_SHOW_PARTIAL = os.environ.get("ENRICHMENT_SHOW_PARTIAL", "1").strip() in ("1", "true", "True")
 
+# Security: Fail-closed profile isolation; auto-fallback enabled only in test settings
+ALLOW_SINGLE_PROFILE_FALLBACK = False
+
+# Third-party LLM tracing privacy controls (default off, redacts student text when enabled)
+LANGSMITH_TRACING = os.environ.get("LANGSMITH_TRACING", "false").lower() in ("true", "1", "yes")
+LANGSMITH_REDACT_STUDENT_TEXT = os.environ.get("LANGSMITH_REDACT_STUDENT_TEXT", "true").lower() in ("true", "1", "yes")
+
 
 LOGGING = {
     "version": 1,

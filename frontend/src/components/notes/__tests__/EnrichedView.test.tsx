@@ -391,7 +391,7 @@ describe("EnrichedView Component Visual Styling & Rendering Tests", () => {
       </MemoryRouter>,
     );
 
-    expect(html).toContain("Enriching your notes, this takes about a minute.");
+    expect(html).toContain("Enriching your notes, this takes up to 2–3 minutes.");
     expect(html).toContain("Current step: Researching references (2 of 3)...");
     expect(html).toContain("Topics completed: 1 / 3");
   });

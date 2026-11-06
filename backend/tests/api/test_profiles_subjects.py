@@ -90,6 +90,39 @@ class ProfileSubjectAPITests(TestCase):
         )
         self.assertEqual(unknown.status_code, 404)
 
+    def test_missing_active_profile_header_returns_403_under_production_settings(self):
+        """Under prod settings (ALLOW_SINGLE_PROFILE_FALLBACK=False), missing profile header fails closed with 403."""
+        from django.test import override_settings
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            response = self.alice.get("/api/v1/revision/overview")
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"]["code"], "FORBIDDEN")
+
+    def test_unowned_profile_header_returns_403_under_production_settings(self):
+        """Passing another user's profile ID in X-Active-Profile is rejected with 403."""
+        from django.test import override_settings
+
+        bob_profile = Profile.objects.get(user__email="bob@example.com")
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            response = self.alice.get(
+                "/api/v1/revision/overview",
+                HTTP_X_ACTIVE_PROFILE=str(bob_profile.id),
+            )
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"]["code"], "FORBIDDEN")
+
+    def test_valid_active_profile_header_succeeds_under_production_settings(self):
+        """Passing the owned profile in X-Active-Profile succeeds under production settings."""
+        from django.test import override_settings
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            response = self.alice.get(
+                "/api/v1/revision/overview",
+                HTTP_X_ACTIVE_PROFILE=str(self.alice_profile.id),
+            )
+            self.assertEqual(response.status_code, 200)
+
 
 class ModelConstraintTests(TestCase):
     def test_profile_unique_per_user_name(self):
@@ -187,3 +220,22 @@ class ModuleIsolationTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Subject.objects.create(profile=profile, name="X")
+
+    def test_missing_profile_header_api_returns_403_when_fallback_disabled(self):
+        """API endpoint requiring active profile returns 403 when ALLOW_SINGLE_PROFILE_FALLBACK=False and no header."""
+        from django.test import override_settings
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            res = self.alice.get("/api/v1/revision/overview")
+            self.assertEqual(res.status_code, 403)
+
+    def test_missing_profile_header_api_succeeds_when_fallback_enabled(self):
+        """API endpoint falls back to user's single profile when ALLOW_SINGLE_PROFILE_FALLBACK=True."""
+        from django.test import override_settings
+
+        # Ensure user has exactly 1 profile
+        Profile.objects.filter(user=self.user).exclude(id=self.ai_profile.id).delete()
+        self.assertEqual(Profile.objects.filter(user=self.user).count(), 1)
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=True):
+            res = self.alice.get("/api/v1/revision/overview")
+            self.assertEqual(res.status_code, 200)

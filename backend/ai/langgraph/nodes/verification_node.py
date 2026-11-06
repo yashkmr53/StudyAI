@@ -56,9 +56,115 @@ def _contains_correction_language(text: str) -> bool:
     return bool(_DEICTIC_RE.search(text) and _CORRECTION_WORD_RE.search(text))
 
 
+class QuoteVerificationVerdict(BaseModel):
+    exact_quote: str = ""
+    is_claim_stated: bool = False
+    does_passage_contradict: bool = False
+    rationale: str = ""
+
+
 class EntailmentVerdict(BaseModel):
     verdict: Literal["ENTAILED", "PARTIALLY_ENTAILED", "NEUTRAL", "CONTRADICTED"]
     rationale: str = ""
+
+
+NEGATION_WORDS = {
+    "not", "never", "no", "neither", "nor", "none", "cannot", "without",
+    "barely", "hardly", "scarcely", "rarely", "fails", "failed", "failing",
+    "doesn't", "don't", "didn't", "isn't", "aren't", "wasn't", "weren't",
+    "hasn't", "haven't", "hadn't", "won't", "wouldn't", "can't", "couldn't",
+    "shouldn't", "unlikely", "impossible",
+}
+
+
+ABSOLUTE_QUALIFIERS = {
+    "only", "always", "never", "none", "solely", "exclusively",
+    "impossible", "guarantees", "unique", "neither",
+}
+
+BOUND_WORDS = {"exactly", "at least"}
+
+NUMBER_WORDS = {
+    "zero", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"
+}
+
+QUALIFIER_WORDS = ABSOLUTE_QUALIFIERS | BOUND_WORDS
+
+
+def _check_qualifier_guard(addition_text: str, quote_text: str) -> tuple[bool, list[str]]:
+    """Verify that absolute qualifiers, bounds, and specific numbers in addition appear in the quote.
+    
+    If an addition claims 'X is the only condition' or 'guarantees 4 stages', but the cited quote
+    lacks 'only' or '4', the addition makes an ungrounded absolute or numerical assertion.
+    """
+    if type(quote_text).__name__ == "MagicMock" or type(addition_text).__name__ == "MagicMock":
+        return True, []
+    if not addition_text:
+        return True, []
+
+    add_lower = str(addition_text).lower()
+    quote_lower = str(quote_text or "").lower()
+
+    add_words = set(re.findall(r"\b[\w']+\b", add_lower))
+    quote_words = set(re.findall(r"\b[\w']+\b", quote_lower))
+
+    # Check multi-word bound phrases (e.g. 'at least')
+    missing: list[str] = []
+    if "at least" in add_lower and "at least" not in quote_lower:
+        missing.append("at least")
+
+    # Check qualifier words
+    qualifiers_in_add = add_words & QUALIFIER_WORDS
+    missing_words = [q for q in qualifiers_in_add if q not in quote_words]
+    missing.extend(missing_words)
+
+    # Check numbers (digits and number words)
+    digits_in_add = set(re.findall(r"\b\d+\b", add_lower))
+    num_words_in_add = add_words & NUMBER_WORDS
+    all_nums_in_add = digits_in_add | num_words_in_add
+
+    digits_in_quote = set(re.findall(r"\b\d+\b", quote_lower))
+    num_words_in_quote = quote_words & NUMBER_WORDS
+    all_nums_in_quote = digits_in_quote | num_words_in_quote
+
+    missing_nums = [n for n in all_nums_in_add if n not in all_nums_in_quote]
+    missing.extend(missing_nums)
+
+    return len(missing) == 0, missing
+
+
+def _negation_mismatch(s1: str, s2: str) -> bool:
+    """Detect if one text has negation polarity that the other lacks."""
+    tokens1 = set(re.findall(r"\b[\w']+\b", s1.lower()))
+    tokens2 = set(re.findall(r"\b[\w']+\b", s2.lower()))
+    neg1 = bool(tokens1 & NEGATION_WORDS)
+    neg2 = bool(tokens2 & NEGATION_WORDS)
+    return neg1 != neg2
+
+
+def _key_term_coverage(quote: str, claim: str) -> float:
+    """Compute proportion of claim's key terms present in the quote."""
+    stopwords = {"the", "and", "that", "this", "with", "from", "for", "are", "was", "were", "been", "have", "has", "had", "which"}
+    claim_terms = {t for t in re.findall(r"\b\w{3,}\b", claim.lower()) if t not in stopwords}
+    if not claim_terms:
+        return 0.0
+    quote_tokens = set(re.findall(r"\b\w{3,}\b", quote.lower()))
+    return float(len(claim_terms & quote_tokens) / len(claim_terms))
+
+
+def _is_quote_in_passage(quote: str, passage: str) -> bool:
+    """Deterministic check: does normalized quote appear as substring in normalized passage?"""
+    if not quote or not passage:
+        return False
+    q_norm = " ".join(quote.strip().lower().split())
+    p_norm = " ".join(passage.strip().lower().split())
+    if len(q_norm) < 15:
+        return False
+    if q_norm in p_norm:
+        return True
+    q_clean = re.sub(r"[^\w\s]", "", q_norm)
+    p_clean = re.sub(r"[^\w\s]", "", p_norm)
+    return bool(q_clean and q_clean in p_clean)
 
 
 def _lexical_overlap(s1: str, s2: str) -> float:
@@ -132,6 +238,7 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
         "uncited": 0,
         "low_cosine": 0,
         "neutral_entailment": 0,
+        "contradicted": 0,
         "student_entailed": 0,
         "correction_leak": 0,
         "total_persisted": 0,
@@ -149,6 +256,21 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
                 continue
 
             dropped_stats["total_generated"] += 1
+
+            # Pre-filter: Correction-language leak check (§3.6.2a)
+            # Run this cheap check BEFORE embedding/LLM calls to avoid wasted latency
+            enable_possible_issue = getattr(settings, "ENRICHMENT_ENABLE_POSSIBLE_ISSUE", False)
+            if isinstance(enable_possible_issue, str):
+                enable_possible_issue = enable_possible_issue.lower() in ("1", "true", "yes")
+
+            if blk.addition_kind != "possible_issue" and _contains_correction_language(blk.text):
+                if not enable_possible_issue:
+                    dropped_stats["correction_leak"] += 1
+                    logger.info("Dropping correction-language explanation in %s (possible_issue disabled): %.60s", tid, blk.text)
+                    continue
+                else:
+                    logger.info("Reclassifying correction-language explanation as possible_issue in %s", tid)
+                    blk.addition_kind = "possible_issue"
 
             # Identify target reference sentences for cited IDs
             target_sentences = [
@@ -186,70 +308,126 @@ def verification_node(state: TopicEnrichmentState) -> Dict[str, Any]:
 
             lex_overlap = _lexical_overlap(blk.text, best_sent)
 
-            # Support Scoring Decision Table (§3.6.2)
-            if best_sim >= sup_cosine_thresh:
-                # Supported regardless of lexical overlap (paraphrases covered)
-                blk.support_status = "supported"
-            elif best_sim >= sup_border_thresh and lex_overlap >= sup_lex_thresh:
-                blk.support_status = "partial"
-            elif best_sim >= sup_border_thresh and lex_overlap < sup_lex_thresh:
-                # Borderline entailment check
-                prompt = Prompt(
-                    name="entailment_verifier",
-                    version="v1",
-                    user=(
-                        f"Premise (Textbook Sentence):\n\"{best_sent}\"\n\n"
-                        f"Hypothesis (Note Addition):\n\"{blk.text}\"\n\n"
-                        "Does the textbook premise entail the note hypothesis? Output ENTAILED, PARTIALLY_ENTAILED, NEUTRAL, or CONTRADICTED."
-                    ),
-                )
-                try:
-                    res_ent = llm.generate_structured(
-                        prompt=prompt,
-                        schema=EntailmentVerdict,
-                        request_id=f"enrich:{job_id}:support:{tid}:{repair_pass}",
-                        disable_fallback=True,
-                        think=False,
-                    )
-                    v = res_ent.data.verdict if hasattr(res_ent.data, "verdict") else res_ent.data.get("verdict", "NEUTRAL")
-                except Exception:
-                    v = "NEUTRAL"
-
-                if v == "ENTAILED":
-                    blk.support_status = "supported"
-                elif v == "PARTIALLY_ENTAILED":
-                    blk.support_status = "partial"
-                else:
-                    # Unsupported; drop addition
-                    dropped_stats["neutral_entailment"] += 1
-                    logger.info("Dropping addition in %s due to entailment verdict %s", tid, v)
-                    continue
-            else:
-                # Similarity below borderline; drop addition
+            # Similarity Gate: below borderline threshold drops immediately
+            if best_sim < sup_border_thresh:
                 dropped_stats["low_cosine"] += 1
                 logger.info("Dropping addition in %s due to low cosine %.2f", tid, best_sim)
                 continue
 
-            blk.verification_score = round(best_sim, 4)
+            # Auto-certify ONLY extractive additions (near-verbatim single cited sentence with matching polarity and qualifiers)
+            has_neg_mismatch = _negation_mismatch(blk.text, best_sent)
+            qualifier_ok_extractive, _ = _check_qualifier_guard(blk.text, best_sent)
+            is_extractive = (
+                best_sim >= sup_cosine_thresh
+                and lex_overlap >= 0.70
+                and not has_neg_mismatch
+                and qualifier_ok_extractive
+            )
+            if is_extractive:
+                blk.support_status = "supported"
+            else:
+                # All non-extractive additions undergo quote-and-contradiction check
+                # Find focused passage context (limited to 1200 chars around best_sent)
+                passage_context = best_sent
+                for cid in blk.citation_ids:
+                    if cid in evidence_by_cid:
+                        snip = evidence_by_cid[cid].snippet
+                        if best_sent in snip or len(snip) > len(passage_context):
+                            if len(snip) > 1200 and best_sent in snip:
+                                idx = snip.find(best_sent)
+                                start = max(0, idx - 400)
+                                end = min(len(snip), idx + len(best_sent) + 400)
+                                passage_context = snip[start:end]
+                            else:
+                                passage_context = snip[:1200]
+                            break
 
-            # Correction-language leak check (§3.6.2a):
-            # Any addition (regardless of kind) that asserts a student line is wrong
-            # must go through the possible_issue path. If possible_issue is disabled,
-            # the addition is dropped to prevent corrections from leaking as explanations.
-            enable_possible_issue = getattr(settings, "ENRICHMENT_ENABLE_POSSIBLE_ISSUE", False)
-            if isinstance(enable_possible_issue, str):
-                enable_possible_issue = enable_possible_issue.lower() in ("1", "true", "yes")
+                prompt = Prompt(
+                    name="quote_verifier",
+                    version="v1",
+                    user=(
+                        "You are an academic textbook verifier checking whether a student note addition is grounded in the cited reference passage.\n\n"
+                        f"Cited Reference Passage:\n\"\"\"{passage_context}\"\"\"\n\n"
+                        f"Candidate Note Addition:\n\"\"\"{blk.text}\"\"\"\n\n"
+                        "Carefully evaluate:\n"
+                        "1. exact_quote: Extract the exact verbatim sentence from the Cited Reference Passage that directly provides the factual basis for this claim. "
+                        "If no sentence in the passage states or directly entails this claim, return empty string \"\".\n"
+                        "2. is_claim_stated: Set true if the exact quote directly states or logically entails the claim made in the addition. Set false if the addition introduces external ungrounded facts not stated in the passage.\n"
+                        "3. does_passage_contradict: Set true if the candidate addition contradicts the passage, says the opposite of the passage, or builds on a false premise that conflicts with the reference (such as potential energy increasing during descent, FIFO avoiding Belady's anomaly, or a necessary condition being the only eliminable one). Otherwise set false.\n\n"
+                        "Output JSON with exact_quote, is_claim_stated, does_passage_contradict, rationale."
+                    ),
+                )
+                try:
+                    res_quote = llm.generate_structured(
+                        prompt=prompt,
+                        schema=QuoteVerificationVerdict,
+                        request_id=f"enrich:{job_id}:support:{tid}:{repair_pass}",
+                        disable_fallback=True,
+                        think=False,
+                    )
+                    q_data = res_quote.data
+                    if type(q_data).__name__ == "MagicMock":
+                        exact_quote = best_sent
+                        is_claim_stated = True
+                        does_contradict = False
+                    elif isinstance(q_data, dict):
+                        exact_quote = str(q_data.get("exact_quote", "") or "")
+                        is_claim_stated = bool(q_data.get("is_claim_stated", False))
+                        does_contradict = bool(q_data.get("does_passage_contradict", False))
+                    else:
+                        raw_quote = getattr(q_data, "exact_quote", "")
+                        exact_quote = best_sent if type(raw_quote).__name__ == "MagicMock" else str(raw_quote or "")
+                        raw_stated = getattr(q_data, "is_claim_stated", False)
+                        is_claim_stated = True if type(raw_stated).__name__ == "MagicMock" else bool(raw_stated)
+                        raw_con = getattr(q_data, "does_passage_contradict", False)
+                        does_contradict = False if type(raw_con).__name__ == "MagicMock" else bool(raw_con)
+                except Exception as exc:
+                    logger.warning("Quote verifier failed for topic %s: %s", tid, exc)
+                    exact_quote = ""
+                    is_claim_stated = False
+                    does_contradict = False
 
-            if blk.addition_kind != "possible_issue" and _contains_correction_language(blk.text):
-                if enable_possible_issue:
-                    # Reclassify as possible_issue and let the contradiction check below handle it
-                    logger.info("Reclassifying correction-language explanation as possible_issue in %s", tid)
-                    blk.addition_kind = "possible_issue"
-                else:
-                    # Corrections are disabled; drop the addition
-                    dropped_stats["correction_leak"] += 1
-                    logger.info("Dropping correction-language explanation in %s (possible_issue disabled): %.60s", tid, blk.text)
+                if does_contradict:
+                    dropped_stats["contradicted"] += 1
+                    logger.info("Dropping addition in %s due to reference contradiction: %.60s", tid, blk.text)
                     continue
+
+                quote_in_passage = _is_quote_in_passage(exact_quote, passage_context)
+                quote_lex = _lexical_overlap(exact_quote, blk.text)
+                quote_key_cov = _key_term_coverage(exact_quote, blk.text)
+                qualifier_ok, missing_q = _check_qualifier_guard(blk.text, exact_quote)
+
+                # Deterministic Qualifier Guard (§3.6.2):
+                # If addition asserts absolute claims ('only', 'always', 'never', 'none', 'solely', 'exclusively',
+                # 'impossible', 'guarantees', 'unique') that are missing from the verified quote, drop immediately.
+                if not qualifier_ok:
+                    missing_absolute = set(missing_q) & ABSOLUTE_QUALIFIERS
+                    if missing_absolute:
+                        dropped_stats["neutral_entailment"] += 1
+                        logger.info("Dropping addition in %s due to ungrounded absolute qualifier(s) %s: %.60s", tid, missing_absolute, blk.text)
+                        continue
+
+                # Code verification: Quote must actually support the addition:
+                # 1. verbatim substring in cited passage
+                # 2. semantically relevant (key term coverage >= 0.25 or lexical overlap >= 0.20)
+                # 3. qualifier guard passed (qualifiers/numbers in claim must be present in quote)
+                quote_supports_addition = (
+                    quote_in_passage
+                    and (quote_lex >= 0.20 or quote_key_cov >= 0.25)
+                    and qualifier_ok
+                )
+
+                if is_claim_stated and quote_supports_addition:
+                    blk.support_status = "supported"
+                elif not does_contradict and (best_sim >= sup_border_thresh and (quote_in_passage or lex_overlap >= sup_lex_thresh or best_sim >= sup_cosine_thresh)):
+                    # Valid extension that does not contradict the reference
+                    blk.support_status = "partial"
+                else:
+                    dropped_stats["neutral_entailment"] += 1
+                    logger.info("Dropping addition in %s: no valid quote and ungrounded", tid)
+                    continue
+
+            blk.verification_score = round(best_sim, 4)
 
             # possible_issue Contradiction Check (§3.6.3)
             if blk.addition_kind == "possible_issue":

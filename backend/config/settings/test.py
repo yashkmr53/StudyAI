@@ -49,3 +49,6 @@ LANGSMITH_TRACING = False
 # Sequential enrichment in tests to avoid SQLite concurrent lock collisions
 ENRICHMENT_CONCURRENCY = 1
 
+# Allow single-profile fallback strictly in test environment for test fixtures without explicit headers
+ALLOW_SINGLE_PROFILE_FALLBACK = True
+

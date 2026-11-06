@@ -65,7 +65,7 @@ export const ENRICHMENT_COPY = {
   // Progress during generation
   progress: {
     title: "Enriching your notes",
-    estimateText: "Enriching your notes, this takes about a minute.",
+    estimateText: "Enriching your notes, this takes up to 2–3 minutes.",
     stepPrefix: "Current step: ",
     stages: {
       load_and_gate: "Reading approved transcript lines...",

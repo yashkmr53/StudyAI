@@ -404,7 +404,7 @@ def dispatch_enrichment_job(document: Document, user, force_rerun: bool = False)
     )
     base_version = getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")
     from apps.references.services import reference_library_hash
-    ref_hash = reference_library_hash(document.subject)
+    ref_hash = reference_library_hash(document.subject, profile=document.profile)
     settings_version = f"{base_version}:{ref_hash}"
 
     job = Job.objects.create(
@@ -590,7 +590,7 @@ def run_enrichment_job(job: Job) -> None:
 
             # 3.5 Privacy-Safe Telemetry (§3.5)
             from apps.references.services import reference_library_hash
-            ref_hash = final_state.get("reference_snapshot_hash") or reference_library_hash(doc.subject)
+            ref_hash = final_state.get("reference_snapshot_hash") or locked_job.metadata.get("reference_snapshot_hash") or reference_library_hash(doc.subject, profile=doc.profile)
 
             evidence_status_by_topic = final_state.get("evidence_status_by_topic", {})
             sections_by_topic = final_state.get("sections_by_topic", {})
@@ -617,10 +617,14 @@ def run_enrichment_job(job: Job) -> None:
 
             dropped_v = final_state.get("dropped_verification", {})
             drops_by_reason = {
-                "unanchored": 0,
+                "uncited": dropped_v.get("uncited", 0),
                 "low_similarity": dropped_v.get("low_cosine", 0),
-                "unsupported": dropped_v.get("neutral_entailment", 0) + dropped_v.get("uncited", 0),
-                "contradicted": dropped_v.get("correction_leak", 0),
+                "neutral_entailment": dropped_v.get("neutral_entailment", 0),
+                "contradicted": dropped_v.get("contradicted", 0),
+                "correction_leak": dropped_v.get("correction_leak", 0),
+                "student_entailed": dropped_v.get("student_entailed", 0),
+                "restatement": final_state.get("dropped_restatements", 0),
+                "budget_cap": final_state.get("dropped_for_budget", 0),
                 "duplicate": final_state.get("dropped_duplicates", 0),
             }
 

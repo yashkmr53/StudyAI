@@ -66,11 +66,12 @@ class EnrichedNoteSerializer(serializers.ModelSerializer):
         return out
 
     def get_reference_library_changed(self, obj) -> bool:
-        """True when subject reference library changed and note has missing/partial topic (§3.3)."""
-        if not obj.document or not obj.document.subject_id:
+        """True when reference library changed and note has missing/partial topic (§3.3)."""
+        if not obj.document or not obj.reference_snapshot_hash:
+            # Blank hash on legacy notes is treated as unknown; do not flag as changed
             return False
         from apps.references.services import reference_library_hash
-        current_hash = reference_library_hash(obj.document.subject)
+        current_hash = reference_library_hash(obj.document.subject, profile=obj.document.profile)
         status_vals = (obj.evidence_status_by_topic or {}).values()
         has_gap = any(s in ("none", "partial") for s in status_vals)
         return bool(has_gap and (obj.reference_snapshot_hash != current_hash))

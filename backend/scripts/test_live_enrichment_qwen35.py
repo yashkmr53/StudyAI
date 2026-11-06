@@ -115,6 +115,8 @@ with profile_scoped_transaction(target_profile_id):
         document=student_doc,
         page_number=1,
         ocr_status=DocumentPage.OcrStatus.COMPLETED,
+        review_status=DocumentPage.ReviewStatus.APPROVED,
+        is_approved=True,
     )
     student_rev = DocumentPageRevision.objects.create(
         page=student_page,
@@ -139,6 +141,9 @@ with profile_scoped_transaction(target_profile_id):
             page_revision=student_rev,
             line_index=idx,
             text=text,
+            lineage_id=uuid.uuid4(),
+            original_text=text,
+            confidence_score=0.95,
         )
 
     print(f"\n[4] Created student document {student_doc.pk} with {len(lines_text)} note lines.", flush=True)

@@ -99,7 +99,7 @@ def load_and_gate_node(state: TopicEnrichmentState) -> Dict[str, Any]:
     )
     base_version = getattr(settings, "PROMPT_VERSION", "topic_enrichment:v1")
     from apps.references.services import reference_library_hash
-    ref_hash = reference_library_hash(document.subject)
+    ref_hash = reference_library_hash(document.subject, profile=document.profile)
     settings_version = f"{base_version}:{ref_hash}"
 
     # Record captured inputs in Job.metadata

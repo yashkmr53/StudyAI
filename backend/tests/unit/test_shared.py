@@ -1,4 +1,4 @@
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from shared.idempotency.keys import (
     embedding_key,
@@ -65,3 +65,72 @@ class JobModelTests(TestCase):
         reloaded = Job.objects.get(pk=job.pk)
         self.assertFalse(reloaded.claim(), "second claim must lose")
         self.assertEqual(reloaded.attempt_count, 1)
+
+
+class ProfileAuthorizationFallbackTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.profiles.models import Profile
+
+        User = get_user_model()
+        self.user = User.objects.create_user(email="testuser@example.com", password="password123")
+        self.profile1 = Profile.objects.create(user=self.user, name="Profile 1")
+
+    def test_missing_header_returns_none_when_fallback_disabled(self):
+        """When ALLOW_SINGLE_PROFILE_FALLBACK is False, missing profile header fails closed (returns None)."""
+        from shared.authorization.services import ProfileAuthorizationService
+        from shared.exceptions import Forbidden
+        from django.test.client import RequestFactory
+
+        rf = RequestFactory()
+        request = rf.get("/api/v1/enrichment/test/")
+        request.user = self.user
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            active = ProfileAuthorizationService.get_active_profile(request)
+            self.assertIsNone(active)
+
+            with self.assertRaises(Forbidden):
+                ProfileAuthorizationService.require_active_profile(request)
+
+    def test_single_profile_fallback_succeeds_when_enabled(self):
+        """When ALLOW_SINGLE_PROFILE_FALLBACK is True, a user with 1 profile falls back successfully."""
+        from shared.authorization.services import ProfileAuthorizationService
+        from django.test.client import RequestFactory
+
+        rf = RequestFactory()
+        request = rf.get("/api/v1/enrichment/test/")
+        request.user = self.user
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=True):
+            active = ProfileAuthorizationService.get_active_profile(request)
+            self.assertIsNotNone(active)
+            self.assertEqual(active.id, self.profile1.id)
+
+    def test_fallback_fails_closed_when_user_has_multiple_profiles(self):
+        """Even with fallback enabled, a user with multiple profiles cannot be guessed (fails closed)."""
+        from apps.profiles.models import Profile
+        from shared.authorization.services import ProfileAuthorizationService
+        from django.test.client import RequestFactory
+
+        Profile.objects.create(user=self.user, name="Profile 2")
+        rf = RequestFactory()
+        request = rf.get("/api/v1/enrichment/test/")
+        request.user = self.user
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=True):
+            active = ProfileAuthorizationService.get_active_profile(request)
+            self.assertIsNone(active)
+
+    def test_explicit_header_always_resolves(self):
+        """Explicit X-Active-Profile header resolves regardless of fallback setting."""
+        from shared.authorization.services import ProfileAuthorizationService
+        from django.test.client import RequestFactory
+
+        rf = RequestFactory()
+        request = rf.get("/api/v1/enrichment/test/", HTTP_X_ACTIVE_PROFILE=str(self.profile1.id))
+        request.user = self.user
+
+        with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
+            active = ProfileAuthorizationService.get_active_profile(request)
+            self.assertEqual(active.id, self.profile1.id)
