@@ -80,27 +80,56 @@ class ReferenceCoverageTests(TestCase):
         h0 = reference_library_hash(self.subject)
         self.assertEqual(h0, "empty")
 
-        # When subject is None
-        self.assertEqual(reference_library_hash(None), "no_subject")
+        # When subject is None and no books exist
+        self.assertEqual(reference_library_hash(None), "empty")
 
         # Add a READY reference document
         with profile_scoped_transaction(self.profile.id):
             ref_doc = ReferenceDocument.objects.create(
                 title="OS Concepts",
                 subject=self.subject,
+                profile=self.profile,
                 status=ReferenceDocument.Status.READY,
                 chunk_count=10,
             )
-        h1 = reference_library_hash(self.subject)
+        h1 = reference_library_hash(self.subject, profile=self.profile)
         self.assertNotEqual(h1, "empty")
         self.assertEqual(len(h1), 16)
+        # When subject is None, it covers all READY documents
+        self.assertEqual(reference_library_hash(None, profile=self.profile), h1)
 
         # Updating chunk count changes the hash
         with profile_scoped_transaction(self.profile.id):
             ref_doc.chunk_count = 15
             ref_doc.save(update_fields=("chunk_count", "updated_at"))
-        h2 = reference_library_hash(self.subject)
+        h2 = reference_library_hash(self.subject, profile=self.profile)
         self.assertNotEqual(h1, h2)
+
+        # Unscoped reference document (subject is None) affects subject hash
+        with profile_scoped_transaction(self.profile.id):
+            unscoped_doc = ReferenceDocument.objects.create(
+                title="Global Handbook",
+                subject=None,
+                profile=self.profile,
+                status=ReferenceDocument.Status.READY,
+                chunk_count=5,
+            )
+        h3 = reference_library_hash(self.subject, profile=self.profile)
+        self.assertNotEqual(h2, h3)
+
+        # Another profile's document does not affect self.profile's hash
+        user2 = User.objects.create(email="user2@example.com")
+        profile2 = Profile.objects.create(user=user2, name="User Two")
+        with profile_scoped_transaction(profile2.id):
+            ReferenceDocument.objects.create(
+                title="Other Profile Book",
+                subject=None,
+                profile=profile2,
+                status=ReferenceDocument.Status.READY,
+                chunk_count=20,
+            )
+        h4 = reference_library_hash(self.subject, profile=self.profile)
+        self.assertEqual(h3, h4)
 
     def test_settings_version_incorporates_library_hash(self):
         """dispatch_enrichment_job embeds reference library hash in settings_version."""

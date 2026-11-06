@@ -6,12 +6,43 @@ Only backend/worker processes should have LANGSMITH_API_KEY set.
 import os
 import logging
 from contextlib import contextmanager
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 _client: Optional["langsmith.Client"] = None
 _tracing_enabled: bool = False
+
+
+def _redact_payload(val: Any) -> Any:
+    """Redact student notes, transcripts, model outputs, and messages from third-party tracing."""
+    try:
+        from django.conf import settings
+        if not getattr(settings, "LANGSMITH_REDACT_STUDENT_TEXT", True):
+            return val
+    except Exception:
+        pass
+
+    if hasattr(val, "content"):
+        # e.g. LangChain HumanMessage, AIMessage, SystemMessage
+        return f"[REDACTED_STUDENT_TEXT: length={len(str(val.content))}]"
+
+    if isinstance(val, dict):
+        redacted = {}
+        for k, v in val.items():
+            if k in (
+                "text", "content", "transcript", "student_text", "note_text",
+                "prompt", "args", "kwargs", "completion", "raw_output",
+            ):
+                redacted[k] = f"[REDACTED_STUDENT_TEXT: length={len(str(v))}]"
+            elif k in ("output", "outputs", "response", "result", "generation", "generations") and isinstance(v, str):
+                redacted[k] = f"[REDACTED_STUDENT_TEXT: length={len(v)}]"
+            else:
+                redacted[k] = _redact_payload(v)
+        return redacted
+    elif isinstance(val, (list, tuple)):
+        return [_redact_payload(item) for item in val]
+    return val
 
 
 def is_tracing_enabled() -> bool:
@@ -110,13 +141,13 @@ def traceable(name: str = None, **default_metadata):
             run = client.create_run(
                 name=run_name,
                 run_type="tool" if "tool" in func.__name__ else "chain",
-                inputs={"args": str(args)[:500], "kwargs": str(kwargs)[:500]},
+                inputs=_redact_payload({"args": str(args)[:500], "kwargs": str(kwargs)[:500]}),
                 extra=default_metadata,
                 project_name=get_project(),
             )
             try:
                 result = func(*args, **kwargs)
-                client.update_run(run.id, outputs={"result": str(result)[:1000]}, end_time=None)
+                client.update_run(run.id, outputs=_redact_payload({"result": str(result)[:1000]}), end_time=None)
                 return result
             except Exception as e:
                 client.update_run(run.id, error=str(e), end_time=None)
@@ -185,8 +216,8 @@ def log_tool_call(
         client.create_run(
             name=f"studyai.agent.tool.{tool_name}",
             run_type="tool",
-            inputs=arguments,
-            outputs=result,
+            inputs=_redact_payload(arguments),
+            outputs=_redact_payload(result),
             extra={
                 "latency_ms": latency_ms,
                 "success": success,

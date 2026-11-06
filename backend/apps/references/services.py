@@ -269,24 +269,27 @@ def retrieve_reference_context(
     return results
 
 
-def reference_library_hash(subject=None) -> str:
-    """Compute a deterministic hash of the active reference documents for a subject.
+def reference_library_hash(subject=None, profile=None) -> str:
+    """Compute a deterministic hash of the active reference documents.
 
-    Hash changes whenever reference documents for this subject are added, updated,
-    deleted, or re-indexed (§3.3).
+    Covers:
+    - If subject is given: documents matching subject OR unscoped documents (subject__isnull=True).
+    - If subject is None: all READY documents (retrieval searches across all documents when no subject is set).
+    - Scoped strictly by profile: (Q(profile=profile) | Q(profile__isnull=True)) so another profile's upload cannot alter this hash.
     """
-    if subject is None:
-        return "no_subject"
+    from django.db.models import Q
 
-    subject_id = getattr(subject, "pk", subject)
-    docs = (
-        ReferenceDocument.objects.filter(
-            subject_id=subject_id,
-            status=ReferenceDocument.Status.READY,
-        )
-        .order_by("id")
-        .values_list("id", "updated_at", "chunk_count")
-    )
+    qs = ReferenceDocument.objects.filter(status=ReferenceDocument.Status.READY)
+
+    if profile is not None:
+        profile_id = getattr(profile, "pk", profile)
+        qs = qs.filter(Q(profile_id=profile_id) | Q(profile__isnull=True))
+
+    if subject is not None:
+        subject_id = getattr(subject, "pk", subject)
+        qs = qs.filter(Q(subject_id=subject_id) | Q(subject__isnull=True))
+
+    docs = qs.order_by("id").values_list("id", "updated_at", "chunk_count")
     if not docs:
         return "empty"
 

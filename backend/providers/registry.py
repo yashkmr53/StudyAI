@@ -199,16 +199,17 @@ def get_llm_provider() -> LLMChainProvider:
 
 
 def _flag(name: str, default: str = "false") -> bool:
-    """Get a boolean setting, checking both django settings and os.environ."""
-    # Check os.environ first to allow test patch.dict and CLI overrides
-    env_val = os.environ.get(name)
-    if env_val is not None:
-        return str(env_val).strip().lower() in ("1", "true", "yes")
-
+    """Get a boolean setting, checking django settings first (supporting @override_settings), then os.environ."""
     from django.conf import settings as dj_settings
     val = getattr(dj_settings, name, None)
     if val is not None:
+        if isinstance(val, bool):
+            return val
         return str(val).strip().lower() in ("1", "true", "yes")
+
+    env_val = os.environ.get(name)
+    if env_val is not None:
+        return str(env_val).strip().lower() in ("1", "true", "yes")
 
     return str(default).strip().lower() in ("1", "true", "yes")
 
