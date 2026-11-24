@@ -63,7 +63,14 @@ def _candidate_depth() -> int:
     return int(getattr(settings, "RETRIEVAL_CANDIDATES", 50))
 
 
-def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: bool = False, profile=None):
+def _base_queryset(
+    user,
+    subject=None,
+    reference_book_ids=None,
+    reference_only: bool = False,
+    profile=None,
+    tag_ids=None,
+):
     from apps.retrieval.models import NoteChunk
 
     if reference_only:
@@ -90,6 +97,10 @@ def _base_queryset(user, subject=None, reference_book_ids=None, reference_only: 
             qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile=profile))
         else:
             qs = qs.filter(Q(reference_book_id__in=reference_book_ids) | Q(profile_id__in=profile_ids if user else []))
+    normalized_tag_ids = [t for t in (tag_ids or []) if t]
+    if normalized_tag_ids:
+        # Pre-filter NoteChunk -> Document -> DocumentTag -> Tag (ANY semantics) with distinct() to avoid join duplicates.
+        qs = qs.filter(document__document_tags__tag_id__in=normalized_tag_ids).distinct()
     return qs
 
 
@@ -106,9 +117,16 @@ class RetrievalService:
         include_reference: bool = True,
         reference_book_ids: list = None,
         reference_only: bool = False,
+        tag_ids: Optional[list] = None,
     ):
         """Returns list[Evidence]. The dense leg runs on PostgreSQL only;
-        SQLite unit runs degrade to keyword-only."""
+        SQLite unit runs degrade to keyword-only.
+
+        When ``tag_ids`` is non-empty, both the vector and full-text NoteChunk legs
+        pre-filter for documents carrying ANY of the given tags before top-k cutoff.
+        Note: Reference chunks (``retrieve_reference_context``) are not tagged and
+        therefore leave that path unchanged.
+        """
         from apps.retrieval.models import NoteChunk
         from providers.registry import embedding_model_version, get_embedding_provider
         from apps.profiles.models import Profile
@@ -137,7 +155,14 @@ class RetrievalService:
             except Exception:
                 subject = None
 
-        base = _base_queryset(user, subject, reference_book_ids, reference_only=reference_only, profile=profile)
+        base = _base_queryset(
+            user,
+            subject,
+            reference_book_ids,
+            reference_only=reference_only,
+            profile=profile,
+            tag_ids=tag_ids,
+        )
         if not include_reference:
             base = base.exclude(source_type="reference")
 
