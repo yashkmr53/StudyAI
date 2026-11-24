@@ -174,48 +174,204 @@ def execute_tool_node(state: AgentState, config=None) -> dict:
     }
 
 
+_AGENT_SYNTHESIS_SYSTEM_PROMPT = (
+    "You are StudyAI Agent. Synthesize a clear, concise, grounded answer from the "
+    "retrieved tool results and cite supporting sources using their citation_id values."
+)
+
+
+def _format_citation(raw: dict, src_id: str) -> dict | None:
+    """Build a normalized citation entry from a search/web tool result item."""
+    snippet = (raw.get("snippet") or raw.get("content") or "")[:200]
+    if "chunk_id" in raw:
+        return {
+            "source_id": src_id,
+            "source_type": "database",
+            "chunk_id": raw.get("chunk_id"),
+            "document_id": raw.get("document_id"),
+            "document_title": raw.get("document_title"),
+            "subject_name": raw.get("subject_name"),
+            "page_start": raw.get("page_start"),
+            "page_end": raw.get("page_end"),
+            "snippet": snippet,
+            "url": None,
+        }
+    if raw.get("url"):
+        return {
+            "source_id": src_id,
+            "source_type": "web",
+            "title": raw.get("title"),
+            "url": raw.get("url"),
+            "domain": raw.get("domain"),
+            "snippet": snippet,
+        }
+    return None
+
+
+def _collect_tool_evidence(tool_calls: list[dict], last_result: dict) -> dict:
+    """Extract normalized evidence payload, raw snippets, and citations from tool runs."""
+    records = tool_calls if tool_calls else ([last_result] if last_result.get("success") else [])
+    evidence_payload: list[dict] = []
+    raw_snippets: list[str] = []
+    by_cit_id: dict[str, tuple[dict | None, str]] = {}
+    all_items: list[tuple[dict | None, str]] = []
+
+    for tc in records:
+        result_data = tc.get("result", {})
+        if not isinstance(result_data, dict):
+            continue
+
+        if "results" in result_data and isinstance(result_data["results"], list):
+            for r in result_data["results"]:
+                if not isinstance(r, dict):
+                    continue
+                text = r.get("snippet") or r.get("content") or ""
+                if not text:
+                    continue
+                cit_id = f"SRC-{len(evidence_payload) + 1:03d}"
+                cit_entry = _format_citation(r, cit_id)
+                evidence_payload.append({
+                    "citation_id": cit_id,
+                    "content": text,
+                    "snippet": text[:200],
+                    "source_type": cit_entry["source_type"] if cit_entry else "database",
+                    "chunk_id": r.get("chunk_id"),
+                    "document_id": r.get("document_id"),
+                    "document_title": r.get("document_title"),
+                    "subject_name": r.get("subject_name"),
+                    "page_start": r.get("page_start"),
+                    "page_end": r.get("page_end"),
+                    "title": r.get("title"),
+                    "url": r.get("url"),
+                })
+                raw_snippets.append(text[:200])
+                by_cit_id[cit_id] = (cit_entry, text)
+                all_items.append((cit_entry, text))
+        elif tc.get("success", True):
+            useful = {
+                k: v
+                for k, v in result_data.items()
+                if k not in ("success", "error", "latency_ms") and v not in (None, [], {})
+            }
+            if useful:
+                summary = json.dumps(useful, default=str)[:800]
+                cit_id = f"SRC-{len(evidence_payload) + 1:03d}"
+                evidence_payload.append({
+                    "citation_id": cit_id,
+                    "tool": tc.get("tool"),
+                    "content": summary,
+                })
+                raw_snippets.append(summary[:200])
+                by_cit_id[cit_id] = (None, summary)
+                all_items.append((None, summary))
+
+    return {
+        "evidence_payload": evidence_payload,
+        "raw_snippets": raw_snippets,
+        "by_cit_id": by_cit_id,
+        "all_items": all_items,
+    }
+
+
+def _select_citations(items: list[tuple[dict | None, str]]) -> tuple[list[dict], list[str]]:
+    """Renumber kept citations sequentially and return paired cited texts."""
+    citations: list[dict] = []
+    cited_contents: list[str] = []
+    for cit, text in items:
+        cited_contents.append(text)
+        if cit is not None:
+            numbered = dict(cit)
+            numbered["source_id"] = f"src-{len(citations) + 1:03d}"
+            citations.append(numbered)
+    return citations, cited_contents
+
+
+def _verify_agent_answer(state: AgentState, answer: str, cited_contents: list[str]) -> tuple[str, float]:
+    """Run the reusable EvidenceVerifier graph against cited evidence contents."""
+    from ai.langgraph.graphs.verification_graph import invoke_verification_graph
+    from ai.langgraph.state.verification_state import VerificationState
+
+    ver_result = invoke_verification_graph(
+        VerificationState(
+            user_request=state.get("user_request", ""),
+            profile_id=str(state.get("profile_id", "")),
+            subject_id=state.get("subject_id"),
+            session_id=state.get("session_id"),
+            errors=[],
+            execution_metadata={},
+            content=answer,
+            cited_contents=cited_contents,
+            verification_status="not_verified",
+            verification_score=0.0,
+        )
+    )
+    return (
+        ver_result.get("verification_status", "not_verified"),
+        float(ver_result.get("verification_score") or 0.0),
+    )
+
+
 @traced_node("studyai.agent.format_response", feature="agent")
 def format_response_node(state: AgentState, config=None) -> dict:
+    from ai.schemas.chat import ChatAnswer
+
     tool_calls = state.get("tool_calls", [])
     last_result = state.get("last_tool_result", {})
+    collected = _collect_tool_evidence(tool_calls, last_result)
+    evidence_payload = collected["evidence_payload"]
+    raw_snippets = collected["raw_snippets"]
+    by_cit_id = collected["by_cit_id"]
+    all_items = collected["all_items"]
 
-    evidence_parts = []
-    citations = []
-
-    for tc in tool_calls:
-        result_data = tc.get("result", {})
-        if isinstance(result_data, dict):
-            for r in result_data.get("results", []):
-                if "snippet" in r:
-                    evidence_parts.append(r["snippet"][:200])
-                if "chunk_id" in r:
-                    src_id = f"src-{len(citations) + 1:03d}"
-                    citations.append({
-                        "source_id": src_id,
-                        "source_type": "database",
-                        "chunk_id": r.get("chunk_id"),
-                        "document_id": r.get("document_id"),
-                        "document_title": r.get("document_title"),
-                        "subject_name": r.get("subject_name"),
-                        "page_start": r.get("page_start"),
-                        "page_end": r.get("page_end"),
-                        "snippet": r.get("snippet", "")[:200],
-                        "url": None,
-                    })
-
-    if evidence_parts:
-        answer = f"Based on the available information: {' '.join(evidence_parts[:3])}"
-    elif last_result.get("success") and last_result.get("result", {}).get("results"):
-        snippets = [r.get("snippet", "")[:200] for r in last_result["result"]["results"] if "snippet" in r]
-        answer = f"Based on the search results: {' '.join(snippets[:3])}"
+    user_request = state.get("user_request", "")
+    if evidence_payload:
+        user_text = f"QUESTION: {user_request}\n\nEVIDENCE_JSON:{json.dumps({'evidence': evidence_payload})}"
     else:
-        answer = "I was unable to complete the analysis within the allowed steps. Please try a more specific question."
+        user_text = f"QUESTION: {user_request}"
+
+    citations, cited_contents = _select_citations(all_items)
+
+    try:
+        llm = get_llm_provider()
+        result = llm.generate_structured(
+            prompt=Prompt(
+                name="chat",
+                version="v1",
+                system=_AGENT_SYNTHESIS_SYSTEM_PROMPT,
+                user=user_text,
+            ),
+            schema=ChatAnswer,
+            request_id=f"agent:{state.get('session_id')}:format",
+        )
+        data = result.data if isinstance(result.data, dict) else {}
+        answer = (data.get("answer") or "").strip()
+        if not answer:
+            raise ValueError("LLM returned empty answer during agent response synthesis")
+
+        cited_ids = data.get("cited_ids", []) or data.get("cited_chunk_ids", []) or []
+        matched = [by_cit_id[cid] for cid in dict.fromkeys(cited_ids) if cid in by_cit_id]
+        if matched:
+            citations, cited_contents = _select_citations(matched)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Agent response LLM synthesis failed, using snippet fallback: %s", exc)
+        if raw_snippets:
+            answer = f"LLM synthesis failed (fallback to retrieved results): {' '.join(raw_snippets[:3])}"
+        else:
+            answer = (
+                "LLM synthesis failed (fallback mode): "
+                "I was unable to complete the analysis within the allowed steps. "
+                "Please try a more specific question."
+            )
+
+    verification_status, verification_score = _verify_agent_answer(
+        state, answer, cited_contents
+    )
 
     return {
         "answer": answer,
         "citations": citations,
-        "verification_status": "not_verified",
-        "verification_score": 0.0,
+        "verification_status": verification_status,
+        "verification_score": verification_score,
     }
 
 

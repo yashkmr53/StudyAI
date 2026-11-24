@@ -211,6 +211,167 @@ class TestAgentGraphNodes(TestCase):
         self.assertIn("answer", result)
         self.assertIn("test snippet", result["answer"])
 
+    def test_format_response_synthesizes_with_llm_and_reflects_verifier(self):
+        from unittest.mock import MagicMock
+
+        mock_llm = MagicMock()
+        mock_llm.generate_structured.return_value = MagicMock(
+            data={
+                "answer": "Newton second law states force equals mass times acceleration.",
+                "cited_ids": ["SRC-001"],
+                "confidence": 0.9,
+            },
+            model="test-model",
+        )
+
+        state = AgentState(
+            user_request="What is Newton's second law?",
+            profile_id="profile-1",
+            subject_id=None,
+            session_id="session-1",
+            retrieved_evidence=[],
+            selected_evidence=[],
+            answer="",
+            citations=[],
+            verification_status="not_verified",
+            verification_score=0.0,
+            tool_calls=[
+                {
+                    "tool": "search_notes",
+                    "arguments": {"query": "Newton second law"},
+                    "result": {
+                        "results": [
+                            {
+                                "chunk_id": "c-1",
+                                "document_id": "d-1",
+                                "document_title": "Physics Notes",
+                                "snippet": "Newton second law states force equals mass times acceleration",
+                            }
+                        ]
+                    },
+                    "success": True,
+                }
+            ],
+            iterations=1,
+            max_iterations=5,
+            max_tool_calls=10,
+            errors=[],
+            execution_metadata={},
+        )
+
+        with patch("ai.langgraph.nodes.agent_nodes.get_llm_provider", return_value=mock_llm):
+            result = format_response_node(state)
+
+        mock_llm.generate_structured.assert_called_once()
+        self.assertEqual(result["answer"], "Newton second law states force equals mass times acceleration.")
+        self.assertEqual(result["verification_status"], "supported")
+        self.assertGreaterEqual(result["verification_score"], 0.6)
+        self.assertEqual(len(result["citations"]), 1)
+        self.assertEqual(result["citations"][0]["chunk_id"], "c-1")
+
+        # Now return an unsupported hallucinated answer and assert verifier detects it
+        mock_llm.generate_structured.return_value = MagicMock(
+            data={
+                "answer": "Quantum entanglement drives tropical banana photosynthesis exclusively.",
+                "cited_ids": ["SRC-001"],
+                "confidence": 0.9,
+            },
+            model="test-model",
+        )
+        with patch("ai.langgraph.nodes.agent_nodes.get_llm_provider", return_value=mock_llm):
+            unsupported_result = format_response_node(state)
+
+        self.assertEqual(unsupported_result["verification_status"], "unsupported")
+        self.assertLess(unsupported_result["verification_score"], 0.3)
+
+    def test_format_response_end_to_end_with_mock_provider_verifies_real_score(self):
+        state = AgentState(
+            user_request="Summarize dynamic programming overlapping subproblems",
+            profile_id="profile-1",
+            subject_id=None,
+            session_id="session-1",
+            retrieved_evidence=[],
+            selected_evidence=[],
+            answer="",
+            citations=[],
+            verification_status="not_verified",
+            verification_score=0.0,
+            tool_calls=[
+                {
+                    "tool": "search_notes",
+                    "arguments": {"query": "dynamic programming"},
+                    "result": {
+                        "results": [
+                            {
+                                "chunk_id": "c-dp",
+                                "snippet": "Dynamic programming solves optimization problems with overlapping subproblems.",
+                            }
+                        ]
+                    },
+                    "success": True,
+                }
+            ],
+            iterations=1,
+            max_iterations=5,
+            max_tool_calls=10,
+            errors=[],
+            execution_metadata={},
+        )
+
+        result = format_response_node(state)
+        self.assertIn("dynamic programming", result["answer"].lower())
+        self.assertIn(result["verification_status"], ("supported", "partially_supported"))
+        self.assertGreater(result["verification_score"], 0.0)
+        self.assertEqual(result["citations"][0]["chunk_id"], "c-dp")
+
+    def test_format_response_fallback_when_llm_fails(self):
+        from unittest.mock import MagicMock
+
+        failing_llm = MagicMock()
+        failing_llm.generate_structured.side_effect = RuntimeError("LLM connection timeout")
+
+        state = AgentState(
+            user_request="Explain Newton's second law",
+            profile_id="profile-1",
+            subject_id=None,
+            session_id="session-1",
+            retrieved_evidence=[],
+            selected_evidence=[],
+            answer="",
+            citations=[],
+            verification_status="not_verified",
+            verification_score=0.0,
+            tool_calls=[
+                {
+                    "tool": "search_notes",
+                    "arguments": {"query": "Newton second law"},
+                    "result": {
+                        "results": [
+                            {
+                                "chunk_id": "c-1",
+                                "snippet": "Force equals mass times acceleration in inertial frames.",
+                            }
+                        ]
+                    },
+                    "success": True,
+                }
+            ],
+            iterations=1,
+            max_iterations=5,
+            max_tool_calls=10,
+            errors=[],
+            execution_metadata={},
+        )
+
+        with patch("ai.langgraph.nodes.agent_nodes.get_llm_provider", return_value=failing_llm):
+            result = format_response_node(state)
+
+        self.assertIn("Force equals mass times acceleration", result["answer"])
+        self.assertIn("fallback", result["answer"].lower())
+        self.assertNotEqual(result["verification_status"], "not_verified")
+        self.assertGreater(result["verification_score"], 0.0)
+        self.assertEqual(len(result["citations"]), 1)
+
     def test_finalize_node(self):
         state = AgentState(
             user_request="test request",
