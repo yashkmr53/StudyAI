@@ -286,6 +286,9 @@ class MockLLMProvider:
             provider=self.name,
             prompt_name=prompt.name,
             prompt_version=prompt.version,
+            input_tokens=15,
+            output_tokens=15,
+            total_tokens=30,
         )
 
     @staticmethod

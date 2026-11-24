@@ -247,6 +247,18 @@ class LLMChainProvider:
         prompt_name = getattr(prompt, "name", "direct")
         prompt_version = getattr(prompt, "version", "v1")
 
+        log_metadata = {"redactions_count": redaction_count, "prompt_name": prompt_name}
+        if request_id:
+            log_metadata["request_id"] = request_id
+        try:
+            from apps.accounts.services.budget import get_active_reservation_id
+
+            res_id = get_active_reservation_id()
+            if res_id:
+                log_metadata["reservation_id"] = res_id
+        except Exception:
+            pass
+
         record_provider_call(
             provider=provider_name,
             model=model,
@@ -257,7 +269,7 @@ class LLMChainProvider:
             output_tokens=output_tokens,
             total_tokens=total_tokens,
             estimated_cost_usd=estimated_cost_usd,
-            metadata={"redactions_count": redaction_count, "prompt_name": prompt_name},
+            metadata=log_metadata,
         )
 
         try:
