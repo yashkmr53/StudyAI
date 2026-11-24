@@ -3,15 +3,22 @@
 Initializes LangSmith client from environment variables.
 Only backend/worker processes should have LANGSMITH_API_KEY set.
 """
-import os
 import logging
+import os
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 _client: Optional["langsmith.Client"] = None
 _tracing_enabled: bool = False
+
+
+def _as_bool(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ("true", "1", "yes")
 
 
 def _redact_payload(val: Any) -> Any:
@@ -33,9 +40,14 @@ def _redact_payload(val: Any) -> Any:
             if k in (
                 "text", "content", "transcript", "student_text", "note_text",
                 "prompt", "args", "kwargs", "completion", "raw_output",
+                "user_request", "answer", "raw_text", "snippet", "user",
+                "system", "query",
             ):
                 redacted[k] = f"[REDACTED_STUDENT_TEXT: length={len(str(v))}]"
-            elif k in ("output", "outputs", "response", "result", "generation", "generations") and isinstance(v, str):
+            elif k in (
+                "output", "outputs", "response", "result",
+                "generation", "generations", "initial_state", "final_state",
+            ) and isinstance(v, str):
                 redacted[k] = f"[REDACTED_STUDENT_TEXT: length={len(v)}]"
             else:
                 redacted[k] = _redact_payload(v)
@@ -46,17 +58,16 @@ def _redact_payload(val: Any) -> Any:
 
 
 def is_tracing_enabled() -> bool:
-    """Check if LangSmith tracing is enabled."""
+    """Check if LangSmith tracing is enabled (respects live settings/env changes)."""
     global _tracing_enabled
-    if not _tracing_enabled:
-        try:
-            from django.conf import settings
-            if hasattr(settings, "LANGSMITH_TRACING"):
-                _tracing_enabled = bool(settings.LANGSMITH_TRACING)
-            else:
-                _tracing_enabled = os.environ.get("LANGSMITH_TRACING", "false").lower() == "true"
-        except Exception:
-            _tracing_enabled = os.environ.get("LANGSMITH_TRACING", "false").lower() == "true"
+    try:
+        from django.conf import settings
+        if getattr(settings, "configured", False) and hasattr(settings, "LANGSMITH_TRACING"):
+            _tracing_enabled = _as_bool(settings.LANGSMITH_TRACING)
+            return _tracing_enabled
+    except Exception:
+        pass
+    _tracing_enabled = _as_bool(os.environ.get("LANGSMITH_TRACING", "false"))
     return _tracing_enabled
 
 
@@ -168,31 +179,53 @@ def log_llm_call(
     success: bool,
     error: str = "",
     metadata: Optional[dict] = None,
+    inputs: Optional[dict] = None,
+    outputs: Optional[dict] = None,
+    parent_run_id: Optional[str] = None,
 ) -> None:
     """Log an LLM call to LangSmith.
 
-    Called from provider chain after each LLM invocation.
+    Called from the LLM provider choke point after each LLM invocation.
     """
     client = get_client()
     if client is None:
         return
 
     try:
-        client.create_run(
+        if parent_run_id is None:
+            from ai.tracing.decorators import get_current_run_id
+            parent_run_id = get_current_run_id()
+
+        end_time = datetime.now(dt_timezone.utc)
+        start_time = end_time - timedelta(milliseconds=max(0, latency_ms or 0))
+        run_inputs = _redact_payload(
+            inputs if inputs is not None else {"prompt": prompt_name, "version": prompt_version}
+        )
+        run_outputs = _redact_payload(
+            outputs if outputs is not None else {"tokens": {"input": input_tokens, "output": output_tokens}}
+        )
+        run_extra = _redact_payload({
+            "model": model,
+            "provider": provider,
+            "latency_ms": latency_ms,
+            "success": success,
+            "error": error,
+            **(metadata or {}),
+        })
+
+        create_kwargs = dict(
             name=f"studyai.llm.{prompt_name}",
             run_type="llm",
-            inputs={"prompt": prompt_name, "version": prompt_version},
-            outputs={"tokens": {"input": input_tokens, "output": output_tokens}},
-            extra={
-                "model": model,
-                "provider": provider,
-                "latency_ms": latency_ms,
-                "success": success,
-                "error": error,
-                **(metadata or {}),
-            },
+            inputs=run_inputs if isinstance(run_inputs, dict) else {"value": run_inputs},
+            outputs=run_outputs if isinstance(run_outputs, dict) else {"value": run_outputs},
+            extra=run_extra if isinstance(run_extra, dict) else {"metadata": run_extra},
             project_name=get_project(),
+            start_time=start_time,
+            end_time=end_time,
         )
+        if parent_run_id:
+            create_kwargs["parent_run_id"] = parent_run_id
+        client.create_run(**create_kwargs)
     except Exception as e:
         logger.warning("LangSmith LLM call logging failed: %s", e)
 

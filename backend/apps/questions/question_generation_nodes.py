@@ -139,18 +139,6 @@ def generate_questions_node(state: QuestionGenerationState, config=None) -> dict
             request_id=f"qgen:{chunk['chunk_id']}",
             disable_fallback=True,
         )
-        latency_ms = int((time.monotonic() - started) * 1000)
-
-        log_llm_call(
-            model=result.model,
-            provider=llm.name,
-            prompt_name=prompt.name,
-            prompt_version=prompt.version,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            latency_ms=latency_ms,
-            success=True,
-        )
 
         resp_data = result.data if isinstance(result.data, dict) else {}
         prompt_text = resp_data.get("prompt", "")

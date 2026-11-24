@@ -198,3 +198,155 @@ class TestTracingConfig(TestCase):
         self.assertNotIn("potential energy increases", redacted_str)
         self.assertNotIn("gravity causes an increase", redacted_str)
         self.assertNotIn("PE_g = mgh", redacted_str)
+
+
+class TestT8TracingChokePointAndDecorators(TestCase):
+    def setUp(self):
+        from ai.tracing import config
+        config._tracing_enabled = False
+        config._client = None
+
+    def tearDown(self):
+        from ai.tracing import config
+        config._tracing_enabled = False
+        config._client = None
+
+    def test_topic_enrichment_llm_call_emits_redacted_langsmith_trace_when_enabled(self):
+        """T8: Topic enrichment calls through LLMChainProvider emit redacted LangSmith traces + PG ProviderCallLog."""
+        import os
+        import uuid
+        from ai.langgraph.nodes.segment_classifier_node import segment_classifier_node
+        from apps.audit.models import ProviderCallLog
+
+        mock_client = MagicMock()
+        mock_run = MagicMock()
+        mock_run.id = "run-enrichment-1"
+        mock_client.create_run.return_value = mock_run
+
+        state = {
+            "approved_lines": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "lineage_id": "lid-1",
+                    "text": "SECRET_STUDENT_NOTE: Maxwell displacement current term",
+                    "line_index": 0,
+                }
+            ],
+            "force_include_line_ids": [],
+        }
+
+        with override_settings(
+            LANGSMITH_TRACING=True,
+            LANGSMITH_API_KEY="test-key",
+            LANGSMITH_REDACT_STUDENT_TEXT=True,
+        ), patch.dict(os.environ, {"LANGSMITH_TRACING": "true", "LANGSMITH_API_KEY": "test-key"}), \
+             patch("langsmith.Client", return_value=mock_client):
+            segment_classifier_node(state)
+
+        self.assertGreaterEqual(ProviderCallLog.objects.filter(success=True).count(), 1)
+        llm_calls = [
+            c for c in mock_client.create_run.call_args_list
+            if c.kwargs.get("run_type") == "llm"
+        ]
+        self.assertGreaterEqual(len(llm_calls), 1, f"Expected llm trace from topic enrichment, got: {mock_client.create_run.call_args_list}")
+        serialized = str(llm_calls)
+        self.assertNotIn("SECRET_STUDENT_NOTE", serialized)
+
+    def test_topic_enrichment_emits_zero_traces_when_disabled(self):
+        """T8: With LANGSMITH_TRACING=False, zero LangSmith client calls are sent."""
+        import os
+        import uuid
+        from ai.langgraph.nodes.segment_classifier_node import segment_classifier_node
+
+        mock_client = MagicMock()
+        state = {
+            "approved_lines": [
+                {"id": str(uuid.uuid4()), "lineage_id": "lid-1", "text": "Normal study note text", "line_index": 0}
+            ],
+            "force_include_line_ids": [],
+        }
+
+        with override_settings(LANGSMITH_TRACING=False), \
+             patch.dict(os.environ, {"LANGSMITH_TRACING": "false", "LANGSMITH_API_KEY": "test-key"}), \
+             patch("langsmith.Client", return_value=mock_client):
+            segment_classifier_node(state)
+
+        mock_client.create_run.assert_not_called()
+
+    def test_traced_node_and_graph_redact_payload_pass_parent_run_id_and_end_time(self):
+        """T8: @traced_graph and @traced_node redact payloads, pass parent_run_id top-level, and set end_time."""
+        import os
+        from ai.tracing.decorators import traced_graph, traced_node
+
+        mock_client = MagicMock()
+        graph_run = MagicMock()
+        graph_run.id = "graph-run-123"
+        node_run = MagicMock()
+        node_run.id = "node-run-456"
+        mock_client.create_run.side_effect = [graph_run, node_run]
+
+        @traced_node("unit_node", feature="test")
+        def inner_node(st):
+            return {"answer": "SECRET_OUTPUT_ANSWER", "status": "ok"}
+
+        @traced_graph("unit_graph", feature="test")
+        def outer_graph(st):
+            return inner_node(st)
+
+        with override_settings(
+            LANGSMITH_TRACING=True,
+            LANGSMITH_API_KEY="test-key",
+            LANGSMITH_REDACT_STUDENT_TEXT=True,
+        ), patch.dict(os.environ, {"LANGSMITH_TRACING": "true", "LANGSMITH_API_KEY": "test-key"}), \
+             patch("langsmith.Client", return_value=mock_client):
+            outer_graph({"student_text": "SECRET_INPUT_NOTE", "safe_id": "id-1"})
+
+        self.assertEqual(mock_client.create_run.call_count, 2)
+        graph_kwargs = mock_client.create_run.call_args_list[0].kwargs
+        node_kwargs = mock_client.create_run.call_args_list[1].kwargs
+
+        self.assertEqual(node_kwargs.get("parent_run_id"), "graph-run-123")
+        self.assertNotIn("parent_run_id", node_kwargs.get("extra", {}))
+        self.assertNotIn("SECRET_INPUT_NOTE", str(graph_kwargs.get("inputs")))
+        self.assertNotIn("SECRET_INPUT_NOTE", str(node_kwargs.get("inputs")))
+
+        for upd in mock_client.update_run.call_args_list:
+            self.assertIsNotNone(upd.kwargs.get("end_time"))
+            self.assertNotIn("SECRET_OUTPUT_ANSWER", str(upd.kwargs.get("outputs")))
+
+    def test_chat_node_traces_llm_call_exactly_once(self):
+        """T8: Chat node calling get_llm_provider() logs exactly 1 llm run (no duplicate node + provider trace)."""
+        import os
+        from apps.chat.langgraph_nodes import answer_generation_node
+
+        mock_client = MagicMock()
+        mock_run = MagicMock()
+        mock_run.id = "chat-run-1"
+        mock_client.create_run.return_value = mock_run
+
+        state = {
+            "user_request": "Explain Dijkstra SECRET_CHAT_QUERY",
+            "profile_id": "p1",
+            "subject_id": None,
+            "session_id": "s1",
+            "route": "material",
+            "selected_evidence": [
+                {"citation_id": "SRC-001", "chunk_id": "c1", "snippet": "Dijkstra finds shortest path", "source_type": "database"}
+            ],
+            "messages": [],
+        }
+
+        with override_settings(
+            LANGSMITH_TRACING=True,
+            LANGSMITH_API_KEY="test-key",
+            LANGSMITH_REDACT_STUDENT_TEXT=True,
+        ), patch.dict(os.environ, {"LANGSMITH_TRACING": "true", "LANGSMITH_API_KEY": "test-key"}), \
+             patch("langsmith.Client", return_value=mock_client):
+            answer_generation_node(state)
+
+        llm_calls = [
+            c for c in mock_client.create_run.call_args_list
+            if c.kwargs.get("run_type") == "llm"
+        ]
+        self.assertEqual(len(llm_calls), 1, f"Expected exactly 1 LLM trace, got {len(llm_calls)}")
+        self.assertNotIn("SECRET_CHAT_QUERY", str(llm_calls))
