@@ -48,6 +48,7 @@ class MCPToken:
     scopes: list[str]
     created_at: float
     expires_at: float
+    profile_id: Optional[str] = None
     revoked: bool = False
 
 
@@ -69,6 +70,7 @@ class MCPAuthenticator:
         client_id: str,
         scopes: Optional[list[str]] = None,
         ttl_hours: Optional[int] = None,
+        profile_id: Optional[str] = None,
     ) -> MCPToken:
         """Create a new MCP access token for a user."""
         ttl_hours = ttl_hours or self.DEFAULT_TTL_HOURS
@@ -84,6 +86,7 @@ class MCPAuthenticator:
             scopes=scopes or ["tools:read", "tools:execute"],
             created_at=now,
             expires_at=now + (ttl_hours * 3600),
+            profile_id=str(profile_id) if profile_id else None,
         )
         
         # Store in cache
@@ -145,7 +148,11 @@ class MCPAuthenticator:
         """Get user context from validated token."""
         try:
             user = User.objects.get(pk=token.user_id)
-            profile = Profile.objects.filter(user=user).first()
+            profile = None
+            if token.profile_id:
+                profile = Profile.objects.filter(user=user, pk=token.profile_id).first()
+            if profile is None:
+                profile = Profile.objects.filter(user=user).first()
             if not profile:
                 raise ValueError("Active profile context not found")
         except (User.DoesNotExist, Profile.DoesNotExist):
@@ -176,6 +183,8 @@ class MCPTokenValidator:
         "learning": ["tools:read", "tools:execute", "learning:read"],
         "evidence": ["tools:read", "tools:execute"],
         "document": ["tools:read", "tools:execute", "documents:read"],
+        "web": ["tools:read", "tools:execute"],
+        "artifact": ["tools:execute"],
     }
     
     def __init__(self, authenticator: MCPAuthenticator):

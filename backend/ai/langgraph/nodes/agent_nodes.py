@@ -100,7 +100,8 @@ def execute_tool_node(state: AgentState, config=None) -> dict:
     tool_call = state.get("tool_call", {})
     tool_name = tool_call.get("tool")
     tool_args = tool_call.get("arguments", {})
-    user = Profile.objects.get(pk=state["profile_id"]).user
+    profile = Profile.objects.get(pk=state["profile_id"])
+    user = profile.user
     tool_calls = state.get("tool_calls", [])
     iterations = state.get("iterations", 0)
 
@@ -138,7 +139,12 @@ def execute_tool_node(state: AgentState, config=None) -> dict:
     started = time.monotonic()
     try:
         input_model = tool.metadata.input_schema(**tool_args)
-        result = tool.execute(input_model, user=user, request_id=f"agent:{state.get('session_id')}")
+        result = tool.execute(
+            input_model,
+            user=user,
+            request_id=f"agent:{state.get('session_id')}",
+            profile=profile,
+        )
         latency_ms = int((time.monotonic() - started) * 1000)
         result.latency_ms = latency_ms
 
