@@ -229,3 +229,42 @@ class RevisionPlannerTests(LearningBase):
         self.assertEqual(len(plan["schedule"]), 7)
         for day in plan["schedule"]:
             self.assertLessEqual(len(day["focus"]), 2)
+
+
+class ChatBudgetThrottleScopeTests(TestCase):
+    def setUp(self):
+        from apps.accounts.models import User, UserProfile
+
+        self.alice = authenticated_client("alice_t3@example.com", "s3curePass!x")
+        self.user = User.objects.get(email="alice_t3@example.com")
+        self.user_profile, _ = UserProfile.objects.get_or_create(user=self.user)
+
+    def test_get_sessions_and_get_messages_do_not_charge_budget_while_post_message_does(self):
+        """T3: Read-only GET chat endpoints (and session create) do not deduct AI budget; POST messages does."""
+        from apps.accounts.models import UserProfile
+
+        create_res = self.alice.post("/api/v1/chat/sessions", {}, content_type="application/json")
+        self.assertEqual(create_res.status_code, 201)
+        session_id = create_res.json()["id"]
+
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 0)
+
+        list_res = self.alice.get("/api/v1/chat/sessions")
+        self.assertEqual(list_res.status_code, 200)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 0)
+
+        get_msgs_res = self.alice.get(f"/api/v1/chat/sessions/{session_id}/messages")
+        self.assertEqual(get_msgs_res.status_code, 200)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 0)
+
+        post_msg_res = self.alice.post(
+            f"/api/v1/chat/sessions/{session_id}/messages",
+            {"content": "hello"},
+            content_type="application/json",
+        )
+        self.assertEqual(post_msg_res.status_code, 201)
+        self.user_profile.refresh_from_db()
+        self.assertGreater(self.user_profile.current_month_token_usage, 0)
