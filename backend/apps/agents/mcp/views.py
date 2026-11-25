@@ -4,12 +4,18 @@ Django views for MCP over HTTP/SSE.
 """
 import json
 import logging
+import time
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.conf import settings
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.agents.mcp.server import create_mcp_server, MCPServer
 from apps.agents.mcp.auth import MCPAuthenticator, MCPTokenValidator, MCPRateLimiter
@@ -81,29 +87,25 @@ class MCPHTTPView(View):
         return resp
 
 
-class MCPTokenView(View):
+class MCPTokenView(APIView):
     """Endpoint for creating/revoking MCP tokens."""
-    
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        from apps.agents.mcp.auth import MCPAuthenticator
         self.authenticator = MCPAuthenticator()
-    
+
     def post(self, request):
         """Create a new MCP token."""
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-        
-        # Require authentication (use existing session auth)
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
-        
+        data = request.data if isinstance(request.data, dict) else {}
+
         client_id = data.get("client_id", f"client_{request.user.pk}_{int(time.time())}")
         scopes = data.get("scopes", ["tools:read", "tools:execute"])
         ttl_hours = data.get("ttl_hours", 24)
-        
+        profile_id = request.headers.get("X-Active-Profile") or data.get("profile_id")
+
         # Validate scopes
         valid_scopes = [
             "tools:read", "tools:execute", "learning:read", "documents:read"
@@ -111,52 +113,39 @@ class MCPTokenView(View):
         scopes = [s for s in scopes if s in valid_scopes]
         if not scopes:
             scopes = ["tools:read", "tools:execute"]
-        
-        # Create token
-        from apps.agents.mcp.auth import MCPAuthenticator
-        authenticator = MCPAuthenticator()
-        token = authenticator.create_token(
+
+        token = self.authenticator.create_token(
             user=request.user,
             client_id=client_id,
             scopes=scopes,
             ttl_hours=ttl_hours,
+            profile_id=profile_id,
         )
-        
-        return JsonResponse({
+
+        return Response({
             "token": token.token,
             "expires_at": token.expires_at,
             "scopes": token.scopes,
             "client_id": token.client_id,
         })
-    
+
     def delete(self, request):
         """Revoke an MCP token."""
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-        
+        data = request.data if isinstance(request.data, dict) else {}
         token_str = data.get("token")
         if not token_str:
-            return JsonResponse({"error": "Token required"}, status=400)
-        
-        from apps.agents.mcp.auth import MCPAuthenticator
-        authenticator = MCPAuthenticator()
-        success = authenticator.revoke_token(token_str)
-        
-        return JsonResponse({"revoked": success})
-    
+            return Response({"error": "Token required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        token_obj = self.authenticator.validate_token(token_str)
+        if token_obj and token_obj.user_id != request.user.pk:
+            return Response({"revoked": False}, status=status.HTTP_403_FORBIDDEN)
+
+        success = self.authenticator.revoke_token(token_str)
+        return Response({"revoked": success})
+
     def get(self, request):
         """List user's MCP tokens (metadata only)."""
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
-        
-        # This would require scanning all tokens - simplified for now
-        return JsonResponse({
+        return Response({
             "tokens": [],
             "message": "Token listing requires additional storage. Use the token directly.",
         })
-
-
-# Import time for MCPTokenView
-import time

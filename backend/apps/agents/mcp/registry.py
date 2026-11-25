@@ -74,7 +74,7 @@ class MCPToolRegistry:
         """Get tool definitions in MCP format for tools/list."""
         return [tool.to_mcp_dict() for tool in self._tools.values()]
     
-    async def call_tool(
+    def call_tool(
         self,
         name: str,
         arguments: dict,
@@ -93,11 +93,12 @@ class MCPToolRegistry:
         # Validate input
         input_model = internal_tool.metadata.input_schema(**arguments)
         
-        # Execute with user context
+        # Execute with user and explicit profile context
         result = internal_tool.execute(
             input_model,
             user=user_context.user,
             request_id=user_context.request_id,
+            profile=user_context.profile,
         )
         
         return result.model_dump()
