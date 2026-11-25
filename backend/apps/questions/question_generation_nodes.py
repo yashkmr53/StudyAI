@@ -93,8 +93,10 @@ def _resolve_target_difficulty(state: QuestionGenerationState) -> str:
 
 @traced_node("studyai.question_generation.generate", feature="question_generation")
 def generate_questions_node(state: QuestionGenerationState, config=None) -> dict:
+    from ai.langchain.prompts import resolve_prompt_version
+
     llm = get_llm_provider()
-    prompt_version = "v1"
+    prompt_version = resolve_prompt_version("question_generation")
     chunks = state.get("chunks", [])
     ref_chunks = state.get("reference_chunks", [])
     q_type = state.get("question_type") or Question.QuestionType.MCQ
@@ -221,11 +223,13 @@ def verify_evidence_node(state: QuestionGenerationState, config=None) -> dict:
 
 @traced_node("studyai.question_generation.persist", feature="question_generation")
 def persist_questions_node(state: QuestionGenerationState, config=None) -> dict:
+    from ai.langchain.prompts import resolve_prompt_version
+
     document = Document.objects.get(pk=state["document_id"])
     verified = state.get("verified_questions", [])
     persisted = []
     model = getattr(__import__("django.conf", fromlist=["settings"]).settings, "LLM_MODEL", "qwen3.5:4b")
-    prompt_version = "v1"
+    prompt_version = resolve_prompt_version("question_generation")
 
     tag = _primary_tag(document)
 

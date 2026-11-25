@@ -42,8 +42,27 @@ class PromptTemplate:
         return ChatPromptTemplate.from_template(self.template)
 
 
+def _active_db_prompt(names: tuple[str, ...]):
+    """Safely look up an active DB PromptVersion row across candidate names."""
+    try:
+        from django.apps import apps
+        from django.conf import settings
+
+        if not getattr(settings, "configured", False) or not apps.ready:
+            return None
+        from apps.ai_classroom.models import PromptVersion
+
+        return (
+            PromptVersion.objects.filter(prompt_name__in=names, is_active=True)
+            .order_by("-created_at", "-version")
+            .first()
+        )
+    except Exception:
+        return None
+
+
 class PromptRegistry:
-    """Registry for versioned prompt templates."""
+    """Registry for versioned prompt templates (DB active override + JSON specs)."""
 
     def __init__(self):
         self._prompts: Dict[str, PromptTemplate] = {}
@@ -74,20 +93,24 @@ class PromptRegistry:
     def get(self, name: str, version: str = "latest") -> Optional[PromptTemplate]:
         """Get a prompt template by name and version.
 
-        Args:
-            name: Prompt name
-            version: Specific version or "latest"
-
-        Returns:
-            PromptTemplate or None if not found
+        When ``version == "latest"``, active rows in ``PromptVersion`` take
+        precedence over static JSON templates while preserving schema metadata.
         """
         if version == "latest":
-            # Find highest version for this name
             candidates = [p for k, p in self._prompts.items() if k.startswith(f"{name}:")]
-            if not candidates:
-                return None
-            # Simple version sorting (assumes semantic versioning)
-            return max(candidates, key=lambda p: p.version)
+            base = max(candidates, key=lambda p: p.version) if candidates else None
+            db_row = _active_db_prompt((name,))
+            if db_row is not None:
+                return PromptTemplate(
+                    name=name,
+                    version=db_row.version,
+                    template=db_row.template,
+                    output_schema=base.output_schema if base else None,
+                    output_schema_version=db_row.output_schema_version or (base.output_schema_version if base else "v1"),
+                    description=base.description if base else "",
+                    tags=list(base.tags) if base else [],
+                )
+            return base
 
         key = f"{name}:{version}"
         return self._prompts.get(key)
@@ -139,6 +162,35 @@ _registry = PromptRegistry()
 def get_prompt_registry() -> PromptRegistry:
     """Get the global prompt registry."""
     return _registry
+
+
+def resolve_prompt_version(
+    name: str,
+    *,
+    aliases: tuple[str, ...] = (),
+    default: str = "v1",
+) -> str:
+    """Resolve the active version string (e.g. 'v1'/'v2') from unified DB+JSON registry."""
+    names = tuple(dict.fromkeys((name, *aliases)))
+    db_row = _active_db_prompt(names)
+    if db_row is not None:
+        return db_row.version
+    for candidate in names:
+        tmpl = _registry.get(candidate, "latest")
+        if tmpl is not None:
+            return tmpl.version
+    return default
+
+
+def resolve_qualified_version(
+    name: str,
+    *,
+    label: Optional[str] = None,
+    aliases: tuple[str, ...] = (),
+    default: str = "v1",
+) -> str:
+    """Resolve canonical qualified version tag (e.g. 'chat:v2', 'agent_orchestrator:v1')."""
+    return f"{label or name}:{resolve_prompt_version(name, aliases=aliases, default=default)}"
 
 
 def active_prompt(name: str) -> PromptTemplate:

@@ -69,9 +69,11 @@ def select_tool_node(state: AgentState, config=None) -> dict:
         ])
         user_request = f"Previous tool calls:\n{history}\n\nOriginal request: {user_request}"
 
+    from ai.langchain.prompts import resolve_prompt_version
+
     prompt = Prompt(
         name="agent_orchestrator",
-        version="v1",
+        version=resolve_prompt_version("agent_orchestrator"),
         system=system_prompt,
         user=user_request,
     )
@@ -332,11 +334,13 @@ def format_response_node(state: AgentState, config=None) -> dict:
     citations, cited_contents = _select_citations(all_items)
 
     try:
+        from ai.langchain.prompts import resolve_prompt_version
+
         llm = get_llm_provider()
         result = llm.generate_structured(
             prompt=Prompt(
                 name="chat",
-                version="v1",
+                version=resolve_prompt_version("chat_answer", aliases=("chat",)),
                 system=_AGENT_SYNTHESIS_SYSTEM_PROMPT,
                 user=user_text,
             ),

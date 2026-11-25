@@ -82,6 +82,92 @@ class TestPromptRegistry(TestCase):
         self.assertEqual(prompt.name, "chat_answer")
         self.assertEqual(prompt.version, "v1")
 
+    def test_seed_agent_prompt_versions_succeeds_and_syncs_canonical_prompt(self):
+        from apps.agents.models import AgentPromptVersion, seed_agent_prompt_versions
+        from apps.ai_classroom.models import PromptVersion
+
+        created = seed_agent_prompt_versions()
+        again = seed_agent_prompt_versions()
+        self.assertEqual(created, 1)
+        self.assertEqual(again, 0)
+        self.assertTrue(AgentPromptVersion.objects.filter(name="agent_orchestrator", version="v1").exists())
+        self.assertTrue(PromptVersion.objects.filter(prompt_name="agent_orchestrator", version="v1", is_active=True).exists())
+
+    def test_seed_all_prompt_versions_syncs_file_and_classroom_prompts(self):
+        from apps.ai_classroom.models import PromptVersion
+        from apps.ai_classroom.prompts import seed_all_prompt_versions
+
+        seed_all_prompt_versions()
+        for expected in (
+            "enrichment_draft",
+            "gap_detection",
+            "gap_filling",
+            "chat_answer",
+            "agent_orchestrator",
+            "question_generation",
+        ):
+            self.assertTrue(
+                PromptVersion.objects.filter(prompt_name=expected, is_active=True).exists(),
+                f"Expected unified PromptVersion for {expected}",
+            )
+
+    def test_unified_registry_respects_active_db_override_across_nodes(self):
+        from ai.langchain.prompts import resolve_prompt_version, resolve_qualified_version
+        from apps.ai_classroom.models import PromptVersion
+        from apps.questions.question_generation_nodes import generate_questions_node
+
+        PromptVersion.objects.create(
+            prompt_name="question_generation",
+            version="v2",
+            template="v2 template",
+            output_schema_version="v1",
+            model="qwen3.5:4b",
+            is_active=True,
+        )
+        PromptVersion.objects.create(
+            prompt_name="chat_answer",
+            version="v2",
+            template="v2 chat template",
+            output_schema_version="v1",
+            model="qwen3.5:4b",
+            is_active=True,
+        )
+
+        self.assertEqual(resolve_prompt_version("question_generation"), "v2")
+        self.assertEqual(resolve_qualified_version("chat", aliases=("chat_answer",)), "chat:v2")
+
+        captured = {}
+
+        class CapturingLLM:
+            model = "mock"
+            name = "mock"
+
+            def generate_structured(self, *, prompt, schema=None, request_id="", **kwargs):
+                captured["version"] = prompt.version
+                return MagicMock(
+                    data={
+                        "prompt": "Q?",
+                        "options": ["A", "B", "C", "D"],
+                        "answer_index": 0,
+                        "difficulty": "easy",
+                        "question_type": "mcq",
+                        "explanation": "Explained cleanly.",
+                    },
+                    model="mock",
+                )
+
+        with patch("apps.questions.question_generation_nodes.get_llm_provider", return_value=CapturingLLM()):
+            res = generate_questions_node(
+                {
+                    "chunks": [{"chunk_id": "c-1", "content": "Graph algorithms use priority queues."}],
+                    "reference_chunks": [],
+                    "question_type": "mcq",
+                    "difficulty": "easy",
+                }
+            )
+        self.assertEqual(captured.get("version"), "v2")
+        self.assertEqual(len(res["questions"]), 1)
+
 
 class TestTracingConfig(TestCase):
     def test_tracing_disabled_by_default(self):
