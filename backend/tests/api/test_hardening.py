@@ -137,6 +137,193 @@ class BudgetTests(TestCase):
         self.assertEqual(message.json()["error"]["code"], "RATE_LIMITED")
 
 
+class AtomicBudgetReserveSettleTests(TestCase):
+    def setUp(self):
+        from apps.accounts.models import User, UserProfile
+
+        self.alice = authenticated_client("alice_t9@example.com", "s3curePass!x")
+        self.user = User.objects.get(email="alice_t9@example.com")
+        self.user_profile, _ = UserProfile.objects.get_or_create(user=self.user)
+
+    def test_reserve_settle_adjusts_by_actual_minus_estimate_from_provider_log(self):
+        """T9: reserve -> settle_from_logs adjusts counter by (actual - estimate)."""
+        from decimal import Decimal
+        from apps.accounts.services.budget import BudgetService
+        from apps.audit.models import ProviderCallLog
+
+        res = BudgetService.reserve(self.user, 500, Decimal("0.05"))
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 500)
+        self.assertEqual(self.user_profile.current_month_cost_usd, Decimal("0.05"))
+
+        ProviderCallLog.objects.create(
+            provider="mock",
+            model="qwen3.5:4b",
+            latency_ms=10,
+            success=True,
+            input_tokens=150,
+            output_tokens=120,
+            total_tokens=270,
+            estimated_cost_usd=Decimal("0.02"),
+            metadata={"reservation_id": res.reservation_id},
+        )
+        BudgetService.settle_from_logs(res)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 270)
+        self.assertEqual(self.user_profile.current_month_cost_usd, Decimal("0.02"))
+
+        # Idempotent second settle does nothing
+        BudgetService.settle_from_logs(res)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 270)
+
+    def test_failed_call_refunds_reservation(self):
+        """T9: release() refunds reserved tokens/cost cleanly."""
+        from decimal import Decimal
+        from apps.accounts.services.budget import BudgetService
+
+        res = BudgetService.reserve(self.user, 500, Decimal("0.05"))
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 500)
+
+        BudgetService.release(res)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 0)
+        self.assertEqual(self.user_profile.current_month_cost_usd, Decimal("0.00"))
+
+        # Idempotent second release cannot go negative
+        BudgetService.release(res)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 0)
+
+    def test_stale_read_concurrent_reservations_cannot_exceed_budget(self):
+        """T9: Conditional F()-based UPDATE rejects concurrent over-budget reservation even on stale reads."""
+        from decimal import Decimal
+        from apps.accounts.models import UserProfile
+        from apps.accounts.services.budget import BudgetExceeded, BudgetService
+
+        UserProfile.objects.filter(pk=self.user_profile.pk).update(
+            monthly_token_budget=800,
+            current_month_token_usage=0,
+        )
+        stale_snapshot = UserProfile.objects.get(pk=self.user_profile.pk)
+
+        with mock.patch.object(BudgetService, "_get_or_create_profile", return_value=stale_snapshot):
+            BudgetService.reserve(self.user, 500, Decimal("0.01"))
+            with self.assertRaises(BudgetExceeded):
+                BudgetService.reserve(self.user, 500, Decimal("0.01"))
+
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 500)
+
+    def test_chat_post_settles_actual_tokens_and_refunds_on_failure(self):
+        """T9 E2E: Chat POST settles actual ProviderCallLog tokens; failed call refunds reservation."""
+        from apps.profiles.models import Profile
+        from providers.base import StructuredLLMResult
+
+        profile = Profile.objects.filter(user=self.user).first()
+        headers = {"HTTP_X_ACTIVE_PROFILE": str(profile.id)}
+        session = self.alice.post(
+            "/api/v1/chat/sessions", {}, content_type="application/json", **headers
+        ).json()
+
+        class FakeProvider:
+            name = "fake"
+            model = "fake-4b"
+            def generate_structured(self, **kwargs):
+                return StructuredLLMResult(
+                    data={"answer": "Dijkstra finds shortest paths.", "cited_ids": [], "confidence": 0.9},
+                    raw_text='{"answer": "Dijkstra finds shortest paths."}',
+                    model="fake-4b",
+                    provider="fake",
+                    prompt_name="chat",
+                    prompt_version="v1",
+                    input_tokens=100,
+                    output_tokens=80,
+                    total_tokens=180,
+                    estimated_cost_usd=0.02,
+                )
+
+        from providers.llm.chain import LLMChainProvider
+        chain = LLMChainProvider([FakeProvider()])
+
+        with mock.patch("apps.chat.langgraph_nodes.get_llm_provider", return_value=chain):
+            res = self.alice.post(
+                f"/api/v1/chat/sessions/{session['id']}/messages",
+                {"content": "Hi"},
+                content_type="application/json",
+                **headers,
+            )
+        self.assertEqual(res.status_code, 201)
+        self.user_profile.refresh_from_db()
+        # Throttle reserved 500, real ProviderCallLog logged 180 -> settled to 180!
+        self.assertEqual(self.user_profile.current_month_token_usage, 180)
+
+        # Now test failed AI call refunds the 500 reservation back to 180!
+        with mock.patch("apps.chat.services.ChatService.ask", side_effect=RuntimeError("LLM down")):
+            fail_res = self.alice.post(
+                f"/api/v1/chat/sessions/{session['id']}/messages",
+                {"content": "Trigger failure"},
+                content_type="application/json",
+                **headers,
+            )
+            self.assertEqual(fail_res.status_code, 500)
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.current_month_token_usage, 180)
+
+
+try:
+    from django.test import TransactionTestCase
+
+    class PostgresConcurrentBudgetTests(TransactionTestCase):
+        def test_postgresql_threads_never_exceed_budget(self):
+            """T9 PostgreSQL-only: 5 concurrent threads racing on 1200-token budget only admit 2."""
+            import threading
+            from decimal import Decimal
+            from django.db import connection, connections
+            from apps.accounts.models import User, UserProfile
+            from apps.accounts.services.budget import BudgetExceeded, BudgetService
+
+            if connection.vendor != "postgresql":
+                self.skipTest("PostgreSQL required for threaded atomic UPDATE concurrency test")
+
+            user = User.objects.create_user(email="pg_t9_race@example.com", password="pass")
+            up, _ = UserProfile.objects.get_or_create(
+                user=user,
+                defaults={"monthly_token_budget": 1200, "current_month_token_usage": 0},
+            )
+            UserProfile.objects.filter(pk=up.pk).update(monthly_token_budget=1200, current_month_token_usage=0)
+
+            barrier = threading.Barrier(5)
+            outcomes = []
+            lock = threading.Lock()
+
+            def worker():
+                try:
+                    barrier.wait(timeout=5)
+                    BudgetService.reserve(user, 500, Decimal("0.05"))
+                    with lock:
+                        outcomes.append("ok")
+                except BudgetExceeded:
+                    with lock:
+                        outcomes.append("exceeded")
+                finally:
+                    connections.close_all()
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+
+            up.refresh_from_db()
+            self.assertEqual(outcomes.count("ok"), 2)
+            self.assertEqual(outcomes.count("exceeded"), 3)
+            self.assertEqual(up.current_month_token_usage, 1000)
+except ImportError:
+    pass
+
+
 class LLMFallbackChainTests(TestCase):
     def test_fallback_used_when_primary_fails(self):
         from providers.llm.chain import LLMChainProvider

@@ -113,6 +113,7 @@ class ChatSessionViewSet(
         Emits: `title`, `token` (multiple), `citations`, `done`, `error`.
         """
         from django.http import StreamingHttpResponse
+        from apps.accounts.services.budget import BudgetService, active_reservation_context
 
         session = self.get_object()
         serializer = MessageInSerializer(data=request.data)
@@ -121,8 +122,32 @@ class ChatSessionViewSet(
         content = serializer.validated_data["content"]
         image = serializer.validated_data.get("image")
 
+        raw_request = getattr(request, "_request", request)
+        reservation = getattr(raw_request, "_budget_reservation", None)
+        if reservation is not None:
+            raw_request._budget_reservation_deferred = True
+
+        def _budget_guarded_stream():
+            res_id = reservation.reservation_id if reservation else None
+            stream_errored = False
+            with active_reservation_context(res_id):
+                try:
+                    for chunk in ChatService.stream(session, content, image=image, use_agent=use_agent):
+                        if chunk.startswith("event: error"):
+                            stream_errored = True
+                        yield chunk
+                except Exception:
+                    stream_errored = True
+                    raise
+                finally:
+                    if reservation is not None:
+                        if stream_errored:
+                            BudgetService.release(reservation)
+                        else:
+                            BudgetService.settle_from_logs(reservation)
+
         response = StreamingHttpResponse(
-            ChatService.stream(session, content, image=image, use_agent=use_agent),
+            _budget_guarded_stream(),
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache, no-transform"

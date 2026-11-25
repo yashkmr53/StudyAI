@@ -36,7 +36,7 @@ class LiveSettingsScopedRateThrottle(ScopedRateThrottle):
 
 
 class AIBudgetThrottle(LiveSettingsScopedRateThrottle):
-    """Throttle that also enforces monthly AI budget (B8)."""
+    """Throttle that atomically reserves monthly AI budget and links settlement (B8, T9)."""
 
     scope = "ai"
 
@@ -45,26 +45,71 @@ class AIBudgetThrottle(LiveSettingsScopedRateThrottle):
         if not super().allow_request(request, view):
             return False
 
-        # Then check monthly budget if authenticated
+        # Reserve estimated monthly budget atomically if authenticated
         if request.user and request.user.is_authenticated:
-            from apps.accounts.services.budget import BudgetService, BudgetExceeded
+            from apps.accounts.services.budget import (
+                BudgetExceeded,
+                BudgetService,
+                set_active_reservation,
+                set_active_reservation_id,
+            )
             from shared.exceptions import RateLimited
 
-            # Estimate tokens for this request (rough heuristic)
             estimated_tokens = 500  # default estimate
             estimated_cost = Decimal("0.001")  # default estimate
 
             try:
-                BudgetService.check_and_increment(request.user, estimated_tokens, estimated_cost)
+                reservation = BudgetService.reserve(request.user, estimated_tokens, estimated_cost)
+                raw_request = getattr(request, "_request", request)
+                raw_request._budget_reservation = reservation
+                set_active_reservation(reservation)
+                set_active_reservation_id(reservation.reservation_id)
             except BudgetExceeded as exc:
                 raise RateLimited(details={
                     "budget_type": exc.budget_type,
                     "limit": str(exc.limit),
                     "current": str(exc.current),
-                    "reset_date": None,  # BudgetService doesn't expose this easily here
+                    "reset_date": None,
                 })
 
         return True
+
+
+class BudgetSettlementMiddleware:
+    """Settle or refund any request-scoped AI budget reservation upon response/error (T9)."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from apps.accounts.services.budget import (
+            BudgetService,
+            _active_reservation,
+            _active_reservation_id,
+            set_active_reservation,
+            set_active_reservation_id,
+        )
+
+        token = set_active_reservation_id(None)
+        res_token = set_active_reservation(None)
+        try:
+            response = self.get_response(request)
+        except Exception:
+            reservation = getattr(request, "_budget_reservation", None)
+            if reservation is not None and not getattr(request, "_budget_reservation_deferred", False):
+                BudgetService.release(reservation)
+            raise
+        else:
+            reservation = getattr(request, "_budget_reservation", None)
+            if reservation is not None and not getattr(request, "_budget_reservation_deferred", False):
+                if getattr(response, "status_code", 500) >= 400:
+                    BudgetService.release(reservation)
+                else:
+                    BudgetService.settle_from_logs(reservation)
+            return response
+        finally:
+            _active_reservation_id.reset(token)
+            _active_reservation.reset(res_token)
 
 
 LiveScopedRateThrottle = LiveSettingsScopedRateThrottle

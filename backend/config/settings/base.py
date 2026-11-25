@@ -69,6 +69,7 @@ MIDDLEWARE = [
     "shared.observability.metrics.SecurityHeadersMiddleware",
     "shared.observability.metrics.TimingMiddleware",
     "shared.database.middleware.RlsContextMiddleware",
+    "shared.throttles.BudgetSettlementMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

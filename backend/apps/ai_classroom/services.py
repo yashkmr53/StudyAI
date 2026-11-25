@@ -290,6 +290,13 @@ class EnrichmentService:
                 if not created:
                     Job.objects.filter(pk=job.pk).update(status=Job.Status.QUEUED, next_retry_at=None, last_error="")
                     job.refresh_from_db()
+                from apps.accounts.services.budget import get_active_reservation
+                active_res = get_active_reservation()
+                if active_res is not None:
+                    meta = dict(job.metadata or {})
+                    meta["budget_reservation"] = active_res.to_dict()
+                    Job.objects.filter(pk=job.pk).update(metadata=meta)
+                    job.metadata = meta
                 from apps.jobs.services import dispatch_job
 
                 dispatch_job(job)
@@ -407,6 +414,21 @@ def dispatch_enrichment_job(document: Document, user, force_rerun: bool = False)
     ref_hash = reference_library_hash(document.subject, profile=document.profile)
     settings_version = f"{base_version}:{ref_hash}"
 
+    from apps.accounts.services.budget import get_active_reservation
+    active_res = get_active_reservation()
+    job_metadata = {
+        "start_hash": start_hash,
+        "force_include_hash": force_include_hash,
+        "force_include_line_ids": norm_force_ids,
+        "settings_version": settings_version,
+        "reference_snapshot_hash": ref_hash,
+        "outcome": "",
+        "error_code": "",
+        "message": "Enrichment queued...",
+    }
+    if active_res is not None:
+        job_metadata["budget_reservation"] = active_res.to_dict()
+
     job = Job.objects.create(
         job_type="enrich",
         resource_type="document",
@@ -414,16 +436,7 @@ def dispatch_enrichment_job(document: Document, user, force_rerun: bool = False)
         profile_id=document.profile_id,
         idempotency_key=idempotency_key,
         status=Job.Status.QUEUED,
-        metadata={
-            "start_hash": start_hash,
-            "force_include_hash": force_include_hash,
-            "force_include_line_ids": norm_force_ids,
-            "settings_version": settings_version,
-            "reference_snapshot_hash": ref_hash,
-            "outcome": "",
-            "error_code": "",
-            "message": "Enrichment queued...",
-        },
+        metadata=job_metadata,
     )
 
     from apps.jobs.tasks import process_job_task
@@ -436,7 +449,30 @@ def dispatch_enrichment_job(document: Document, user, force_rerun: bool = False)
 
 
 def run_enrichment_job(job: Job) -> None:
-    """Execute durable Topic-Based Note Enrichment Job (§3.7, §3.8)."""
+    """Execute durable Topic-Based Note Enrichment Job (§3.7, §3.8) with reserve/settle budget tracking."""
+    from apps.accounts.services.budget import BudgetReservation, BudgetService, active_reservation_context
+
+    res_dict = (job.metadata or {}).get("budget_reservation") if isinstance(job.metadata, dict) else None
+    reservation = BudgetReservation.from_dict(res_dict) if res_dict else None
+    res_id = reservation.reservation_id if reservation else None
+
+    with active_reservation_context(res_id):
+        try:
+            _run_enrichment_job_impl(job)
+        except Exception:
+            if reservation is not None:
+                BudgetService.release(reservation)
+            raise
+
+    if reservation is not None:
+        job.refresh_from_db()
+        if job.status in (Job.Status.FAILED_RETRYABLE, Job.Status.FAILED_DEAD_LETTER, Job.Status.CANCELLED):
+            BudgetService.release(reservation)
+        else:
+            BudgetService.settle_from_logs(reservation)
+
+
+def _run_enrichment_job_impl(job: Job) -> None:
     from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
     from ai.langgraph.state.topic_enrichment_state import TopicEnrichmentState
 

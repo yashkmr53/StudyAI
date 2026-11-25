@@ -294,11 +294,20 @@ class DocumentViewSet(
             throttle_classes=[AIBudgetThrottle])
     def enrich(self, request, pk=None):
         """§60: POST /documents/{id}/enrich — 200 existing / 202 enrich job."""
+        from apps.accounts.services.budget import BudgetService
+
+        raw_request = getattr(request, "_request", request)
+        reservation = getattr(raw_request, "_budget_reservation", None)
+        if reservation is not None:
+            raw_request._budget_reservation_deferred = True
         result = EnrichmentService.enqueue_enrichment(request.user, str(pk))
         if result["note"] is not None:
+            BudgetService.release(reservation)
             from apps.ai_classroom.views_serializers import EnrichedNoteSerializer
 
             return Response({"enriched_note": EnrichedNoteSerializer(result["note"]).data, "job": None}, status=200)
+        if result.get("coalesced"):
+            BudgetService.release(reservation)
         return Response(
             {"enriched_note": None, "job": _job_payload(result["job"])},
             status=status.HTTP_202_ACCEPTED,
@@ -345,6 +354,9 @@ class DocumentViewSet(
     def regenerate_enrichment(self, request, pk=None):
         """POST /documents/{id}/enrichment/regenerate — dispatches new enrichment job."""
         from apps.ai_classroom.services import EnrichmentService
+        raw_request = getattr(request, "_request", request)
+        if getattr(raw_request, "_budget_reservation", None) is not None:
+            raw_request._budget_reservation_deferred = True
         force_rerun = request.data.get("force_rerun", True)
         job = EnrichmentService.regenerate_enrichment(request.user, str(pk), force_rerun=force_rerun)
         return Response({"job": _enrichment_job_payload(job)}, status=status.HTTP_202_ACCEPTED)
@@ -353,16 +365,26 @@ class DocumentViewSet(
             throttle_classes=[AIBudgetThrottle])
     def force_include_segments(self, request, pk=None):
         """POST /documents/{id}/enrichment/force-include — forces segment inclusion and regenerates."""
+        from apps.accounts.services.budget import BudgetService
         from apps.ai_classroom.services import EnrichmentService
         from shared.exceptions import ValidationError
+        raw_request = getattr(request, "_request", request)
+        reservation = getattr(raw_request, "_budget_reservation", None)
+        if reservation is not None:
+            raw_request._budget_reservation_deferred = True
         line_ids = request.data.get("force_include_line_ids", [])
         if not isinstance(line_ids, list):
+            BudgetService.release(reservation)
             return Response({"error": "force_include_line_ids must be a list"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             job = EnrichmentService.force_include_segments(request.user, str(pk), line_ids)
         except ValidationError as e:
+            BudgetService.release(reservation)
             if getattr(e, "code", None) == "UNKNOWN_LINE_IDS":
                 return Response({"detail": str(e), "code": "UNKNOWN_LINE_IDS"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            raise
+        except Exception:
+            BudgetService.release(reservation)
             raise
         return Response({"job": _enrichment_job_payload(job)}, status=status.HTTP_202_ACCEPTED)
 
@@ -370,7 +392,15 @@ class DocumentViewSet(
             throttle_classes=[AIBudgetThrottle])
     def refresh_ai(self, request, pk=None):
         """§60: POST /documents/{id}/refresh-ai — forces regeneration."""
+        from apps.accounts.services.budget import BudgetService
+
+        raw_request = getattr(request, "_request", request)
+        reservation = getattr(raw_request, "_budget_reservation", None)
+        if reservation is not None:
+            raw_request._budget_reservation_deferred = True
         result = EnrichmentService.enqueue_enrichment(request.user, str(pk), force_refresh=True)
+        if result["note"] is not None or result.get("coalesced"):
+            BudgetService.release(reservation)
         return Response(
             {"enriched_note": None, "job": _job_payload(result["job"])},
             status=status.HTTP_202_ACCEPTED,
