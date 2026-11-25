@@ -175,13 +175,16 @@ class IngestionService:
     def finalize_upload(cls, user, page_id) -> dict:
         """Object uploaded → validate → hash → revision → OCR job (§46)."""
         from providers.registry import get_object_storage
+        from providers.storage.validation import validate_uploaded_object
 
         storage = get_object_storage()
         with transaction.atomic():
             page = cls.get_owned_page(user, page_id, for_update=True)
-            if not page.image_ref or not storage.exists(page.image_ref):
-                raise ValidationError("No uploaded object found for this page.")
-            data = storage.read_bytes(page.image_ref)
+            data = validate_uploaded_object(
+                storage,
+                page.image_ref,
+                source_type=getattr(page.document, "source_type", None),
+            )
             content_hash = compute_content_hash(data)
 
             page.ocr_attempt_count = 1

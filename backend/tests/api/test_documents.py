@@ -372,3 +372,73 @@ class JobsApiTests(TestCase):
         response = self.alice.post(f"/api/v1/jobs/{job.pk}/cancel")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "cancelled")
+
+
+@override_settings(OCR_PROVIDER_CHAIN=["mock"])
+class PresignedUploadPostFinalizeValidationTests(TestCase):
+    def setUp(self):
+        self.alice = authenticated_client("alice_r1@example.com", "s3curePass!x")
+        self.profile = Profile.objects.get(user__email="alice_r1@example.com")
+
+    def _new_page(self):
+        body = self.alice.post(
+            "/api/v1/documents",
+            {"profile": str(self.profile.id), "source_type": "image", "filename": "scan.jpg"},
+            content_type="application/json",
+        ).json()
+        return body["document"]["id"], body["page"]["id"], body["upload"]["key"]
+
+    def test_finalize_upload_rejects_spoofed_magic_bytes_and_deletes_object(self):
+        doc_id, page_id, key = self._new_page()
+        storage = get_object_storage()
+        storage.store_bytes(key, b"<html><script>alert(1)</script></html>")
+
+        res = self.alice.post(
+            f"/api/v1/documents/{doc_id}/revisions",
+            {"page_id": page_id},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(DocumentPageRevision.objects.filter(page_id=page_id).count(), 0)
+        self.assertEqual(Job.objects.filter(job_type="ocr", profile_id=self.profile.id).count(), 0)
+        self.assertFalse(storage.exists(key))
+
+    def test_finalize_upload_rejects_oversized_object_before_reading_bytes(self):
+        from unittest.mock import patch
+        from django.conf import settings
+
+        doc_id, page_id, key = self._new_page()
+        storage = get_object_storage()
+        storage.store_bytes(key, _png_bytes())
+
+        max_bytes = getattr(settings, "UPLOAD_MAX_BYTES", 10 * 1024 * 1024)
+        with patch.object(storage, "size", return_value=max_bytes + 1), \
+             patch.object(storage, "read_bytes", side_effect=AssertionError("read_bytes must not run on oversized object")), \
+             patch("providers.registry.get_object_storage", return_value=storage):
+            res = self.alice.post(f"/api/v1/documents/pages/{page_id}/finalize-upload")
+
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(DocumentPageRevision.objects.filter(page_id=page_id).count(), 0)
+        self.assertFalse(storage.exists(key))
+
+    def test_finalize_upload_rejects_empty_object(self):
+        _, page_id, key = self._new_page()
+        storage = get_object_storage()
+        storage.store_bytes(key, b"")
+
+        res = self.alice.post(f"/api/v1/documents/pages/{page_id}/finalize-upload")
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(DocumentPageRevision.objects.filter(page_id=page_id).count(), 0)
+        self.assertFalse(storage.exists(key))
+
+    def test_finalize_upload_accepts_valid_jpeg_and_webp(self):
+        for payload in (
+            b"\xff\xd8\xff\xe0" + b"jpeg-body" * 20,
+            b"RIFF\x24\x00\x00\x00WEBP" + b"webp-body" * 20,
+        ):
+            _, page_id, key = self._new_page()
+            get_object_storage().store_bytes(key, payload)
+            with self.captureOnCommitCallbacks(execute=True):
+                res = self.alice.post(f"/api/v1/documents/pages/{page_id}/finalize-upload")
+            self.assertEqual(res.status_code, 202)
+            self.assertEqual(DocumentPageRevision.objects.filter(page_id=page_id).count(), 1)
