@@ -1,11 +1,11 @@
 """LangSmith tracing decorators for graph nodes and functions."""
 import functools
-from typing import Optional
-import time
-from typing import Callable, Any, Optional
 from contextvars import ContextVar
+from datetime import datetime, timezone as dt_timezone
+import time
+from typing import Any, Callable, Optional
 
-from ai.tracing.config import get_client, is_tracing_enabled, get_project
+from ai.tracing.config import _redact_payload, get_client, get_project, is_tracing_enabled
 
 _current_run_id: ContextVar[Optional[str]] = ContextVar("_current_run_id", default=None)
 
@@ -18,6 +18,13 @@ def get_current_run_id() -> Optional[str]:
 def set_current_run_id(run_id: Optional[str]) -> None:
     """Set the current LangSmith run ID in context."""
     _current_run_id.set(run_id)
+
+
+def _safe_redacted_dict(payload: Any, fallback_key: str) -> dict:
+    redacted = _redact_payload(payload)
+    if isinstance(redacted, dict):
+        return redacted
+    return {fallback_key: redacted}
 
 
 def traced_node(node_name: str, **default_metadata):
@@ -39,32 +46,41 @@ def traced_node(node_name: str, **default_metadata):
                 return func(*args, **kwargs)
 
             parent_run_id = get_current_run_id()
-            started = time.monotonic()
-
-            run = client.create_run(
+            raw_inputs = args[0] if (args and isinstance(args[0], dict)) else {"args": list(args), "kwargs": kwargs}
+            redacted_inputs = _safe_redacted_dict(raw_inputs, "input")
+            create_kwargs = dict(
                 name=f"studyai.{node_name}",
                 run_type="tool",
-                inputs={"args": str(args[1:])[:500] if len(args) > 1 else "state"},
-                extra={"node": node_name, "parent_run_id": parent_run_id, **default_metadata},
+                inputs=redacted_inputs,
+                extra={"node": node_name, **default_metadata},
                 project_name=get_project(),
+                start_time=datetime.now(dt_timezone.utc),
             )
+            if parent_run_id:
+                create_kwargs["parent_run_id"] = parent_run_id
+
+            run = None
+            try:
+                run = client.create_run(**create_kwargs)
+            except Exception:
+                run = None
             if run is not None:
                 set_current_run_id(run.id)
 
             try:
                 result = func(*args, **kwargs)
-                latency_ms = int((time.monotonic() - started) * 1000)
                 if run is not None:
+                    raw_out = result if isinstance(result, dict) else {"result": result}
                     client.update_run(
                         run.id,
-                        outputs={"result": str(result)[:1000] if result else "none"},
-                        end_time=None,
+                        outputs=_safe_redacted_dict(raw_out, "result"),
+                        end_time=datetime.now(dt_timezone.utc),
                     )
                 return result
             except Exception as e:
-                latency_ms = int((time.monotonic() - started) * 1000)
                 if run is not None:
-                    client.update_run(run.id, error=str(e), end_time=None)
+                    redacted_err = _redact_payload({"text": str(e)}).get("text", "[REDACTED]")
+                    client.update_run(run.id, error=str(redacted_err), end_time=datetime.now(dt_timezone.utc))
                 raise
             finally:
                 if run is not None:
@@ -91,31 +107,41 @@ def traced_graph(graph_name: str, **default_metadata):
             if client is None:
                 return func(*args, **kwargs)
 
-            started = time.monotonic()
-            run = client.create_run(
+            previous_run_id = get_current_run_id()
+            raw_inputs = args[0] if (args and isinstance(args[0], dict)) else {"initial_state": args[0] if args else None, "kwargs": kwargs}
+            create_kwargs = dict(
                 name=graph_name,
                 run_type="chain",
-                inputs={"initial_state": str(args[0])[:500] if args else "none"},
+                inputs=_safe_redacted_dict(raw_inputs, "initial_state"),
                 extra=default_metadata,
                 project_name=get_project(),
+                start_time=datetime.now(dt_timezone.utc),
             )
-            previous_run_id = get_current_run_id()
+            if previous_run_id:
+                create_kwargs["parent_run_id"] = previous_run_id
+
+            run = None
+            try:
+                run = client.create_run(**create_kwargs)
+            except Exception:
+                run = None
             if run is not None:
                 set_current_run_id(run.id)
 
             try:
                 result = func(*args, **kwargs)
-                latency_ms = int((time.monotonic() - started) * 1000)
                 if run is not None:
+                    raw_out = result if isinstance(result, dict) else {"final_state": result}
                     client.update_run(
                         run.id,
-                        outputs={"final_state": str(result)[:1000] if result else "none"},
-                        end_time=None,
+                        outputs=_safe_redacted_dict(raw_out, "final_state"),
+                        end_time=datetime.now(dt_timezone.utc),
                     )
                 return result
             except Exception as e:
                 if run is not None:
-                    client.update_run(run.id, error=str(e), end_time=None)
+                    redacted_err = _redact_payload({"text": str(e)}).get("text", "[REDACTED]")
+                    client.update_run(run.id, error=str(redacted_err), end_time=datetime.now(dt_timezone.utc))
                 raise
             finally:
                 if run is not None:

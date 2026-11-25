@@ -309,17 +309,6 @@ def draft_node(state: EnrichmentState, config=None) -> dict:
 
     validate_stage_output("enrichment_draft", result.data)
 
-    log_llm_call(
-        model=result.model,
-        provider=result.provider if result.provider else llm.name,
-        prompt_name=prompt.name,
-        prompt_version=prompt.version,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        latency_ms=latency_ms,
-        success=True,
-    )
-
     return {"draft_result": result.data, "llm_provider": result.provider, "llm_model": result.model}
 
 
@@ -358,17 +347,6 @@ def gap_detection_node(state: EnrichmentState, config=None) -> dict:
     latency_ms = int((time.monotonic() - started) * 1000)
 
     validate_stage_output("gap_detection", result.data)
-
-    log_llm_call(
-        model=result.model,
-        provider=result.provider if result.provider else llm.name,
-        prompt_name=prompt.name,
-        prompt_version=prompt.version,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        latency_ms=latency_ms,
-        success=True,
-    )
 
     return {"gaps_result": result.data}
 
@@ -544,17 +522,6 @@ def gap_fill_node(state: EnrichmentState, config=None) -> dict:
     latency_ms = int((time.monotonic() - started) * 1000)
 
     validate_stage_output("gap_filling", result.data)
-
-    log_llm_call(
-        model=result.model,
-        provider=result.provider if result.provider else llm.name,
-        prompt_name=prompt.name,
-        prompt_version=prompt.version,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        latency_ms=latency_ms,
-        success=True,
-    )
 
     return {"fill_result": result.data, "llm_provider": result.provider, "llm_model": result.model}
 

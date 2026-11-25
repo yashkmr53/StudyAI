@@ -451,18 +451,6 @@ def answer_generation_node(state: ChatState) -> dict:
             schema=ChatAnswer,
             request_id=f"chat:{state.get('session_id')}",
         )
-    latency_ms = int((time.monotonic() - started) * 1000)
-
-    log_llm_call(
-        model=result.model,
-        provider=llm.name,
-        prompt_name=prompt.name,
-        prompt_version=prompt.version,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        latency_ms=latency_ms,
-        success=True,
-    )
 
     answer = result.data.get("answer", "")
     # Support both cited_ids (new) and cited_chunk_ids (backward compat)
@@ -567,18 +555,6 @@ def retry_answer_node(state: ChatState) -> dict:
             schema=ChatAnswerRetry,
             request_id=f"chat:{state.get('session_id')}:retry",
         )
-    latency_ms = int((time.monotonic() - started) * 1000)
-
-    log_llm_call(
-        model=result.model,
-        provider=llm.name,
-        prompt_name=prompt.name,
-        prompt_version=prompt.version,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        latency_ms=latency_ms,
-        success=True,
-    )
 
     answer = result.data.get("answer", "")
     cited_ids = result.data.get("cited_ids", []) or result.data.get("cited_chunk_ids", [])

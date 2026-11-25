@@ -119,7 +119,33 @@ class LLMChainProvider:
             raise RuntimeError("No LLM providers configured in chain")
         primary = self.providers[0]
         if hasattr(primary, "generate"):
-            return primary.generate(prompt=actual_prompt, request_id=request_id, **kwargs)
+            started = time.monotonic()
+            try:
+                res = primary.generate(prompt=actual_prompt, request_id=request_id, **kwargs)
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=getattr(res, "provider", "") or primary.name,
+                    model=getattr(res, "model", ""),
+                    prompt=actual_prompt,
+                    result=res,
+                    latency_ms=latency_ms,
+                    success=True,
+                    request_id=request_id,
+                )
+                return res
+            except Exception as exc:
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=primary.name,
+                    model="",
+                    prompt=actual_prompt,
+                    result=None,
+                    latency_ms=latency_ms,
+                    success=False,
+                    error=str(exc)[:300],
+                    request_id=request_id,
+                )
+                raise
         raise NotImplementedError(f"Primary provider {primary.name} does not support generate()")
 
     def generate_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, *, request_id: str = "", **kwargs) -> LLMResult:
@@ -132,7 +158,33 @@ class LLMChainProvider:
             raise RuntimeError("No LLM providers configured in chain")
         primary = self.providers[0]
         if hasattr(primary, "generate_with_image"):
-            return primary.generate_with_image(prompt=actual_prompt, image=actual_image, request_id=request_id, **kwargs)
+            started = time.monotonic()
+            try:
+                res = primary.generate_with_image(prompt=actual_prompt, image=actual_image, request_id=request_id, **kwargs)
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=getattr(res, "provider", "") or primary.name,
+                    model=getattr(res, "model", ""),
+                    prompt=actual_prompt,
+                    result=res,
+                    latency_ms=latency_ms,
+                    success=True,
+                    request_id=request_id,
+                )
+                return res
+            except Exception as exc:
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=primary.name,
+                    model="",
+                    prompt=actual_prompt,
+                    result=None,
+                    latency_ms=latency_ms,
+                    success=False,
+                    error=str(exc)[:300],
+                    request_id=request_id,
+                )
+                raise
         raise NotImplementedError(f"Primary provider {primary.name} does not support generate_with_image()")
 
     def generate_structured_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, schema: Any = None, *, request_id: str = "", **kwargs) -> StructuredLLMResult:
@@ -146,8 +198,98 @@ class LLMChainProvider:
             raise RuntimeError("No LLM providers configured in chain")
         primary = self.providers[0]
         if hasattr(primary, "generate_structured_with_image"):
-            return primary.generate_structured_with_image(prompt=actual_prompt, image=actual_image, schema=actual_schema, request_id=request_id, **kwargs)
+            started = time.monotonic()
+            try:
+                res = primary.generate_structured_with_image(prompt=actual_prompt, image=actual_image, schema=actual_schema, request_id=request_id, **kwargs)
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=getattr(res, "provider", "") or primary.name,
+                    model=getattr(res, "model", ""),
+                    prompt=actual_prompt,
+                    result=res,
+                    latency_ms=latency_ms,
+                    success=True,
+                    request_id=request_id,
+                )
+                return res
+            except Exception as exc:
+                latency_ms = int((time.monotonic() - started) * 1000)
+                self._record_and_trace(
+                    provider_name=primary.name,
+                    model="",
+                    prompt=actual_prompt,
+                    result=None,
+                    latency_ms=latency_ms,
+                    success=False,
+                    error=str(exc)[:300],
+                    request_id=request_id,
+                )
+                raise
         raise NotImplementedError(f"Primary provider {primary.name} does not support generate_structured_with_image()")
+
+    def _record_and_trace(
+        self,
+        *,
+        provider_name: str,
+        model: str,
+        prompt: Prompt,
+        result: Any,
+        latency_ms: int,
+        success: bool,
+        error: str = "",
+        redaction_count: int = 0,
+        request_id: str = "",
+    ) -> None:
+        input_tokens = getattr(result, "input_tokens", 0) or 0 if result else 0
+        output_tokens = getattr(result, "output_tokens", 0) or 0 if result else 0
+        total_tokens = (getattr(result, "total_tokens", None) or (input_tokens + output_tokens)) if result else 0
+        estimated_cost_usd = getattr(result, "estimated_cost_usd", 0.0) or 0.0 if result else 0.0
+        prompt_name = getattr(prompt, "name", "direct")
+        prompt_version = getattr(prompt, "version", "v1")
+
+        record_provider_call(
+            provider=provider_name,
+            model=model,
+            latency_ms=latency_ms,
+            success=success,
+            error=error,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            metadata={"redactions_count": redaction_count, "prompt_name": prompt_name},
+        )
+
+        try:
+            from ai.tracing.config import log_llm_call
+
+            raw_output = ""
+            if result is not None:
+                raw_output = getattr(result, "raw_text", None) or getattr(result, "text", "") or ""
+            log_llm_call(
+                model=model,
+                provider=provider_name,
+                prompt_name=prompt_name,
+                prompt_version=prompt_version,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                success=success,
+                error=error,
+                inputs={
+                    "prompt_name": prompt_name,
+                    "version": prompt_version,
+                    "system": getattr(prompt, "system", "") or "",
+                    "user": getattr(prompt, "user", "") or "",
+                },
+                outputs={
+                    "raw_output": str(raw_output),
+                    "tokens": {"input": input_tokens, "output": output_tokens},
+                },
+                metadata={"request_id": request_id, "redactions_count": redaction_count},
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("LangSmith choke-point trace failed", exc_info=True)
 
     def generate_structured(self, prompt: Optional[Prompt] = None, *, schema=None, request_id: str = "", disable_fallback: bool = False, **kwargs) -> StructuredLLMResult:
         actual_prompt = prompt or kwargs.get("prompt")
@@ -177,23 +319,16 @@ class LLMChainProvider:
                 
                 result = self._timeouted_generate(provider, sanitized_prompt, schema, request_id, **kwargs)
                 latency_ms = int((time.monotonic() - started) * 1000)
-                # Mock providers don't return token counts; real providers will populate these
-                input_tokens = getattr(result, "input_tokens", 0)
-                output_tokens = getattr(result, "output_tokens", 0)
-                total_tokens = getattr(result, "total_tokens", input_tokens + output_tokens)
-                estimated_cost_usd = getattr(result, "estimated_cost_usd", 0.0)
-                # Capture the actual provider name/model from the result
                 result_provider = getattr(result, "provider", "") or provider.name
-                record_provider_call(
-                    provider=result_provider,
+                self._record_and_trace(
+                    provider_name=result_provider,
                     model=getattr(result, "model", ""),
+                    prompt=sanitized_prompt,
+                    result=result,
                     latency_ms=latency_ms,
                     success=True,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=total_tokens,
-                    estimated_cost_usd=estimated_cost_usd,
-                    metadata={"redactions_count": redaction_count, "prompt_name": prompt.name},
+                    redaction_count=redaction_count,
+                    request_id=request_id,
                 )
                 # Enrich the result with provider provenance
                 result.provider = result_provider
@@ -201,13 +336,16 @@ class LLMChainProvider:
                 return result
             except Exception as exc:  # noqa: BLE001 — fallback is the point
                 last_error = exc
-                record_provider_call(
-                    provider=provider.name,
+                self._record_and_trace(
+                    provider_name=provider.name,
                     model="",
+                    prompt=prompt,
+                    result=None,
                     latency_ms=int((time.monotonic() - started) * 1000),
                     success=False,
                     error=str(exc)[:300],
-                    metadata={"redactions_count": 0, "prompt_name": prompt.name},
+                    redaction_count=0,
+                    request_id=request_id,
                 )
                 logger.warning("LLM provider %s failed: %s", provider.name, exc)
                 if no_fallback:
