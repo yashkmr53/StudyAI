@@ -12,6 +12,7 @@ from ai.langgraph.nodes.agent_nodes import execute_tool_node
 from ai.langgraph.state.agent_state import AgentState
 from apps.agents.mcp.registry import get_mcp_tool_registry, MCPToolRegistry
 from apps.agents.mcp.auth import MCPAuthenticator, MCPTokenValidator, MCPUserContext
+from apps.agents.mcp.client import MCPClient, MCPClientToolAdapter, discover_mcp_tools
 from apps.agents.mcp.server import MCPServer, create_mcp_server
 from apps.agents.mcp.telemetry import record_mcp_call, get_mcp_stats
 from apps.profiles.models import Profile
@@ -450,3 +451,99 @@ class TestMCPT1Correctness(TestCase):
         body = resp.json()
         self.assertIsNone(body.get("error"))
         self.assertTrue(body["result"]["success"])
+
+
+class TestMCPClientToolAdapter(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="mcp_client@example.com", password="pw")
+        self.profile = Profile.objects.create(user=self.user, name="MCP Client User")
+
+    def test_discover_and_execute_remote_mcp_tools_loopback_and_registry(self):
+        from apps.agents.tools.base import ToolRegistry
+
+        def _fake_transport(url, payload, headers):
+            method = payload.get("method")
+            if method == "initialize":
+                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"protocolVersion": "2024-11-05"}}
+            if method == "tools/list":
+                return {
+                    "jsonrpc": "2.0",
+                    "id": payload["id"],
+                    "result": {
+                        "tools": [
+                            {
+                                "name": "ext_math_solver",
+                                "description": "Solve symbolic algebra expressions",
+                                "inputSchema": {"type": "object", "properties": {"expr": {"type": "string"}}},
+                            },
+                            {
+                                "name": "ext_failing_tool",
+                                "description": "Returns remote error",
+                                "inputSchema": {"type": "object"},
+                            },
+                        ]
+                    },
+                }
+            if method == "tools/call":
+                params = payload.get("params", {})
+                if params.get("name") == "ext_failing_tool":
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "error": {"code": -32004, "message": "Remote boom"},
+                    }
+                return {
+                    "jsonrpc": "2.0",
+                    "id": payload["id"],
+                    "result": {
+                        "solution": f"Solved {params.get('arguments', {}).get('expr')}",
+                        "steps": ["isolate x"],
+                    },
+                }
+            raise AssertionError(f"Unexpected MCP method: {method}")
+
+        client = MCPClient("https://mcp.example.test/rpc", auth_token="tok-123", transport=_fake_transport)
+        tools = discover_mcp_tools(client)
+        self.assertEqual([t.metadata.name for t in tools], ["ext_math_solver", "ext_failing_tool"])
+
+        registry = ToolRegistry()
+        for tool in tools:
+            registry.register(tool)
+
+        solver = registry.get("ext_math_solver")
+        out = solver.execute(
+            solver.metadata.input_schema(expr="2x + 4 = 10"),
+            user=self.user,
+            profile=self.profile,
+            request_id="req-mcp-client-1",
+        )
+        self.assertTrue(out.success)
+        self.assertEqual(out.result["solution"], "Solved 2x + 4 = 10")
+
+        failing = registry.get("ext_failing_tool")
+        err_out = failing.execute(
+            failing.metadata.input_schema(),
+            user=self.user,
+            profile=self.profile,
+            request_id="req-mcp-client-2",
+        )
+        self.assertFalse(err_out.success)
+        self.assertIn("Remote boom", err_out.error)
+
+    def test_mcp_client_rejects_cross_profile_execution(self):
+        other_user = User.objects.create_user(email="other_mcp@example.com", password="pw")
+        other_profile = Profile.objects.create(user=other_user, name="Other Profile")
+
+        adapter = MCPClientToolAdapter(
+            client=MCPClient("https://mcp.example.test/rpc", transport=lambda *a: {}),
+            tool_name="ext_ping",
+            description="Ping remote tool",
+        )
+        out = adapter.execute(
+            adapter.metadata.input_schema(),
+            user=self.user,
+            profile=other_profile,
+            request_id="req-auth-fail",
+        )
+        self.assertFalse(out.success)
+        self.assertEqual(out.error, "Authorization failed")

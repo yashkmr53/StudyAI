@@ -43,11 +43,27 @@ class StatusEndpointTests(TestCase):
         response = self.staff.get("/api/v1/status")
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        for key in ("jobs", "providers", "citations", "requests", "counters", "database"):
+        for key in ("jobs", "providers", "citations", "requests", "counters", "database", "tracing"):
             self.assertIn(key, body)
         self.assertIn("queue_depth", body["jobs"])
         self.assertIn("dead_letter_count", body["jobs"])
         self.assertIn("p95_ms", body["requests"])
+
+    def test_status_reports_tracing_readiness_without_leaking_key(self):
+        import os
+
+        with self.settings(LANGSMITH_TRACING=True, LANGSMITH_REDACT_STUDENT_TEXT=True), mock.patch.dict(
+            os.environ, {"LANGSMITH_TRACING": "true", "LANGSMITH_API_KEY": "ls-secret-test-key", "LANGSMITH_PROJECT": "studyai-eval"}
+        ):
+            response = self.staff.get("/api/v1/status")
+        self.assertEqual(response.status_code, 200)
+        tracing = response.json()["tracing"]
+        self.assertTrue(tracing["enabled"])
+        self.assertTrue(tracing["api_key_configured"])
+        self.assertTrue(tracing["active"])
+        self.assertEqual(tracing["project"], "studyai-eval")
+        self.assertTrue(tracing["redact_student_text"])
+        self.assertNotIn("ls-secret-test-key", response.content.decode())
 
     def test_status_requires_staff(self):
         client = authenticated_client("plain@example.com", "s3curePass!x")
