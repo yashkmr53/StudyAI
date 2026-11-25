@@ -78,12 +78,35 @@ class AIBudgetThrottle(LiveSettingsScopedRateThrottle):
 class BudgetSettlementMiddleware:
     """Settle or refund any request-scoped AI budget reservation upon response/error (T9)."""
 
+    sync_capable = True
+    async_capable = True
+
     def __init__(self, get_response):
         self.get_response = get_response
+        from asgiref.sync import iscoroutinefunction, markcoroutinefunction
+
+        if iscoroutinefunction(self.get_response):
+            markcoroutinefunction(self)
+
+    @staticmethod
+    def _settle_or_release(request, *, status_code: int = 500, errored: bool = False) -> None:
+        from apps.accounts.services.budget import BudgetService
+
+        reservation = getattr(request, "_budget_reservation", None)
+        if reservation is None or getattr(request, "_budget_reservation_deferred", False):
+            return
+        if errored or status_code >= 400:
+            BudgetService.release(reservation)
+        else:
+            BudgetService.settle_from_logs(reservation)
 
     def __call__(self, request):
+        from asgiref.sync import iscoroutinefunction
+
+        if iscoroutinefunction(self.get_response):
+            return self.__acall__(request)
+
         from apps.accounts.services.budget import (
-            BudgetService,
             _active_reservation,
             _active_reservation_id,
             set_active_reservation,
@@ -95,17 +118,35 @@ class BudgetSettlementMiddleware:
         try:
             response = self.get_response(request)
         except Exception:
-            reservation = getattr(request, "_budget_reservation", None)
-            if reservation is not None and not getattr(request, "_budget_reservation_deferred", False):
-                BudgetService.release(reservation)
+            self._settle_or_release(request, errored=True)
             raise
         else:
-            reservation = getattr(request, "_budget_reservation", None)
-            if reservation is not None and not getattr(request, "_budget_reservation_deferred", False):
-                if getattr(response, "status_code", 500) >= 400:
-                    BudgetService.release(reservation)
-                else:
-                    BudgetService.settle_from_logs(reservation)
+            self._settle_or_release(request, status_code=getattr(response, "status_code", 500))
+            return response
+        finally:
+            _active_reservation_id.reset(token)
+            _active_reservation.reset(res_token)
+
+    async def __acall__(self, request):
+        from asgiref.sync import sync_to_async
+        from apps.accounts.services.budget import (
+            _active_reservation,
+            _active_reservation_id,
+            set_active_reservation,
+            set_active_reservation_id,
+        )
+
+        token = set_active_reservation_id(None)
+        res_token = set_active_reservation(None)
+        try:
+            response = await self.get_response(request)
+        except Exception:
+            await sync_to_async(self._settle_or_release, thread_sensitive=True)(request, errored=True)
+            raise
+        else:
+            await sync_to_async(self._settle_or_release, thread_sensitive=True)(
+                request, status_code=getattr(response, "status_code", 500)
+            )
             return response
         finally:
             _active_reservation_id.reset(token)

@@ -3,9 +3,8 @@
 Business logic depends on these protocols only; provider SDKs must not
 leak into apps.
 """
-from typing import Optional
+from typing import AsyncIterator, Optional, Protocol, runtime_checkable
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
 
 
 @dataclass
@@ -65,6 +64,11 @@ class LLMProvider(Protocol):
     def generate_structured(self, *, prompt: Prompt, schema: type, request_id: str, **kwargs) -> StructuredLLMResult: ...
     def generate_with_image(self, *, prompt: Prompt, image: str | bytes, request_id: str, **kwargs) -> LLMResult: ...
     def generate_structured_with_image(self, *, prompt: Prompt, image: str | bytes, schema: type, request_id: str, **kwargs) -> StructuredLLMResult: ...
+
+
+@runtime_checkable
+class StreamingLLMProvider(LLMProvider, Protocol):
+    def astream(self, *, prompt: Prompt, request_id: str, **kwargs) -> AsyncIterator[str]: ...
 
 
 @runtime_checkable

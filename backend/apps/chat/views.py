@@ -112,6 +112,9 @@ class ChatSessionViewSet(
 
         Emits: `title`, `token` (multiple), `citations`, `done`, `error`.
         """
+        # Under ASGI (ASGIRequest), returns a non-blocking async StreamingHttpResponse.
+        from asgiref.sync import sync_to_async
+        from django.core.handlers.asgi import ASGIRequest
         from django.http import StreamingHttpResponse
         from apps.accounts.services.budget import BudgetService, active_reservation_context
 
@@ -127,8 +130,17 @@ class ChatSessionViewSet(
         if reservation is not None:
             raw_request._budget_reservation_deferred = True
 
+        res_id = reservation.reservation_id if reservation else None
+
+        def _settle(stream_errored: bool) -> None:
+            if reservation is None:
+                return
+            if stream_errored:
+                BudgetService.release(reservation)
+            else:
+                BudgetService.settle_from_logs(reservation)
+
         def _budget_guarded_stream():
-            res_id = reservation.reservation_id if reservation else None
             stream_errored = False
             with active_reservation_context(res_id):
                 try:
@@ -140,14 +152,29 @@ class ChatSessionViewSet(
                     stream_errored = True
                     raise
                 finally:
-                    if reservation is not None:
-                        if stream_errored:
-                            BudgetService.release(reservation)
-                        else:
-                            BudgetService.settle_from_logs(reservation)
+                    _settle(stream_errored)
 
+        async def _budget_guarded_async_stream():
+            stream_errored = False
+            with active_reservation_context(res_id):
+                try:
+                    async for chunk in ChatService.astream(session, content, image=image, use_agent=use_agent):
+                        if chunk.startswith("event: error"):
+                            stream_errored = True
+                        yield chunk
+                except Exception:
+                    stream_errored = True
+                    raise
+                finally:
+                    await sync_to_async(_settle, thread_sensitive=True)(stream_errored)
+
+        stream_iter = (
+            _budget_guarded_async_stream()
+            if isinstance(raw_request, ASGIRequest)
+            else _budget_guarded_stream()
+        )
         response = StreamingHttpResponse(
-            _budget_guarded_stream(),
+            stream_iter,
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache, no-transform"

@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import transaction
 
@@ -147,6 +148,58 @@ class LLMChainProvider:
                 )
                 raise
         raise NotImplementedError(f"Primary provider {primary.name} does not support generate()")
+
+    async def astream(self, prompt: Optional[Prompt] = None, *, request_id: str = "", **kwargs) -> AsyncIterator[str]:
+        """Asynchronously stream tokens via primary provider while recording telemetry & LangSmith trace."""
+        actual_prompt = prompt or kwargs.get("prompt")
+        if actual_prompt is None:
+            raise ValueError("Prompt is required for astream()")
+        if not self.providers:
+            raise RuntimeError("No LLM providers configured in chain")
+        primary = self.providers[0]
+        started = time.monotonic()
+        collected: list[str] = []
+        try:
+            if hasattr(primary, "astream"):
+                async for delta in primary.astream(prompt=actual_prompt, request_id=request_id, **kwargs):
+                    if delta:
+                        collected.append(delta)
+                        yield delta
+                res = LLMResult(
+                    text="".join(collected),
+                    model=getattr(primary, "model", None) or getattr(primary, "model_name", ""),
+                    provider=primary.name,
+                    prompt_name=getattr(actual_prompt, "name", "direct"),
+                    prompt_version=getattr(actual_prompt, "version", "v1"),
+                )
+            else:
+                res = await sync_to_async(primary.generate)(prompt=actual_prompt, request_id=request_id, **kwargs)
+                if res.text:
+                    collected.append(res.text)
+                    yield res.text
+            latency_ms = int((time.monotonic() - started) * 1000)
+            await sync_to_async(self._record_and_trace, thread_sensitive=True)(
+                provider_name=getattr(res, "provider", "") or primary.name,
+                model=getattr(res, "model", ""),
+                prompt=actual_prompt,
+                result=res,
+                latency_ms=latency_ms,
+                success=True,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - started) * 1000)
+            await sync_to_async(self._record_and_trace, thread_sensitive=True)(
+                provider_name=primary.name,
+                model="",
+                prompt=actual_prompt,
+                result=None,
+                latency_ms=latency_ms,
+                success=False,
+                error=str(exc)[:300],
+                request_id=request_id,
+            )
+            raise
 
     def generate_with_image(self, prompt: Optional[Prompt] = None, image: Any = None, *, request_id: str = "", **kwargs) -> LLMResult:
         """Route multimodal image generation to primary provider."""

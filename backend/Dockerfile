@@ -32,4 +32,4 @@ RUN python -c "from pathlib import Path; assert Path('assets/fonts/DejaVuSans.tt
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 3 --timeout-keep-alive 120"]

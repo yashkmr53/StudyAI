@@ -15,8 +15,9 @@ import logging
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
+import httpx
 import requests
 from pydantic import BaseModel
 
@@ -348,6 +349,45 @@ class GeminiProvider:
             latency_ms=latency_ms,
             estimated_cost_usd=cost,
         )
+
+    async def astream(
+        self,
+        prompt: Union[Prompt, str],
+        *,
+        request_id: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: Optional[float] = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        """Asynchronously stream tokens from Gemini SSE endpoint."""
+        if not self.api_key:
+            raise ValueError(
+                "Gemini API key is missing. Please set GEMINI_API_KEY in your .env or Django settings."
+            )
+        _p_name, _p_version, sys_text, user_text = self._normalize_prompt(prompt, system)
+        prompt_msgs = getattr(prompt, "messages", None) if isinstance(prompt, Prompt) else None
+        payload = self._build_request_payload(
+            sys_text=sys_text,
+            user_text=user_text,
+            prompt_messages=prompt_msgs,
+            temperature=temperature,
+            json_mode=False,
+        )
+        url = f"{GEMINI_API_BASE}/{self.model}:streamGenerateContent?alt=sse&key={self.api_key}"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", url, headers={"Content-Type": "application/json"}, json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw:
+                        continue
+                    chunk_json = json.loads(raw)
+                    for part in chunk_json.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+                        delta = part.get("text", "")
+                        if delta:
+                            yield delta
 
     def generate_structured(
         self,

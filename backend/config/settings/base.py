@@ -90,6 +90,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
 # Database: PostgreSQL is the durable source of truth (architecture §2, §32).
 # RLS requires a restricted non-superuser role. The "studyai_app" role is

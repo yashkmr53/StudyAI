@@ -11,15 +11,22 @@ rejected with ``403 Forbidden``.
 Celery workers already call ``profile_scoped_transaction`` directly; this
 middleware covers the HTTP request path.
 """
-from django.utils.deprecation import MiddlewareMixin
-
-from shared.database.rls import set_profile_context
+from asgiref.sync import iscoroutinefunction, markcoroutinefunction, sync_to_async
 
 
-class RlsContextMiddleware(MiddlewareMixin):
-    """Bind the active profile to the RLS GUC for the current transaction."""
+class RlsContextMiddleware:
+    """Bind the active profile to the RLS GUC for the current transaction/request."""
 
-    def __call__(self, request):
+    sync_capable = True
+    async_capable = True
+
+    def __init__(self, get_response=None):
+        self.get_response = get_response
+        if get_response is not None and iscoroutinefunction(get_response):
+            markcoroutinefunction(self)
+
+    @staticmethod
+    def _resolve_validated_profile_id(request):
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
             force_user = getattr(request, "_force_auth_user", None)
@@ -48,6 +55,7 @@ class RlsContextMiddleware(MiddlewareMixin):
             profile_id = request.GET.get("profile")
         if not profile_id and user and user.is_authenticated:
             from shared.authorization.services import ProfileAuthorizationService
+
             active_profile = ProfileAuthorizationService.get_active_profile(request)
             if active_profile:
                 profile_id = str(active_profile.id)
@@ -57,17 +65,46 @@ class RlsContextMiddleware(MiddlewareMixin):
 
             try:
                 if Profile.objects.filter(pk=profile_id, user=user).exists():
-                    from shared.database.rls import bind_profile_session, clear_profile_context, get_current_profile_id
-
-                    prev = get_current_profile_id()
-                    bind_profile_session(profile_id)
-                    try:
-                        return self.get_response(request)
-                    finally:
-                        clear_profile_context()
-                        if prev:
-                            bind_profile_session(prev)
+                    return str(profile_id)
             except Exception:
                 pass
+        return None
 
+    @staticmethod
+    def _bind(profile_id: str) -> str:
+        from shared.database.rls import bind_profile_session, get_current_profile_id
+
+        prev = get_current_profile_id()
+        bind_profile_session(profile_id)
+        return prev
+
+    @staticmethod
+    def _restore(prev: str) -> None:
+        from shared.database.rls import bind_profile_session, clear_profile_context
+
+        clear_profile_context()
+        if prev:
+            bind_profile_session(prev)
+
+    def __call__(self, request):
+        if iscoroutinefunction(self.get_response):
+            return self.__acall__(request)
+
+        profile_id = self._resolve_validated_profile_id(request)
+        if profile_id:
+            prev = self._bind(profile_id)
+            try:
+                return self.get_response(request)
+            finally:
+                self._restore(prev)
         return self.get_response(request)
+
+    async def __acall__(self, request):
+        profile_id = await sync_to_async(self._resolve_validated_profile_id, thread_sensitive=True)(request)
+        if profile_id:
+            prev = await sync_to_async(self._bind, thread_sensitive=True)(profile_id)
+            try:
+                return await self.get_response(request)
+            finally:
+                await sync_to_async(self._restore, thread_sensitive=True)(prev)
+        return await self.get_response(request)
