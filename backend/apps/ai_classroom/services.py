@@ -115,6 +115,82 @@ class EvidenceVerifier:
         return float(getattr(settings, "VERIFIER_PARTIAL_THRESHOLD", 0.30))
 
     @classmethod
+    def _semantic_min_threshold(cls) -> float:
+        return float(getattr(settings, "VERIFIER_SEMANTIC_MIN_THRESHOLD", 0.15))
+
+    @classmethod
+    def _semantic_enabled(cls) -> bool:
+        return bool(getattr(settings, "VERIFIER_SEMANTIC_ENABLED", True))
+
+    @classmethod
+    def _classify_lexical(cls, score: float) -> tuple[str, float]:
+        if score >= cls._supported_threshold():
+            status = CitationBlock.VerificationStatus.SUPPORTED
+        elif score >= cls._partial_threshold():
+            status = CitationBlock.VerificationStatus.PARTIALLY_SUPPORTED
+        else:
+            status = CitationBlock.VerificationStatus.UNSUPPORTED
+        return status, round(score, 4)
+
+    @classmethod
+    def _verify_semantic(
+        cls,
+        block_content: str,
+        cited_contents: list[str],
+        *,
+        lexical_score: float,
+    ) -> tuple[str, float]:
+        """Tier 2 semantic entailment verification for borderline lexical scores."""
+        from typing import Literal
+        from pydantic import BaseModel
+        from ai.langchain.prompts import resolve_prompt_version
+        from providers.base import Prompt
+        from providers.registry import get_llm_provider as _resolve_llm
+
+        class VerificationEntailmentVerdict(BaseModel):
+            verdict: Literal["ENTAILED", "PARTIALLY_ENTAILED", "NEUTRAL", "CONTRADICTED"]
+            rationale: str = ""
+
+        combined_evidence = "\n\n".join(
+            f"[Source {i + 1}]: {c.strip()[:1200]}"
+            for i, c in enumerate(cited_contents[:5])
+            if c and c.strip()
+        )
+        prompt = Prompt(
+            name="verification_entailment",
+            version=resolve_prompt_version("verification_entailment", default="v1"),
+            system=(
+                "You are a strict citation verification judge. Classify whether the EVIDENCE "
+                "entails, partially entails, is neutral toward, or contradicts the CLAIM. "
+                "Output JSON with verdict in {ENTAILED, PARTIALLY_ENTAILED, NEUTRAL, CONTRADICTED}."
+            ),
+            user=f"CLAIM:\n{block_content[:2000]}\n\nEVIDENCE:\n{combined_evidence}",
+        )
+        try:
+            llm = _resolve_llm()
+            res = llm.generate_structured(
+                prompt=prompt,
+                schema=VerificationEntailmentVerdict,
+                request_id="verifier:tiered",
+            )
+            verdict = str((res.data or {}).get("verdict", "")).upper().strip()
+        except Exception as exc:  # noqa: BLE001 — resilient lexical fallback
+            logger.warning("Tiered semantic verification failed (%s); using lexical fallback", exc)
+            return cls._classify_lexical(lexical_score)
+
+        if verdict == "ENTAILED":
+            return CitationBlock.VerificationStatus.SUPPORTED, round(max(lexical_score, 0.80), 4)
+        if verdict == "PARTIALLY_ENTAILED":
+            return CitationBlock.VerificationStatus.PARTIALLY_SUPPORTED, round(
+                max(lexical_score, cls._partial_threshold()), 4
+            )
+        if verdict == "CONTRADICTED":
+            return CitationBlock.VerificationStatus.UNSUPPORTED, round(min(lexical_score, 0.15), 4)
+        if verdict == "NEUTRAL":
+            return CitationBlock.VerificationStatus.UNSUPPORTED, round(lexical_score, 4)
+        return cls._classify_lexical(lexical_score)
+
+    @classmethod
     def verify(cls, block_content: str, source_refs: list[dict]) -> tuple[str, Optional[float]]:
         if not source_refs:
             return CitationBlock.VerificationStatus.NOT_VERIFIED, None
@@ -131,15 +207,19 @@ class EvidenceVerifier:
 
     @classmethod
     def _classify(cls, block_content: str, cited_contents: list[str]) -> tuple[str, Optional[float]]:
-        """DB-free classification over already-resolved chunk contents."""
+        """Tiered verification: fast lexical bounds + semantic NLI judge on borderline cases."""
         score = cls._lexical_support(block_content, cited_contents)
         if score >= cls._supported_threshold():
-            status = CitationBlock.VerificationStatus.SUPPORTED
-        elif score >= cls._partial_threshold():
-            status = CitationBlock.VerificationStatus.PARTIALLY_SUPPORTED
-        else:
-            status = CitationBlock.VerificationStatus.UNSUPPORTED
-        return status, round(score, 4)
+            return CitationBlock.VerificationStatus.SUPPORTED, round(score, 4)
+        if (
+            score < cls._semantic_min_threshold()
+            or not cited_contents
+            or not any(c and c.strip() for c in cited_contents)
+        ):
+            return CitationBlock.VerificationStatus.UNSUPPORTED, round(score, 4)
+        if cls._semantic_enabled():
+            return cls._verify_semantic(block_content, cited_contents, lexical_score=score)
+        return cls._classify_lexical(score)
 
 
 class EnrichmentService:
