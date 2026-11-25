@@ -38,6 +38,7 @@ def retrieve_reference_context(
     top_k: int = 5,
     min_score: float = 0.0,
     reference_document_ids: Optional[list[str]] = None,
+    tag_ids: Optional[list] = None,
 ) -> list[dict]:
     """Shared Reference Retrieval Service (§7).
 
@@ -108,6 +109,9 @@ def retrieve_reference_context(
         base_filter &= Q(reference_document_id__in=reference_document_ids)
 
     base_qs = ReferenceChunk.objects.filter(base_filter)
+    normalized_tag_ids = [t for t in (tag_ids or []) if t]
+    if normalized_tag_ids:
+        base_qs = base_qs.filter(reference_document__reference_tags__tag_id__in=normalized_tag_ids).distinct()
     if not base_qs.exists():
         return []
 
