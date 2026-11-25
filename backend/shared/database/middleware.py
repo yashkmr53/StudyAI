@@ -64,6 +64,7 @@ class RlsContextMiddleware(MiddlewareMixin):
                     try:
                         return self.get_response(request)
                     finally:
+                        clear_profile_context()
                         if prev:
                             bind_profile_session(prev)
             except Exception:

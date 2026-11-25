@@ -134,3 +134,81 @@ class ProfileAuthorizationFallbackTests(TestCase):
         with override_settings(ALLOW_SINGLE_PROFILE_FALLBACK=False):
             active = ProfileAuthorizationService.get_active_profile(request)
             self.assertEqual(active.id, self.profile1.id)
+
+
+class RLSMiddlewareCleanupTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.profiles.models import Profile
+
+        User = get_user_model()
+        self.user = User.objects.create_user(email="rls_mw@example.com", password="password123")
+        self.profile = Profile.objects.create(user=self.user, name="MW Profile")
+
+    def test_middleware_clears_profile_context_when_prev_empty(self):
+        """T2 unit: RlsContextMiddleware must call clear_profile_context() in finally when prev is empty."""
+        from unittest.mock import patch
+        from django.test.client import RequestFactory
+        from shared.database.middleware import RlsContextMiddleware
+
+        rf = RequestFactory()
+        request = rf.get("/api/v1/documents", HTTP_X_ACTIVE_PROFILE=str(self.profile.id))
+        request.user = self.user
+
+        mw = RlsContextMiddleware(lambda req: "ok")
+        with patch("shared.database.rls.get_current_profile_id", return_value=""), \
+             patch("shared.database.rls.bind_profile_session") as mock_bind, \
+             patch("shared.database.rls.clear_profile_context") as mock_clear:
+            resp = mw(request)
+
+        self.assertEqual(resp, "ok")
+        mock_bind.assert_called_once_with(str(self.profile.id))
+        mock_clear.assert_called_once()
+
+
+try:
+    from django.test import TransactionTestCase
+
+    class RLSMiddlewarePostgresLeakTests(TransactionTestCase):
+        def test_unauthenticated_request_after_authenticated_sees_no_profile(self):
+            """T2 PostgreSQL-only: Persistent connection does not retain app.current_profile_id across requests."""
+            from django.contrib.auth import get_user_model
+            from django.contrib.auth.models import AnonymousUser
+            from django.db import connection
+            from django.test.client import RequestFactory
+            from apps.profiles.models import Profile
+            from shared.database.middleware import RlsContextMiddleware
+            from shared.database.rls import clear_profile_context, get_current_profile_id
+
+            if connection.vendor != "postgresql":
+                self.skipTest("PostgreSQL required for real GUC leak check")
+
+            clear_profile_context()
+            User = get_user_model()
+            user = User.objects.create_user(email="rls_pg@example.com", password="password123")
+            profile = Profile.objects.create(user=user, name="PG Profile")
+
+            observed_gucs = []
+
+            def view_fn(req):
+                observed_gucs.append(get_current_profile_id())
+                return "ok"
+
+            mw = RlsContextMiddleware(view_fn)
+            rf = RequestFactory()
+
+            # Simulate persistent connection (CONN_MAX_AGE > 0) reusing same connection across requests
+            with override_settings(CONN_MAX_AGE=600):
+                auth_req = rf.get("/api/v1/documents", HTTP_X_ACTIVE_PROFILE=str(profile.id))
+                auth_req.user = user
+                mw(auth_req)
+
+                anon_req = rf.get("/healthz")
+                anon_req.user = AnonymousUser()
+                mw(anon_req)
+
+            self.assertEqual(observed_gucs[0], str(profile.id))
+            self.assertEqual(observed_gucs[1], "")
+            self.assertEqual(get_current_profile_id(), "")
+except ImportError:
+    pass
