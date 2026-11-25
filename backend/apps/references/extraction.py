@@ -8,6 +8,7 @@ Preserves page numbers (1-indexed).
 import io
 import logging
 import os
+import tempfile
 import time
 from typing import Any, Optional, Union
 
@@ -117,32 +118,56 @@ def extract_pdf_pages(
                         from providers.registry import get_ocr_provider
                         ocr_provider = get_ocr_provider()
 
-                        for attempt in range(MAX_OCR_RETRIES + 1):
-                            try:
-                                ocr_res = ocr_provider.recognize(
-                                    best_img_data,
-                                    request_id=f"{request_id}:p{page_number}",
-                                )
-                                lines = getattr(ocr_res, "lines", [])
-                                ocr_text = "\n".join(lines).strip()
-                                break
-                            except Exception as attempt_err:
-                                if attempt < MAX_OCR_RETRIES:
-                                    logger.warning(
-                                        "OCR attempt %d failed on page %d: %s; retrying...",
-                                        attempt + 1,
-                                        page_number,
-                                        attempt_err,
+                        suffix = ".jpg" if best_img_data[:3] == b"\xff\xd8\xff" else ".png"
+                        tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+                        try:
+                            with os.fdopen(tmp_fd, "wb") as tmp_file:
+                                tmp_file.write(best_img_data)
+
+                            for attempt in range(MAX_OCR_RETRIES + 1):
+                                try:
+                                    raw_res = ocr_provider.recognize(
+                                        tmp_path,
+                                        request_id=f"{request_id}:p{page_number}",
                                     )
-                                    time.sleep(1.0 * (attempt + 1))
-                                else:
-                                    logger.error(
-                                        "OCR failed after %d attempts on page %d: %s",
-                                        MAX_OCR_RETRIES + 1,
-                                        page_number,
-                                        attempt_err,
-                                    )
-                                    failed_ocr_pages.append(page_number)
+                                    if isinstance(raw_res, tuple):
+                                        ocr_res, _attempted = raw_res
+                                    else:
+                                        ocr_res = raw_res
+
+                                    raw_lines = getattr(ocr_res, "lines", []) or []
+                                    text_lines = []
+                                    for line in raw_lines:
+                                        if isinstance(line, dict):
+                                            text_val = line.get("text", "")
+                                        elif isinstance(line, str):
+                                            text_val = line
+                                        else:
+                                            text_val = getattr(line, "text", "") or ""
+                                        if text_val:
+                                            text_lines.append(str(text_val))
+                                    ocr_text = "\n".join(text_lines).strip()
+                                    break
+                                except Exception as attempt_err:
+                                    if attempt < MAX_OCR_RETRIES:
+                                        logger.warning(
+                                            "OCR attempt %d failed on page %d: %s; retrying...",
+                                            attempt + 1,
+                                            page_number,
+                                            attempt_err,
+                                        )
+                                        time.sleep(1.0 * (attempt + 1))
+                                    else:
+                                        logger.error(
+                                            "OCR failed after %d attempts on page %d: %s",
+                                            MAX_OCR_RETRIES + 1,
+                                            page_number,
+                                            attempt_err,
+                                        )
+                                        failed_ocr_pages.append(page_number)
+                        finally:
+                            if os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
 
             except Exception as ocr_err:
                 logger.warning("OCR processing error on page %d: %s", page_number, ocr_err)

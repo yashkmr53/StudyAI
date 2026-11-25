@@ -169,6 +169,44 @@ class TestExtractionAndChunking(TestCase):
             self.assertIn("Backpropagation and Chain Rule", pages[0]["text"])
             self.assertEqual(pages[0]["method"], "vision_ocr")
 
+    def test_ocr_fallback_with_real_ocr_chain_and_dict_lines(self):
+        """T4: Real OCRChainProvider returns (OCRResult, attempted) with dict lines and expects path/URI string."""
+        import os
+        from providers.ocr.chain import OCRChainProvider
+        from providers.ocr.mock import MockOCRProvider
+
+        pdf_file = _create_sample_pdf(["Img"])
+        seen_inputs = []
+
+        class PathCheckingMockOCR(MockOCRProvider):
+            def recognize(self, image_uri: str, *, request_id: str):
+                seen_inputs.append((type(image_uri), image_uri, os.path.exists(image_uri) if isinstance(image_uri, str) else False))
+                return super().recognize(image_uri, request_id=request_id)
+
+        chain = OCRChainProvider([PathCheckingMockOCR()])
+
+        mock_img = MagicMock()
+        mock_img.data = b"\x89PNG\r\n\x1a\nfake-image-payload"
+
+        with patch("pypdf.PdfReader") as mock_reader_cls, \
+             patch("providers.registry.get_ocr_provider", return_value=chain):
+            mock_page = MagicMock()
+            mock_page.extract_text.return_value = "x"
+            mock_page.images = [mock_img]
+
+            mock_reader = MagicMock()
+            mock_reader.pages = [mock_page]
+            mock_reader_cls.return_value = mock_reader
+
+            pages = extract_pdf_pages(pdf_file)
+
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0]["method"], "vision_ocr")
+        self.assertIn("Recognized line 1:", pages[0]["text"])
+        self.assertEqual(len(seen_inputs), 1)
+        self.assertIs(seen_inputs[0][0], str)
+        self.assertTrue(seen_inputs[0][2], "Temporary image file path should exist during recognize()")
+
     def test_deterministic_textbook_chunking(self):
         content_p1 = (
             "Chapter 4: Convolutional Networks\n\n"
