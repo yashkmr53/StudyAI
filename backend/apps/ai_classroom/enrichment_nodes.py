@@ -348,6 +348,27 @@ def gap_detection_node(state: EnrichmentState, config=None) -> dict:
 
     validate_stage_output("gap_detection", result.data)
 
+    gaps = result.data.get("gaps", []) if isinstance(result.data, dict) else []
+    user_chunks = evidence_payload.get("user_chunks", [])
+    user_note = " ".join(c.get("content", "") for c in user_chunks).strip()
+    if gaps and user_note:
+        from apps.ai_classroom.gap_candidates import GapCandidate
+        from apps.ai_classroom.relevance_gate import apply_relevance_gate
+
+        candidates = [
+            GapCandidate(
+                concept=str(g.get("topic", "")),
+                source_chunk_id=str((g.get("source_chunk_ids") or [""])[0]),
+                source_content=str(g.get("evidence_in_reference", "")),
+                evidence_span=str(g.get("evidence_in_reference", "")),
+                confidence=1.0,
+            )
+            for g in gaps
+        ]
+        gate_res = apply_relevance_gate(candidates, user_note, strategy="D")
+        kept_ids = {id(c) for c in gate_res["relevant"]}
+        result.data["gaps"] = [g for g, c in zip(gaps, candidates) if id(c) in kept_ids]
+
     return {"gaps_result": result.data}
 
 
@@ -409,10 +430,17 @@ def coverage_comparison_node(state: EnrichmentState, config=None) -> dict:
     
     # Classify coverage
     coverages = classify_candidates(candidates, user_note)
-    
-    # Filter to genuine gaps
+
+    # Filter to genuine gaps, then suppress off-topic distractors via relevance gate
     gap_candidates = filter_gap_candidates(coverages, min_confidence=0.6)
-    
+    irrelevant_filtered = 0
+    if gap_candidates and user_note.strip():
+        from apps.ai_classroom.relevance_gate import apply_relevance_gate
+
+        gate_res = apply_relevance_gate(gap_candidates, user_note, strategy="D")
+        gap_candidates = gate_res["relevant"]
+        irrelevant_filtered = len(gate_res["irrelevant"])
+
     gap_candidates_data = [
         {
             "concept": c.concept,
@@ -424,11 +452,12 @@ def coverage_comparison_node(state: EnrichmentState, config=None) -> dict:
         }
         for c in gap_candidates
     ]
-    
+
     # Also return coverage breakdown for debugging
     coverage_summary = {
         status: len(covs) for status, covs in coverages.items()
     }
+    coverage_summary["irrelevant_filtered"] = irrelevant_filtered
     
     return {
         "gap_candidates": gap_candidates_data,
