@@ -4,6 +4,7 @@ Enforces PostgreSQL FORCE ROW LEVEL SECURITY across all tenant tables,
 ensures restricted application role studyai_app exists with required permissions,
 and configures profiles_profile for non-locking profile listing.
 """
+from django.conf import settings
 from django.db import migrations
 
 TENANT_TABLES = [
@@ -39,6 +40,11 @@ TENANT_TABLES = [
 def apply_rls_hardening(apps, schema_editor):
     if schema_editor.connection.vendor != "postgresql":
         return
+    db_name = (
+        schema_editor.connection.settings_dict.get("NAME")
+        or settings.DATABASES.get(schema_editor.connection.alias, {}).get("NAME")
+        or ""
+    )
     with schema_editor.connection.cursor() as cursor:
         # 1. Ensure restricted role studyai_app exists and has permissions
         cursor.execute(
@@ -49,7 +55,6 @@ def apply_rls_hardening(apps, schema_editor):
                     CREATE ROLE studyai_app WITH LOGIN PASSWORD 'studyai_app_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
                 END IF;
             END $$;
-            GRANT CONNECT ON DATABASE studyai TO studyai_app;
             GRANT USAGE ON SCHEMA public TO studyai_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO studyai_app;
             GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO studyai_app;
@@ -57,6 +62,9 @@ def apply_rls_hardening(apps, schema_editor):
             ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO studyai_app;
             """
         )
+        if db_name:
+            quoted_db = schema_editor.quote_name(str(db_name))
+            cursor.execute(f"GRANT CONNECT ON DATABASE {quoted_db} TO studyai_app;")
 
         # 2. FORCE ROW LEVEL SECURITY on all tenant tables
         for table in TENANT_TABLES:

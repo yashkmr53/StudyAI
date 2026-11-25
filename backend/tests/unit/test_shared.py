@@ -260,5 +260,31 @@ try:
             self.assertEqual(observed_gucs[0], str(profile.id))
             self.assertEqual(observed_gucs[1], "")
             self.assertEqual(get_current_profile_id(), "")
+
+    class MigrationDatabaseNameTests(TestCase):
+        def test_rls_hardening_reads_database_name_from_settings(self):
+            """0003_phase12_rls_hardening must grant CONNECT on configured DB name, not hardcoded studyai."""
+            import importlib
+            from unittest.mock import MagicMock
+
+            mod = importlib.import_module("apps.audit.migrations.0003_phase12_rls_hardening")
+            executed_sql = []
+
+            mock_cursor = MagicMock()
+            mock_cursor.execute.side_effect = lambda sql, *args, **kwargs: executed_sql.append(sql)
+            mock_conn = MagicMock()
+            mock_conn.vendor = "postgresql"
+            mock_conn.alias = "default"
+            mock_conn.settings_dict = {"NAME": "custom_ci_db"}
+            mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+            mock_schema_editor = MagicMock()
+            mock_schema_editor.connection = mock_conn
+            mock_schema_editor.quote_name.side_effect = lambda name: f'"{name}"'
+
+            mod.apply_rls_hardening(None, mock_schema_editor)
+
+            joined = "\n".join(executed_sql)
+            self.assertIn('GRANT CONNECT ON DATABASE "custom_ci_db" TO studyai_app', joined)
+            self.assertNotIn("GRANT CONNECT ON DATABASE studyai TO studyai_app", joined)
 except ImportError:
     pass

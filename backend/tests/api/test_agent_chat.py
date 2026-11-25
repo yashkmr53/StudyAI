@@ -180,3 +180,62 @@ class AgentChatApiTests(TestCase):
             HTTP_X_PROFILE_ID=str(self.bob_profile.id),
         )
         self.assertEqual(res3.status_code, 404)
+
+    def test_agent_get_endpoints_do_not_charge_budget_while_post_chat_does(self):
+        """Read-only AgentViewSet GET actions must not invoke AIBudgetThrottle; POST chat does."""
+        from apps.accounts.models import UserProfile
+        from apps.agents.models import AgentExecutionLog
+
+        AgentExecutionLog.objects.create(
+            request_id="req-trace-budget",
+            profile=self.alice_profile_1,
+            model_provider="mock",
+            model_name="mock-model",
+            prompt_version="agent:v1",
+            intent_category="qa",
+            iterations=1,
+            outcome="success",
+        )
+        up, _ = UserProfile.objects.get_or_create(user=self.alice_user)
+        self.assertEqual(up.current_month_token_usage, 0)
+
+        for url in (
+            "/api/v1/tools/",
+            "/api/v1/agents/tools/",
+            "/api/v1/executions/req-trace-budget/",
+        ):
+            res = self.alice.get(url, HTTP_X_PROFILE_ID=str(self.alice_profile_1.id))
+            self.assertEqual(res.status_code, 200, f"GET {url} returned {res.status_code}")
+
+        up.refresh_from_db()
+        self.assertEqual(up.current_month_token_usage, 0)
+        self.assertEqual(float(up.current_month_cost_usd), 0.0)
+
+        # Even with exhausted token budget, read-only GETs keep working while POST chat returns 429
+        UserProfile.objects.filter(pk=up.pk).update(
+            monthly_token_budget=10,
+            current_month_token_usage=10,
+        )
+        self.assertEqual(self.alice.get("/api/v1/agents/tools/").status_code, 200)
+        throttled = self.alice.post(
+            "/api/v1/agents/chat/",
+            {"session_id": str(self.alice_session_1.id), "content": "Help me study"},
+            content_type="application/json",
+            HTTP_X_PROFILE_ID=str(self.alice_profile_1.id),
+        )
+        self.assertEqual(throttled.status_code, 429)
+
+        # Restore budget and verify POST chat records usage
+        UserProfile.objects.filter(pk=up.pk).update(
+            monthly_token_budget=100000,
+            current_month_token_usage=0,
+        )
+        ok_res = self.alice.post(
+            "/api/v1/agents/chat/",
+            {"session_id": str(self.alice_session_1.id), "content": "Help me study"},
+            content_type="application/json",
+            HTTP_X_PROFILE_ID=str(self.alice_profile_1.id),
+        )
+        self.assertEqual(ok_res.status_code, 201)
+        up.refresh_from_db()
+        self.assertGreater(up.current_month_token_usage, 0)
