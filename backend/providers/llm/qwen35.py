@@ -15,7 +15,7 @@ import logging
 import os
 import re
 import time
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Optional, Union
 
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -250,21 +250,7 @@ class Qwen35Provider:
 
         raise ValueError(f"Could not resolve image input from source: {image[:100]}")
 
-    def generate(
-        self,
-        prompt: Union[Prompt, str],
-        *,
-        request_id: Optional[str] = None,
-        system: Optional[str] = None,
-        temperature: Optional[float] = None,
-        think: Optional[bool] = None,
-        **kwargs,
-    ) -> LLMResult:
-        """Generate plain text output. Model output is read from content only."""
-        p_name, p_version, sys_text, user_text = self._normalize_prompt(prompt, system)
-        should_think = self._resolve_think(p_name, think)
-        client = self._get_client(think=should_think, temperature=temperature)
-
+    def _build_chat_messages(self, prompt: Union[Prompt, str], sys_text: str, user_text: str) -> list:
         messages = []
         if sys_text:
             messages.append(SystemMessage(content=sys_text))
@@ -281,6 +267,23 @@ class Qwen35Provider:
                     messages.append(SystemMessage(content=c))
         else:
             messages.append(HumanMessage(content=user_text))
+        return messages
+
+    def generate(
+        self,
+        prompt: Union[Prompt, str],
+        *,
+        request_id: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: Optional[float] = None,
+        think: Optional[bool] = None,
+        **kwargs,
+    ) -> LLMResult:
+        """Generate plain text output. Model output is read from content only."""
+        p_name, p_version, sys_text, user_text = self._normalize_prompt(prompt, system)
+        should_think = self._resolve_think(p_name, think)
+        client = self._get_client(think=should_think, temperature=temperature)
+        messages = self._build_chat_messages(prompt, sys_text, user_text)
 
         started = time.monotonic()
         res = client.invoke(messages)
@@ -304,6 +307,26 @@ class Qwen35Provider:
             latency_ms=latency_ms,
             estimated_cost_usd=0.0,
         )
+
+    async def astream(
+        self,
+        prompt: Union[Prompt, str],
+        *,
+        request_id: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: Optional[float] = None,
+        think: Optional[bool] = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        """Asynchronously stream plain text tokens via ChatOllama."""
+        p_name, _p_version, sys_text, user_text = self._normalize_prompt(prompt, system)
+        should_think = self._resolve_think(p_name, think)
+        client = self._get_client(think=should_think, temperature=temperature)
+        messages = self._build_chat_messages(prompt, sys_text, user_text)
+        async for chunk in client.astream(messages):
+            content = getattr(chunk, "content", "")
+            if content:
+                yield content if isinstance(content, str) else str(content)
 
     def generate_structured(
         self,

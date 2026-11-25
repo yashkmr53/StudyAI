@@ -11,11 +11,12 @@ from material-seeking questions, and generates a grounded answer by
 extracting and reformulating the key sentence from the top evidence chunk.
 It never returns raw retrieved content verbatim.
 """
+import asyncio
 import hashlib
 import json
 import re
 import datetime as _dt
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Optional, Union
 
 from providers.base import LLMResult, Prompt, StructuredLLMResult
 
@@ -161,6 +162,13 @@ class MockLLMProvider:
             output_tokens=10,
             total_tokens=20,
         )
+
+    async def astream(self, *, prompt: Union[Prompt, str], request_id: str = "", **kwargs) -> AsyncIterator[str]:
+        result = self.generate(prompt=prompt, request_id=request_id, **kwargs)
+        parts = re.findall(r"\S+\s*", result.text) or ([result.text] if result.text else [])
+        for part in parts:
+            yield part
+            await asyncio.sleep(0)
 
     def generate_with_image(self, *, prompt: Union[Prompt, str], image: Any, request_id: str = "", **kwargs) -> LLMResult:
         p_name = prompt.name if isinstance(prompt, Prompt) else "vision"

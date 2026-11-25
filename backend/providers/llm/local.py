@@ -9,8 +9,9 @@ import json
 import logging
 import os
 import time
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Optional, Union
 
+import httpx
 import requests
 
 from providers.base import Prompt, StructuredLLMResult
@@ -117,6 +118,38 @@ class OllamaLLMProvider:
             return self._generate_with_chat(prompt, system_prompt, user_prompt, format_value, schema, request_id)
         else:
             return self._generate_with_generate(prompt, system_prompt, user_prompt, format_value, schema, request_id)
+
+    async def astream(self, *, prompt: Union[Prompt, str], request_id: str = "", **kwargs) -> AsyncIterator[str]:
+        if self.fail:
+            raise RuntimeError(f"{self.name}: simulated provider failure")
+        chat_messages = []
+        if isinstance(prompt, Prompt):
+            if prompt.system:
+                chat_messages.append({"role": "system", "content": prompt.system})
+            if getattr(prompt, "messages", None):
+                for m in prompt.messages:
+                    chat_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+            else:
+                chat_messages.append({"role": "user", "content": prompt.user})
+        else:
+            chat_messages.append({"role": "user", "content": str(prompt)})
+
+        payload = {
+            "model": self.model,
+            "messages": chat_messages,
+            "stream": True,
+            "options": {"temperature": kwargs.get("temperature", 0.2)},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    delta = data.get("message", {}).get("content", "") or data.get("response", "")
+                    if delta:
+                        yield delta
     
     def _generate_with_chat(
         self,

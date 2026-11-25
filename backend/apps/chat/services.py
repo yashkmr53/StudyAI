@@ -8,15 +8,17 @@ content.
 Agent mode (Phase 1): When X-Agent-Mode header is present or AGENT_ENABLED,
 uses StudyAIAgent for multi-step tool-use orchestration.
 """
+import asyncio
 import json
-from typing import Optional, Union, Any
+from typing import Any, AsyncIterator, Optional, Union
 import logging
 import re
 import time
 from collections.abc import Iterator
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.db import transaction
+from django.db import connections, connection, transaction
 
 from apps.ai_classroom.services import EvidenceVerifier
 from apps.chat.models import ChatMessage, ChatSession
@@ -241,6 +243,92 @@ class ChatService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _prepare_stream_turn(session: ChatSession, content: str) -> tuple[Any, Optional[str]]:
+        from apps.ai_classroom.budget import assert_within_budget
+
+        assert_within_budget(session.profile_id)
+        with profile_scoped_transaction(session.profile_id):
+            user_msg = ChatMessage.objects.create(
+                session=session, role=ChatMessage.Role.USER, content=content
+            )
+            generated_title: Optional[str] = None
+            if not session.title and session.messages.count() <= 2:
+                session.title = ChatService._generate_title(content)
+                session.save(update_fields=["title"])
+                generated_title = session.title
+        return user_msg, generated_title
+
+    @staticmethod
+    def _load_stream_history(session: ChatSession, user_msg: Any) -> list[dict]:
+        with profile_scoped_transaction(session.profile_id):
+            return get_bounded_history(session, exclude_msg_id=user_msg.pk if user_msg else None)
+
+    @staticmethod
+    def _execute_stream_turn(
+        session: ChatSession,
+        content: str,
+        previous_messages: list[dict],
+        *,
+        image: Optional[Union[bytes, str]] = None,
+        use_agent: bool = False,
+    ) -> dict:
+        if use_agent and getattr(settings, "AGENT_ENABLED", True):
+            return ChatService._run_agent_for_stream(session, content)
+        return ChatService._run_classic_for_stream(session, content, previous_messages, image=image)
+
+    @staticmethod
+    def _extract_stream_result(final_state: dict) -> tuple[str, list, str, Any, str]:
+        answer = final_state.get("answer", "") or ""
+        citations = final_state.get("citations", []) or []
+        verification_status = final_state.get("verification_status", "not_verified")
+        verification_score = final_state.get("verification_score")
+        route = final_state.get("route")
+        has_evidence = bool(
+            final_state.get("selected_evidence")
+            or final_state.get("retrieved_evidence")
+            or final_state.get("web_evidence")
+        )
+        if route == "conversational" or not has_evidence:
+            citations = []
+        canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
+        return answer, citations, verification_status, verification_score, canonical_model
+
+    @staticmethod
+    def _save_stream_answer(
+        session: ChatSession,
+        *,
+        answer: str,
+        citations: list,
+        canonical_model: str,
+        verification_status: str,
+        verification_score: Any,
+    ) -> ChatMessage:
+        with profile_scoped_transaction(session.profile_id):
+            return ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.ASSISTANT,
+                content=answer,
+                citations=citations,
+                model=canonical_model,
+                prompt_version=_active_chat_prompt_version(),
+                verification_status=verification_status,
+                verification_score=verification_score,
+            )
+
+    @staticmethod
+    async def _run_db_async(fn, *args, **kwargs):
+        if connection.vendor == "postgresql":
+            def _wrapped():
+                connections.close_all()
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    connections.close_all()
+
+            return await sync_to_async(_wrapped, thread_sensitive=False)()
+        return await sync_to_async(fn, thread_sensitive=True)(*args, **kwargs)
+
+    @staticmethod
     def stream(
         session: ChatSession,
         content: str,
@@ -256,82 +344,37 @@ class ChatService:
           - citations (once, when citations are available)
           - done (terminal, includes the persisted assistant message id)
           - error (terminal, on failure)
-
-        The user message and any auto-generated title are committed before
-        streaming begins so that sidebar updates are observable without a
-        page refresh. The assistant message is persisted atomically at the
-        end of the stream.
         """
-        from apps.ai_classroom.budget import assert_within_budget
-
         content = (content or "").strip()
         if not content:
             yield _sse(EVT_ERROR, {"message": "Message content is required."})
             return
 
         try:
-            assert_within_budget(session.profile_id)
+            user_msg, generated_title = ChatService._prepare_stream_turn(session, content)
         except Exception as exc:  # noqa: BLE001
-            yield _sse(EVT_ERROR, {"message": str(exc) or "Budget exceeded."})
-            return
-
-        user_msg = None
-        try:
-            with profile_scoped_transaction(session.profile_id):
-                user_msg = ChatMessage.objects.create(
-                    session=session, role=ChatMessage.Role.USER, content=content
-                )
-                generated_title: Optional[str] = None
-                if not session.title and session.messages.count() <= 2:
-                    session.title = ChatService._generate_title(content)
-                    session.save(update_fields=["title"])
-                    generated_title = session.title
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Failed to persist user message / title")
-            yield _sse(EVT_ERROR, {"message": f"Failed to persist message: {exc}"})
+            logger.exception("Failed to prepare chat stream turn")
+            yield _sse(EVT_ERROR, {"message": str(exc) or "Failed to start chat."})
             return
 
         if generated_title:
             yield _sse(EVT_TITLE, {"title": generated_title, "session_id": str(session.pk)})
 
-        with profile_scoped_transaction(session.profile_id):
-            previous_messages = get_bounded_history(session, exclude_msg_id=user_msg.pk if user_msg else None)
+        previous_messages = ChatService._load_stream_history(session, user_msg)
 
-        # Run the graph in non-streaming mode but stream the answer text
-        # by chunking the final answer through the wire. This works for
-        # any LLM provider (mock/ollama/etc.) without requiring each
-        # provider to expose token-level streaming.
-        # Note: Do not hold a database transaction open across long-running LLM inference.
-        # Individual database access points (such as retrieve_node) manage their own
-        # short-lived profile-scoped transactions.
         try:
-            if use_agent and getattr(settings, "AGENT_ENABLED", True):
-                final_state = ChatService._run_agent_for_stream(session, content)
-            else:
-                final_state = ChatService._run_classic_for_stream(
-                    session, content, previous_messages, image=image
-                )
+            final_state = ChatService._execute_stream_turn(
+                session, content, previous_messages, image=image, use_agent=use_agent
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Chat stream failed")
             yield _sse(EVT_ERROR, {"message": str(exc) or "Chat failed."})
             return
 
-        answer = final_state.get("answer", "") or ""
-        citations = final_state.get("citations", []) or []
-        verification_status = final_state.get("verification_status", "not_verified")
-        verification_score = final_state.get("verification_score")
-        route = final_state.get("route")
-        has_evidence = bool(
-            final_state.get("selected_evidence")
-            or final_state.get("retrieved_evidence")
-            or final_state.get("web_evidence")
+        answer, citations, verification_status, verification_score, canonical_model = (
+            ChatService._extract_stream_result(final_state)
         )
-        if route == "conversational" or not has_evidence:
-            citations = []
 
-        # Emit tokens with a small artificial delay so the UI shows a
-        # genuine stream effect even with mock providers. The delay is
-        # skipped for empty answers.
         token_delay_ms = int(getattr(settings, "CHAT_STREAM_TOKEN_DELAY_MS", 25))
         for chunk in _tokenize(answer):
             yield _sse(EVT_TOKEN, {"delta": chunk})
@@ -341,21 +384,101 @@ class ChatService:
         if citations:
             yield _sse(EVT_CITATIONS, {"citations": citations})
 
-        canonical_model = final_state.get("model") or getattr(settings, "LLM_MODEL", "qwen3.5:4b")
         try:
-            with profile_scoped_transaction(session.profile_id):
-                persisted = ChatMessage.objects.create(
-                    session=session,
-                    role=ChatMessage.Role.ASSISTANT,
-                    content=answer,
-                    citations=citations,
-                    model=canonical_model,
-                    prompt_version=_active_chat_prompt_version(),
-                    verification_status=verification_status,
-                    verification_score=verification_score,
-                )
+            persisted = ChatService._save_stream_answer(
+                session,
+                answer=answer,
+                citations=citations,
+                canonical_model=canonical_model,
+                verification_status=verification_status,
+                verification_score=verification_score,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Failed to persist assistant message")
+            yield _sse(EVT_ERROR, {"message": f"Failed to save answer: {exc}"})
+            return
+
+        yield _sse(
+            EVT_DONE,
+            {
+                "message_id": str(persisted.pk),
+                "verification_status": verification_status,
+                "verification_score": verification_score,
+                "model": persisted.model,
+            },
+        )
+
+    @staticmethod
+    async def astream(
+        session: ChatSession,
+        content: str,
+        *,
+        image: Optional[Union[bytes, str]] = None,
+        use_agent: bool = False,
+    ) -> AsyncIterator[str]:
+        """Async SSE generator for ASGI deployments — never blocks the event loop."""
+        content = (content or "").strip()
+        if not content:
+            yield _sse(EVT_ERROR, {"message": "Message content is required."})
+            return
+
+        try:
+            user_msg, generated_title = await ChatService._run_db_async(
+                ChatService._prepare_stream_turn, session, content
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to prepare async chat stream turn")
+            yield _sse(EVT_ERROR, {"message": str(exc) or "Failed to start chat."})
+            return
+
+        if generated_title:
+            yield _sse(EVT_TITLE, {"title": generated_title, "session_id": str(session.pk)})
+
+        previous_messages = await ChatService._run_db_async(
+            ChatService._load_stream_history, session, user_msg
+        )
+
+        try:
+            final_state = await ChatService._run_db_async(
+                ChatService._execute_stream_turn,
+                session,
+                content,
+                previous_messages,
+                image=image,
+                use_agent=use_agent,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Async chat stream failed")
+            yield _sse(EVT_ERROR, {"message": str(exc) or "Chat failed."})
+            return
+
+        answer, citations, verification_status, verification_score, canonical_model = (
+            ChatService._extract_stream_result(final_state)
+        )
+
+        token_delay_ms = int(getattr(settings, "CHAT_STREAM_TOKEN_DELAY_MS", 25))
+        for chunk in _tokenize(answer):
+            yield _sse(EVT_TOKEN, {"delta": chunk})
+            if token_delay_ms > 0:
+                await asyncio.sleep(token_delay_ms / 1000.0)
+            else:
+                await asyncio.sleep(0)
+
+        if citations:
+            yield _sse(EVT_CITATIONS, {"citations": citations})
+
+        try:
+            persisted = await ChatService._run_db_async(
+                ChatService._save_stream_answer,
+                session,
+                answer=answer,
+                citations=citations,
+                canonical_model=canonical_model,
+                verification_status=verification_status,
+                verification_score=verification_score,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to persist assistant message in async stream")
             yield _sse(EVT_ERROR, {"message": f"Failed to save answer: {exc}"})
             return
 

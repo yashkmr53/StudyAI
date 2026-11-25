@@ -8,6 +8,7 @@ import threading
 import time
 from collections import deque
 
+from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 from django.conf import settings
 
 try:
@@ -145,44 +146,78 @@ def get_prometheus_metrics() -> bytes:
 class TimingMiddleware:
     """Records per-request duration; attaches X-Duration-Ms header."""
 
+    sync_capable = True
+    async_capable = True
+
     def __init__(self, get_response):
         self.get_response = get_response
+        if iscoroutinefunction(self.get_response):
+            markcoroutinefunction(self)
 
-    def __call__(self, request):
-        started = time.monotonic()
-        response = self.get_response(request)
+    @staticmethod
+    def _record(request, response, started: float) -> None:
         duration_ms = round((time.monotonic() - started) * 1000, 1)
         observe_latency_ms(duration_ms)
         response["X-Duration-Ms"] = str(duration_ms)
         path = request.path
         if path.startswith("/api/"):
             incr(f"requests.{request.method}.{path.rstrip('/')}")
+
+    def __call__(self, request):
+        if iscoroutinefunction(self.get_response):
+            return self.__acall__(request)
+        started = time.monotonic()
+        response = self.get_response(request)
+        self._record(request, response, started)
+        return response
+
+    async def __acall__(self, request):
+        started = time.monotonic()
+        response = await self.get_response(request)
+        self._record(request, response, started)
         return response
 
 
 class SecurityHeadersMiddleware:
     """Baseline security headers on every response (§23)."""
 
+    sync_capable = True
+    async_capable = True
+
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+
     def __init__(self, get_response):
         self.get_response = get_response
+        if iscoroutinefunction(self.get_response):
+            markcoroutinefunction(self)
 
-    def __call__(self, request):
-        response = self.get_response(request)
+    @classmethod
+    def _apply(cls, response) -> None:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'"
-        )
-        response.headers.setdefault("Content-Security-Policy", csp)
+        response.headers.setdefault("Content-Security-Policy", cls._CSP)
+
+    def __call__(self, request):
+        if iscoroutinefunction(self.get_response):
+            return self.__acall__(request)
+        response = self.get_response(request)
+        self._apply(response)
+        return response
+
+    async def __acall__(self, request):
+        response = await self.get_response(request)
+        self._apply(response)
         return response
 
 
