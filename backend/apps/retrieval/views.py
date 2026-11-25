@@ -15,6 +15,9 @@ class SearchSerializer(serializers.Serializer):
     subject = serializers.UUIDField(required=False, allow_null=True)
     top_k = serializers.IntegerField(min_value=1, max_value=50, required=False, default=8)
     include_reference = serializers.BooleanField(required=False, default=True)
+    tag_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, allow_null=True, default=None
+    )
 
 
 from shared.throttles import LiveScopedRateThrottle
@@ -46,6 +49,7 @@ class SearchView(APIView):
             subject=subject,
             top_k=data["top_k"],
             include_reference=data["include_reference"],
+            tag_ids=data.get("tag_ids"),
         )
         return Response(
             {"query": data["query"], "count": len(evidence), "results": [e.as_dict() for e in evidence]},

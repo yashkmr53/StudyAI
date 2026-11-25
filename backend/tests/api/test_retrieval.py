@@ -386,3 +386,125 @@ class ReferenceBookTests(TestCase):
         from apps.references.models import ReferenceBook
 
         self.assertEqual(ReferenceBook.objects.filter(title="Graph Theory Basics").count(), 1)
+
+
+class TagFilterRetrievalTests(TestCase):
+    def setUp(self):
+        from apps.ai_classroom.models import DocumentTag, Tag
+        from apps.retrieval.services import index_document
+        from apps.subjects.models import Subject
+
+        self.alice = authenticated_client("alice_t5@example.com", "s3curePass!x")
+        self.user = self.alice_user()
+        self.profile = Profile.objects.get(user=self.user)
+        self.subject = Subject.objects.create(profile=self.profile, name="Algorithms")
+
+        self.tag_a = Tag.objects.create(subject=self.subject, stable_key="graphs", display_name="Graphs")
+        self.tag_b = Tag.objects.create(subject=self.subject, stable_key="shortest_path", display_name="Shortest Path")
+        self.tag_c = Tag.objects.create(subject=self.subject, stable_key="dp", display_name="Dynamic Programming")
+
+        self.doc_a = _make_ocr_document(
+            self.alice, self.profile, [["Algorithm study guide for weighted shortest path graphs."]]
+        )
+        self.doc_c = _make_ocr_document(
+            self.alice, self.profile, [["Algorithm study guide for overlapping subproblems dp."]]
+        )
+        self.doc_untagged = _make_ocr_document(
+            self.alice, self.profile, [["Algorithm study guide untagged notes about sorting."]]
+        )
+        Document.objects.filter(pk__in=[self.doc_a, self.doc_c, self.doc_untagged]).update(subject=self.subject)
+
+        for doc_id in (self.doc_a, self.doc_c, self.doc_untagged):
+            index_document(Document.objects.get(pk=doc_id))
+
+        DocumentTag.objects.create(document_id=self.doc_a, tag=self.tag_a)
+        DocumentTag.objects.create(document_id=self.doc_a, tag=self.tag_b)
+        DocumentTag.objects.create(document_id=self.doc_c, tag=self.tag_c)
+
+    def alice_user(self):
+        from apps.accounts.models import User
+
+        return User.objects.get(email="alice_t5@example.com")
+
+    def test_tag_ids_filters_chunks_any_semantics_no_duplicates(self):
+        """T5: Chunks without requested tags never appear; multiple matching tags do not duplicate rows."""
+        from apps.retrieval.retrieval import RetrievalService
+
+        # Single tag filter
+        res_a = RetrievalService.search(
+            self.user, "algorithm study guide", profile=self.profile, tag_ids=[self.tag_a.id], include_reference=False
+        )
+        doc_ids_a = {r.document_id for r in res_a}
+        self.assertEqual(doc_ids_a, {str(self.doc_a)})
+
+        # Multiple matching tags on same doc (tag_a & tag_b both on doc_a) -> no duplicates
+        res_ab = RetrievalService.search(
+            self.user,
+            "algorithm study guide",
+            profile=self.profile,
+            tag_ids=[self.tag_a.id, self.tag_b.id],
+            include_reference=False,
+        )
+        chunk_ids = [r.chunk_id for r in res_ab]
+        self.assertEqual(len(chunk_ids), len(set(chunk_ids)))
+        self.assertEqual({r.document_id for r in res_ab}, {str(self.doc_a)})
+
+        # ANY semantics: tag_a OR tag_c returns doc_a & doc_c, never doc_untagged
+        res_ac = RetrievalService.search(
+            self.user,
+            "algorithm study guide",
+            profile=self.profile,
+            tag_ids=[self.tag_a.id, self.tag_c.id],
+            include_reference=False,
+        )
+        doc_ids_ac = {r.document_id for r in res_ac}
+        self.assertEqual(doc_ids_ac, {str(self.doc_a), str(self.doc_c)})
+        self.assertNotIn(str(self.doc_untagged), doc_ids_ac)
+
+    def test_empty_or_omitted_tag_ids_identical(self):
+        """T5: Empty list [] and None produce identical results to omitting tag_ids."""
+        from apps.retrieval.retrieval import RetrievalService
+
+        omitted = RetrievalService.search(
+            self.user, "algorithm study guide", profile=self.profile, include_reference=False
+        )
+        none_res = RetrievalService.search(
+            self.user, "algorithm study guide", profile=self.profile, tag_ids=None, include_reference=False
+        )
+        empty_res = RetrievalService.search(
+            self.user, "algorithm study guide", profile=self.profile, tag_ids=[], include_reference=False
+        )
+        self.assertEqual([r.chunk_id for r in omitted], [r.chunk_id for r in none_res])
+        self.assertEqual([r.chunk_id for r in omitted], [r.chunk_id for r in empty_res])
+        self.assertEqual(len(omitted), 3)
+
+    def test_search_api_accepts_optional_tag_ids(self):
+        """T5 API: POST /api/v1/search forwards optional tag_ids cleanly."""
+        res = self.alice.post(
+            "/api/v1/search",
+            {"query": "algorithm study guide", "tag_ids": [str(self.tag_c.id)], "include_reference": False},
+            content_type="application/json",
+            HTTP_X_ACTIVE_PROFILE=str(self.profile.id),
+        )
+        self.assertEqual(res.status_code, 200)
+        doc_ids = {r["document_id"] for r in res.json()["results"]}
+        self.assertEqual(doc_ids, {str(self.doc_c)})
+
+    def test_both_dense_and_keyword_legs_honor_tag_filter_on_postgresql(self):
+        """T5 PostgreSQL-only: Both CosineDistance vector leg and tsvector keyword leg pre-filter by tag_ids."""
+        from django.db import connection
+        from apps.retrieval.retrieval import RetrievalService
+
+        if connection.vendor != "postgresql":
+            self.skipTest("PostgreSQL required to verify both dense and tsvector legs")
+
+        res = RetrievalService.search(
+            self.user,
+            "algorithm study guide",
+            profile=self.profile,
+            tag_ids=[self.tag_a.id, self.tag_b.id],
+            include_reference=False,
+        )
+        self.assertEqual({r.document_id for r in res}, {str(self.doc_a)})
+        self.assertIsNotNone(res[0].dense_rank)
+        self.assertIsNotNone(res[0].keyword_rank)
