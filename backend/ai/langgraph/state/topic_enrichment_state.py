@@ -2,9 +2,17 @@
 
 Defines Pydantic models for structured stages and the TypedDict state used by LangGraph.
 """
-from typing import Dict, List, Literal, Optional, Any
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
+
+
+def _merge_topic_dicts(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge per-topic dictionaries across parallel LangGraph Send branches."""
+    merged = dict(left or {})
+    if right:
+        merged.update(right)
+    return merged
 
 
 # --- Segment Classifier Models ---
@@ -144,9 +152,9 @@ class TopicEnrichmentState(TypedDict, total=False):
     topic_plan: Optional[Dict[str, Any]]
     planner_fallback: bool
 
-    # Stage 3: Research & Writing (keyed by topic_id)
-    research_by_topic: Dict[str, Dict[str, Any]]
-    sections_by_topic: Dict[str, Dict[str, Any]]
+    # Stage 3: Research & Writing (keyed by topic_id, reduced across parallel Send fan-out)
+    research_by_topic: Annotated[Dict[str, Dict[str, Any]], _merge_topic_dicts]
+    sections_by_topic: Annotated[Dict[str, Dict[str, Any]], _merge_topic_dicts]
 
     # Stage 4: Deduplication & Verification
     dedupe_pairs_evaluated: int
