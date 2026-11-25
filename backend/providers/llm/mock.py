@@ -266,6 +266,18 @@ class MockLLMProvider:
                 "merged_text": None,
                 "rationale": "Both additions represent distinct perspectives",
             }
+        elif prompt.name == "verification_entailment":
+            claim_tokens = {w for w in re.findall(r"[a-z0-9]+", (prompt.user or "").split("EVIDENCE:")[0].lower()) if len(w) > 2}
+            ev_part = (prompt.user or "").split("EVIDENCE:", 1)[1] if "EVIDENCE:" in (prompt.user or "") else ""
+            ev_tokens = {w for w in re.findall(r"[a-z0-9]+", ev_part.lower()) if len(w) > 2}
+            overlap = len(claim_tokens & ev_tokens) / max(1, len(claim_tokens)) if claim_tokens else 0.0
+            if overlap >= 0.50:
+                verdict = "ENTAILED"
+            elif overlap >= 0.25:
+                verdict = "PARTIALLY_ENTAILED"
+            else:
+                verdict = "NEUTRAL"
+            data = {"verdict": verdict, "rationale": f"Mock entailment overlap={overlap:.2f}"}
         elif "quote" in prompt.name.lower() or "verifier" in prompt.name.lower() or "entailment" in prompt.name.lower():
             if schema and getattr(schema, "__name__", "") == "QuoteVerificationVerdict":
                 passage_match = re.search(r'Cited Reference Passage:\s*"""(.*?)"""', prompt.user or "", re.DOTALL)
