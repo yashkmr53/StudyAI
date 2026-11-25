@@ -28,6 +28,18 @@ from typing import Optional
 CHAT_PROMPT_VERSION = "chat:v1"
 AGENT_PROMPT_VERSION = getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1")
 
+
+def _active_chat_prompt_version() -> str:
+    from ai.langchain.prompts import resolve_qualified_version
+
+    return resolve_qualified_version("chat", aliases=("chat_answer",), default="v1")
+
+
+def _active_agent_prompt_version() -> str:
+    from ai.langchain.prompts import resolve_qualified_version
+
+    return resolve_qualified_version("agent_orchestrator", default="v1")
+
 # Event types emitted over SSE during streaming chat.
 EVT_TITLE = "title"
 EVT_TOKEN = "token"
@@ -192,7 +204,7 @@ class ChatService:
                 content=answer,
                 citations=citations,
                 model=canonical_model,
-                prompt_version=CHAT_PROMPT_VERSION,
+                prompt_version=_active_chat_prompt_version(),
                 verification_status=verification_status,
                 verification_score=verification_score,
             )
@@ -215,7 +227,7 @@ class ChatService:
                 content=result.answer,
                 citations=result.citations,
                 model=canonical_model,
-                prompt_version=AGENT_PROMPT_VERSION,
+                prompt_version=_active_agent_prompt_version(),
             )
         logger.info(
             "Agent chat %s answered with %s citation(s) [%s] (tools=%d, iterations=%d, outcome=%s, model=%s)",
@@ -338,7 +350,7 @@ class ChatService:
                     content=answer,
                     citations=citations,
                     model=canonical_model,
-                    prompt_version=CHAT_PROMPT_VERSION,
+                    prompt_version=_active_chat_prompt_version(),
                     verification_status=verification_status,
                     verification_score=verification_score,
                 )

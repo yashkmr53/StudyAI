@@ -171,7 +171,7 @@ QUALIFIED = {p["prompt_name"]: f"{p['prompt_name']}:{p['version']}" for p in DEF
 
 
 def seed_prompt_versions() -> int:
-    """Idempotent registry seeding; returns number of rows created/updated."""
+    """Idempotent registry seeding for AI classroom stages; returns rows created."""
     created = 0
     model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
     for spec in DEFAULT_PROMPTS:
@@ -190,9 +190,42 @@ def seed_prompt_versions() -> int:
     return created
 
 
+def seed_all_prompt_versions() -> int:
+    """Sync both classroom defaults and file-based PromptRegistry JSON specs into PromptVersion."""
+    from ai.langchain.prompts import get_prompt_registry
+
+    created = seed_prompt_versions()
+    model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
+    registry = get_prompt_registry()
+    for tmpl in registry.list_prompts():
+        _, was_created = PromptVersion.objects.get_or_create(
+            prompt_name=tmpl.name,
+            version=tmpl.version,
+            defaults={
+                "template": tmpl.template,
+                "output_schema_version": tmpl.output_schema_version or "v1",
+                "model": model,
+                "configuration": {},
+                "is_active": True,
+            },
+        )
+        created += 1 if was_created else 0
+    return created
+
+
 def active_prompt(prompt_name: str) -> PromptVersion:
-    prompt = PromptVersion.objects.filter(prompt_name=prompt_name, is_active=True).first()
+    prompt = (
+        PromptVersion.objects.filter(prompt_name=prompt_name, is_active=True)
+        .order_by("-created_at", "-version")
+        .first()
+    )
     if prompt is None:
-        seed_prompt_versions()
-        prompt = PromptVersion.objects.get(prompt_name=prompt_name, version="v1")
+        seed_all_prompt_versions()
+        prompt = (
+            PromptVersion.objects.filter(prompt_name=prompt_name, is_active=True)
+            .order_by("-created_at", "-version")
+            .first()
+        )
+        if prompt is None:
+            prompt = PromptVersion.objects.get(prompt_name=prompt_name, version="v1")
     return prompt

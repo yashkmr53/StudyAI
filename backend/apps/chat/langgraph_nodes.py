@@ -428,9 +428,11 @@ def answer_generation_node(state: ChatState) -> dict:
                 structured_messages.append({"role": r, "content": c})
     structured_messages.append({"role": "user", "content": user_content})
 
+    from ai.langchain.prompts import resolve_prompt_version
+
     prompt = Prompt(
         name="chat",
-        version="v1",
+        version=resolve_prompt_version("chat_answer", aliases=("chat",)),
         system=CHAT_SYSTEM_PROMPT,
         user=user_prompt_text,
         messages=structured_messages,
@@ -532,9 +534,11 @@ def retry_answer_node(state: ChatState) -> dict:
                 structured_messages.append({"role": r, "content": c})
     structured_messages.append({"role": "user", "content": user})
 
+    from ai.langchain.prompts import resolve_prompt_version
+
     prompt = Prompt(
         name="chat",
-        version="v1",
+        version=resolve_prompt_version("chat_answer", aliases=("chat",)),
         system=CHAT_SYSTEM_PROMPT,
         user=user,
         messages=structured_messages,

@@ -89,13 +89,15 @@ class StudyAIAgent:
             verification_score=final_state.get("verification_score"),
         )
 
+        from ai.langchain.prompts import resolve_qualified_version
+
         record_agent_execution(
             request_id=request_id,
             profile=profile,
             intent_category=classify_intent(user_request),
             model_provider=getattr(settings, "LLM_PROVIDER", "unknown"),
             model_name=getattr(settings, "LLM_MODEL", "unknown"),
-            prompt_version=getattr(settings, "AGENT_PROMPT_VERSION", "agent_orchestrator:v1"),
+            prompt_version=resolve_qualified_version("agent_orchestrator"),
             tool_calls=[tc.__dict__ for tc in result.tool_calls],
             iterations=result.iterations,
             retrieved_evidence_ids=result.citations,

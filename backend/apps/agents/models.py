@@ -74,11 +74,12 @@ class AgentPromptVersion(models.Model):
 
 
 def seed_agent_prompt_versions() -> int:
-    """Idempotent registry seeding for agent prompts."""
+    """Idempotent registry seeding for agent prompts (syncs AgentPromptVersion + PromptVersion)."""
     from django.conf import settings
 
-    from apps.agents.prompts.agent_prompts import AGENT_SYSTEM_PROMPT, TOOL_DESCRIPTION_TEMPLATE
+    from apps.agents.prompts.agent_prompts import AGENT_SYSTEM_PROMPT
     from apps.agents.tools import get_tool_registry
+    from apps.ai_classroom.models import PromptVersion
 
     model = getattr(settings, "LLM_MODEL", "qwen3.5:4b")
     registry = get_tool_registry()
@@ -97,7 +98,17 @@ def seed_agent_prompt_versions() -> int:
         defaults={
             "system_template": AGENT_SYSTEM_PROMPT,
             "tool_descriptions": tool_descriptions,
+            "is_active": True,
+        },
+    )
+    PromptVersion.objects.get_or_create(
+        prompt_name="agent_orchestrator",
+        version="v1",
+        defaults={
+            "template": AGENT_SYSTEM_PROMPT,
+            "output_schema_version": "v1",
             "model": model,
+            "configuration": {},
             "is_active": True,
         },
     )
