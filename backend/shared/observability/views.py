@@ -7,6 +7,8 @@
                  request latency percentiles (§25 list).
 /metrics   — Prometheus metrics endpoint (§25, E).
 """
+import os
+
 from django.conf import settings
 from django.db import connection
 from rest_framework.permissions import IsAdminUser
@@ -68,6 +70,12 @@ class StatusView(APIView):
             CitationBlock.objects.values_list("verification_status").annotate(c=Count("id"))
         )
 
+        from ai.tracing.config import get_project, is_tracing_enabled
+
+        tracing_enabled = is_tracing_enabled()
+        api_key = os.environ.get("LANGSMITH_API_KEY") or getattr(settings, "LANGSMITH_API_KEY", "") or ""
+        api_key_configured = bool(str(api_key).strip())
+
         snapshot_data = snapshot()
         payload = {
             "jobs": {
@@ -84,6 +92,13 @@ class StatusView(APIView):
                 "ocr_fallback_rate": None,  # computed when real OCR lands (Phase 3+ providers mocked)
             },
             "citations": {"verification_distribution": citation_distribution},
+            "tracing": {
+                "enabled": tracing_enabled,
+                "api_key_configured": api_key_configured,
+                "active": bool(tracing_enabled and api_key_configured),
+                "project": get_project(),
+                "redact_student_text": bool(getattr(settings, "LANGSMITH_REDACT_STUDENT_TEXT", True)),
+            },
             "requests": snapshot_data["requests"],
             "counters": snapshot_data["counters"],
             "database": {"vendor": connection.vendor},
