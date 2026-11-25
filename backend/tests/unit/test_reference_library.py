@@ -766,3 +766,42 @@ class TestReferenceIngestionHardening(TestCase):
         self.assertEqual(res, {"status": "ready"})
         mock_ingest.assert_called_once_with(doc_id, profile_id=profile_id)
 
+
+class TestReferenceVectorIndex(TestCase):
+    def test_reference_chunk_hnsw_index_exists_and_used_in_explain_on_postgresql(self):
+        """T6 PostgreSQL-only: ReferenceChunk has HNSW cosine index used by EXPLAIN plan."""
+        from django.db import connection
+        from pgvector.django import CosineDistance
+
+        if connection.vendor != "postgresql":
+            self.skipTest("PostgreSQL + pgvector required for HNSW index verification")
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT indexname, indexdef
+                FROM pg_indexes
+                WHERE tablename = 'references_referencechunk'
+                  AND indexname = 'idx_refchunk_hnsw_embedding'
+                """
+            )
+            row = cursor.fetchone()
+        self.assertIsNotNone(row, "idx_refchunk_hnsw_embedding not found on references_referencechunk")
+        self.assertIn("USING hnsw", row[1])
+        self.assertIn("vector_cosine_ops", row[1])
+
+        qvec = [0.01] * 1024
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SET LOCAL enable_seqscan = off;")
+                qs = (
+                    ReferenceChunk.objects.exclude(embedding__isnull=True)
+                    .annotate(distance=CosineDistance("embedding", qvec))
+                    .order_by("distance")[:5]
+                )
+                sql, params = qs.query.sql_with_params()
+                cursor.execute(f"EXPLAIN {sql}", params)
+                plan_lines = "\n".join(r[0] for r in cursor.fetchall())
+
+        self.assertIn("idx_refchunk_hnsw_embedding", plan_lines, f"HNSW index not in plan:\n{plan_lines}")
+
