@@ -9,6 +9,50 @@ import { testsApi } from "../../services/api/tests";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 import type { TestAttemptQuestion, TestSummary } from "../../types/domain";
 
+export const CONFIDENCE_OPTIONS = [
+  { value: 0.4, label: "Guess" },
+  { value: 0.75, label: "Unsure" },
+  { value: 1.0, label: "Confident" },
+] as const;
+
+export function ConfidenceSelector({
+  questionId,
+  value,
+  disabled,
+  onChange,
+}: {
+  questionId: string;
+  value: number;
+  disabled: boolean;
+  onChange: (confidence: number) => void;
+}) {
+  return (
+    <div
+      className="row"
+      role="group"
+      aria-label={`Confidence for question ${questionId}`}
+      style={{ gap: 6, marginTop: 8, alignItems: "center" }}
+    >
+      <span className="faint small">Confidence:</span>
+      {CONFIDENCE_OPTIONS.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={selected}
+            className={selected ? "btn btn--primary btn--sm" : "btn btn--ghost btn--sm"}
+            onClick={() => onChange(opt.value)}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Subject Tests (§23) — rendered only while TestsService is enabled. */
 export function TestsPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
@@ -50,6 +94,7 @@ export function TestsPage() {
         subjectId,
         t("tests.defaultTitle", { subject: subjectName }),
         5,
+        "adaptive",
       );
       setTests((prev) => [...(prev ?? []), created]);
     } catch {
@@ -144,6 +189,7 @@ function TestRunner({ test, onExit }: { test: TestSummary; onExit: () => void })
   const { t } = useTranslation();
   const [questions, setQuestions] = useState<TestAttemptQuestion[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [confidences, setConfidences] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,8 +215,9 @@ function TestRunner({ test, onExit }: { test: TestSummary; onExit: () => void })
       const selected = answers[q.id];
       if (selected == null) continue;
       totalAnswered++;
+      const confidence = confidences[q.id] ?? 0.75;
       try {
-        const result = await testsApi.submitAttempt(test.id, q.id, selected);
+        const result = await testsApi.submitAttempt(test.id, q.id, selected, confidence);
         if (result.attempt.correct) correctCount++;
         if (result.mastery) masteryUpdates.push(result.mastery);
       } catch {
@@ -281,6 +328,12 @@ function TestRunner({ test, onExit }: { test: TestSummary; onExit: () => void })
             {submitted && q.answerIndex == null && (
               <p className="hint-text">{t("tests.runner.correctAnswerMissing")}</p>
             )}
+            <ConfidenceSelector
+              questionId={q.id}
+              value={confidences[q.id] ?? 0.75}
+              disabled={submitted}
+              onChange={(c) => setConfidences((prev) => ({ ...prev, [q.id]: c }))}
+            />
           </fieldset>
         ))}
       </form>
