@@ -79,12 +79,52 @@ class TestViewSet(
             num = int(request.data.get("num_questions", 5))
         except (TypeError, ValueError):
             num = 5
+        num = max(1, min(num, 20))
         title = request.data.get("title", "")
-        test = TestGenerationService.build_test(
-            profile, subject=subject, num_questions=max(1, min(num, 20)),
-            type_=TestInstance.Type.PRACTICE,
-            title=title,
-        )
+        mode = str(request.data.get("mode", "bank")).lower()
+
+        test = None
+        if mode == "adaptive":
+            from ai.langgraph.graphs.adaptive_test_graph import invoke_adaptive_test_graph
+            from ai.langgraph.state.adaptive_test_state import AdaptiveTestState
+
+            try:
+                state = AdaptiveTestState(
+                    user_request=title or "Adaptive practice test",
+                    profile_id=str(profile.pk),
+                    subject_id=str(subject.pk) if subject else None,
+                    session_id=None,
+                    errors=[],
+                    execution_metadata={},
+                    num_questions=num,
+                    difficulty=request.data.get("difficulty"),
+                    focus_weak_only=bool(request.data.get("focus_weak_only", True)),
+                    mastery_overview={},
+                    weak_tags=[],
+                    all_tags=[],
+                    retrieved_document_ids=[],
+                    generated_questions=[],
+                    selected_questions=[],
+                    test_id=None,
+                )
+                graph_result = invoke_adaptive_test_graph(state)
+                test_id = graph_result.get("test_id")
+                if test_id:
+                    test = TestInstance.objects.get(pk=test_id, profile=profile)
+                    if title and test.title != title:
+                        test.title = title
+                        test.save(update_fields=["title"])
+            except (ValueError, TestInstance.DoesNotExist):
+                test = None
+
+        if test is None:
+            test = TestGenerationService.build_test(
+                profile,
+                subject=subject,
+                num_questions=num,
+                type_=TestInstance.Type.PRACTICE,
+                title=title,
+            )
         return Response(_serialize_test(test), status=201)
 
     def list(self, request, *args, **kwargs):

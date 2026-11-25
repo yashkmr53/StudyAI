@@ -170,6 +170,39 @@ class AdaptiveTestTests(LearningBase):
         )
         self.assertEqual(duplicate.status_code, 409)
 
+    def test_create_test_adaptive_mode_invokes_graph_and_falls_back_cleanly(self):
+        from unittest.mock import patch
+        from apps.tests.models import TestInstance
+
+        base_test = self.alice.post(
+            "/api/v1/tests",
+            {"num_questions": 2, "title": "Fallback Test"},
+            content_type="application/json",
+        ).json()
+
+        with patch("ai.langgraph.graphs.adaptive_test_graph.invoke_adaptive_test_graph") as mock_graph:
+            mock_graph.return_value = {"test_id": base_test["id"]}
+            res = self.alice.post(
+                "/api/v1/tests",
+                {"num_questions": 2, "mode": "adaptive", "title": "Adaptive Graph Test"},
+                content_type="application/json",
+            )
+            self.assertEqual(res.status_code, 201)
+            mock_graph.assert_called_once()
+            self.assertEqual(TestInstance.objects.get(pk=base_test["id"]).title, "Adaptive Graph Test")
+
+        with patch(
+            "ai.langgraph.graphs.adaptive_test_graph.invoke_adaptive_test_graph",
+            side_effect=ValueError("No topics available"),
+        ):
+            fallback_res = self.alice.post(
+                "/api/v1/tests",
+                {"num_questions": 2, "mode": "adaptive", "title": "Resilient Test"},
+                content_type="application/json",
+            )
+            self.assertEqual(fallback_res.status_code, 201)
+            self.assertEqual(fallback_res.json()["title"], "Resilient Test")
+
 
 class MasteryNotAssessedTests(LearningBase):
     def test_unassessed_tags_reported_not_assessed(self):
