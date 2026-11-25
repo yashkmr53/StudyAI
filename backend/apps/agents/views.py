@@ -32,8 +32,17 @@ class AgentRateThrottle(UserRateThrottle):
 
 
 class AgentViewSet(viewsets.GenericViewSet):
-    throttle_classes = [AgentRateThrottle, AIBudgetThrottle]
+    throttle_classes = [AgentRateThrottle]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_throttles(self):
+        if (
+            self.request
+            and self.request.method == "POST"
+            and self.action == "chat"
+        ):
+            return [AgentRateThrottle(), AIBudgetThrottle()]
+        return [AgentRateThrottle()]
 
     def get_queryset(self):
         qs = AgentExecutionLog.objects.filter(profile__user=self.request.user)

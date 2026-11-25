@@ -326,17 +326,24 @@ class Phase12PostgresRLSTests(TestCase):
                 profile=profile_a,
             )
 
-        # Unscoped query cannot see profile_a's document
-        with self.assertRaises(ReferenceDocument.DoesNotExist):
-            ReferenceDocument.objects.get(pk=doc.id)
+        with connection.cursor() as cursor:
+            cursor.execute("SET ROLE studyai_app;")
 
-        # Query under profile_b cannot see profile_a's document
-        with profile_scoped_transaction(profile_b.id):
+        try:
+            # Unscoped query cannot see profile_a's document
             with self.assertRaises(ReferenceDocument.DoesNotExist):
                 ReferenceDocument.objects.get(pk=doc.id)
 
-        # Query under profile_a successfully sees the document
-        with profile_scoped_transaction(profile_a.id):
-            found = ReferenceDocument.objects.get(pk=doc.id)
-            self.assertEqual(found.title, "RLS Protected Doc")
+            # Query under profile_b cannot see profile_a's document
+            with profile_scoped_transaction(profile_b.id):
+                with self.assertRaises(ReferenceDocument.DoesNotExist):
+                    ReferenceDocument.objects.get(pk=doc.id)
+
+            # Query under profile_a successfully sees the document
+            with profile_scoped_transaction(profile_a.id):
+                found = ReferenceDocument.objects.get(pk=doc.id)
+                self.assertEqual(found.title, "RLS Protected Doc")
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE;")
 

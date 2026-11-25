@@ -70,7 +70,7 @@ jobs:
         working-directory: ./backend
         run: |
           python manage.py spectacular --file /tmp/schema.yml
-          git diff --exit-code docs/openapi/schema.yml || (echo "OpenAPI schema drifted; commit updated schema" && exit 1)
+          diff -u ../docs/openapi/schema.yml /tmp/schema.yml || (echo "OpenAPI schema drifted; commit updated schema" && exit 1)
 
   postgres-integration:
     name: PostgreSQL Integration (pgvector + RLS + FTS)
@@ -127,6 +127,7 @@ jobs:
         run: |
           pytest --ds=config.settings.ci --strict-markers --tb=short \
             tests/api/test_postgres_integration.py \
+            tests/api/test_phase12_security.py::Phase12PostgresRLSTests \
             tests/unit/test_shared.py::RLSMiddlewarePostgresLeakTests \
             tests/api/test_retrieval.py::HybridRetrievalTests \
             tests/api/test_retrieval.py::TagFilterRetrievalTests \
@@ -218,7 +219,7 @@ jobs:
 
       - name: Check OpenAPI drift
         run: |
-          git diff --exit-code docs/openapi/schema.yml || (echo "OpenAPI schema drifted; commit updated schema" && exit 1)
+          diff -u docs/openapi/schema.yml /tmp/schema.yml || (echo "OpenAPI schema drifted; commit updated schema" && exit 1)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

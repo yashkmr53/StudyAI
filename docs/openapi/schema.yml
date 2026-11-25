@@ -31,6 +31,37 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/agents/mcp/token/:
+    get:
+      operationId: api_v1_agents_mcp_token_retrieve
+      description: List user's MCP tokens (metadata only).
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_v1_agents_mcp_token_create
+      description: Create a new MCP token.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: api_v1_agents_mcp_token_destroy
+      description: Revoke an MCP token.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/agents/tools/:
     get:
       operationId: api_v1_agents_tools_retrieve
@@ -1334,6 +1365,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
+          description: No response body
+  /api/v1/mcp/token/:
+    get:
+      operationId: api_v1_mcp_token_retrieve
+      description: List user's MCP tokens (metadata only).
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_v1_mcp_token_create
+      description: Create a new MCP token.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: api_v1_mcp_token_destroy
+      description: Revoke an MCP token.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
           description: No response body
   /api/v1/notebooks:
     get:
