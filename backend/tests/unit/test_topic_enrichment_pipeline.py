@@ -15,7 +15,7 @@ Tests:
 """
 import uuid
 from unittest.mock import patch, MagicMock
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
 from ai.langgraph.nodes.load_and_gate_node import load_and_gate_node
 from ai.langgraph.nodes.render_node import render_node
@@ -771,3 +771,107 @@ class TestQualifierGuard(TestCase):
         self.assertEqual(len(addition_blocks), 0)
         dropped = res.get("dropped_verification", {})
         self.assertEqual(dropped.get("neutral_entailment", 0), 1)
+
+
+class TestEnrichmentLangGraphSend(TransactionTestCase):
+    def test_build_enrichment_graph_compiles_langgraph_state_graph(self):
+        from ai.langgraph.graphs.enrichment_graph import build_enrichment_graph
+
+        compiled = build_enrichment_graph()
+        self.assertIsNotNone(compiled)
+        node_names = set(compiled.get_graph().nodes.keys())
+        for expected in (
+            "load_and_gate",
+            "classify",
+            "plan",
+            "topic_worker",
+            "sanitize_dedupe_pass0",
+            "verify_pass0",
+            "repair_worker",
+            "render",
+        ):
+            self.assertIn(expected, node_names)
+
+    def test_invoke_enrichment_graph_send_fanout_reducer_and_repair(self):
+        from ai.langgraph.graphs.enrichment_graph import invoke_enrichment_graph
+        from apps.documents.models import Document
+        from apps.profiles.models import Profile
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_user(email="r9@example.com", password="pw")
+        profile = Profile.objects.create(user=user, name="R9 Profile")
+        doc = Document.objects.create(profile=profile, title="R9 Notes", source=Document.Source.UPLOAD)
+
+        lid1 = str(uuid.uuid4())
+        lid2 = str(uuid.uuid4())
+        verify_calls = {"count": 0}
+        writer_calls = []
+
+        def _fake_verify(state):
+            verify_calls["count"] += 1
+            if verify_calls["count"] == 1:
+                return {"repair_targets": ["t2"], "repair_pass": 0}
+            return {"repair_targets": [], "repair_pass": 1}
+
+        def _fake_writer(*, topic, research, all_lines_by_lineage, job_id="", repair_pass=0, llm_temperature=0.0):
+            tid = topic["topic_id"]
+            writer_calls.append((tid, repair_pass))
+            return EnrichedSection(
+                topic_id=tid,
+                title=topic["title"],
+                blocks=[SectionBlock(type="student", text=f"{tid}-pass{repair_pass}", line_ids=topic["lineage_ids"])],
+                evidence_status="sufficient",
+            )
+
+        with patch(
+            "ai.langgraph.graphs.enrichment_graph.load_and_gate_node",
+            return_value={
+                "is_ready": True,
+                "approved_lines": [
+                    {"lineage_id": lid1, "text": "Line 1"},
+                    {"lineage_id": lid2, "text": "Line 2"},
+                ],
+            },
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.segment_classifier_node",
+            return_value={"segments": [{"segment_type": "study_notes"}], "outcome": "ok"},
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.topic_planner_node",
+            return_value={
+                "topic_plan": {
+                    "topics": [
+                        {"topic_id": "t1", "title": "Topic 1", "description": "T1", "lineage_ids": [lid1]},
+                        {"topic_id": "t2", "title": "Topic 2", "description": "T2", "lineage_ids": [lid2]},
+                    ]
+                }
+            },
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.topic_research_node",
+            side_effect=lambda *, topic, document, profile, all_lines_by_lineage: TopicResearchResult(
+                topic_id=topic["topic_id"], evidence_status="sufficient"
+            ),
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.topic_writer_node",
+            side_effect=_fake_writer,
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.sanitize_and_dedupe_node",
+            return_value={"dedupe_pairs_evaluated": 0},
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.verification_node",
+            side_effect=_fake_verify,
+        ), patch(
+            "ai.langgraph.graphs.enrichment_graph.render_node",
+            side_effect=lambda s: {
+                "rendered_markdown": f"Topics: {sorted(s['sections_by_topic'].keys())}",
+                "status": "ok",
+            },
+        ):
+            final = invoke_enrichment_graph({"document_id": str(doc.pk), "job_id": ""})
+
+        self.assertEqual(set(final["research_by_topic"].keys()), {"t1", "t2"})
+        self.assertEqual(set(final["sections_by_topic"].keys()), {"t1", "t2"})
+        self.assertEqual(final["sections_by_topic"]["t1"]["blocks"][0]["text"], "t1-pass0")
+        self.assertEqual(final["sections_by_topic"]["t2"]["blocks"][0]["text"], "t2-pass1")
+        self.assertEqual(writer_calls.count(("t1", 1)), 0)
+        self.assertEqual(writer_calls.count(("t2", 1)), 1)
+        self.assertEqual(final["rendered_markdown"], "Topics: ['t1', 't2']")
