@@ -508,3 +508,99 @@ class TagFilterRetrievalTests(TestCase):
         self.assertEqual({r.document_id for r in res}, {str(self.doc_a)})
         self.assertIsNotNone(res[0].dense_rank)
         self.assertIsNotNone(res[0].keyword_rank)
+
+    def test_retrieve_reference_context_filters_by_tag_ids(self):
+        """R4: retrieve_reference_context filters ReferenceChunks by ReferenceDocumentTag when tag_ids given."""
+        from apps.references.models import ReferenceChunk, ReferenceDocument, ReferenceDocumentTag
+        from apps.references.services import retrieve_reference_context
+
+        provider = get_embedding_provider()
+        vec = provider.embed(["algorithm study guide reference textbook"], model_version=provider.model_version)[0]
+
+        ref_a = ReferenceDocument.objects.create(
+            title="Graphs Reference Textbook",
+            profile=self.profile,
+            subject=self.subject,
+            status=ReferenceDocument.Status.READY,
+        )
+        ref_other = ReferenceDocument.objects.create(
+            title="Sorting Reference Textbook",
+            profile=self.profile,
+            subject=self.subject,
+            status=ReferenceDocument.Status.READY,
+        )
+        ReferenceChunk.objects.create(
+            reference_document=ref_a,
+            chunk_index=0,
+            page_number=1,
+            text="Algorithm study guide reference on weighted graphs and shortest paths.",
+            embedding=vec,
+        )
+        ReferenceChunk.objects.create(
+            reference_document=ref_other,
+            chunk_index=0,
+            page_number=1,
+            text="Algorithm study guide reference on quicksort and mergesort.",
+            embedding=vec,
+        )
+        ReferenceDocumentTag.objects.create(reference_document=ref_a, tag=self.tag_a)
+
+        unfiltered = retrieve_reference_context("algorithm study guide reference", profile=self.profile)
+        self.assertEqual({r["document_id"] for r in unfiltered}, {str(ref_a.id), str(ref_other.id)})
+
+        filtered = retrieve_reference_context(
+            "algorithm study guide reference",
+            profile=self.profile,
+            tag_ids=[self.tag_a.id],
+        )
+        self.assertEqual({r["document_id"] for r in filtered}, {str(ref_a.id)})
+
+    def test_retrieval_search_with_include_reference_and_tag_ids_filters_references_too(self):
+        """R4: RetrievalService.search(..., include_reference=True, tag_ids=...) filters both notes and references."""
+        from apps.references.models import ReferenceChunk, ReferenceDocument, ReferenceDocumentTag
+        from apps.retrieval.retrieval import RetrievalService
+
+        provider = get_embedding_provider()
+        vec = provider.embed(["algorithm study guide"], model_version=provider.model_version)[0]
+
+        ref_a = ReferenceDocument.objects.create(
+            title="Graphs Ref",
+            profile=self.profile,
+            subject=self.subject,
+            status=ReferenceDocument.Status.READY,
+        )
+        ref_other = ReferenceDocument.objects.create(
+            title="Untagged Ref",
+            profile=self.profile,
+            subject=self.subject,
+            status=ReferenceDocument.Status.READY,
+        )
+        ReferenceChunk.objects.create(
+            reference_document=ref_a,
+            chunk_index=0,
+            page_number=1,
+            text="Algorithm study guide textbook proof for weighted graphs.",
+            embedding=vec,
+        )
+        ReferenceChunk.objects.create(
+            reference_document=ref_other,
+            chunk_index=0,
+            page_number=1,
+            text="Algorithm study guide textbook chapter on unrelated heaps.",
+            embedding=vec,
+        )
+        ReferenceDocumentTag.objects.create(reference_document=ref_a, tag=self.tag_a)
+
+        res = RetrievalService.search(
+            self.user,
+            "algorithm study guide",
+            profile=self.profile,
+            tag_ids=[self.tag_a.id],
+            include_reference=True,
+            top_k=10,
+        )
+        doc_ids = {r.document_id for r in res}
+        self.assertIn(str(self.doc_a), doc_ids)
+        self.assertIn(str(ref_a.id), doc_ids)
+        self.assertNotIn(str(self.doc_c), doc_ids)
+        self.assertNotIn(str(ref_other.id), doc_ids)

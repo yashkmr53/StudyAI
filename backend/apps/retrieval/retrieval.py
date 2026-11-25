@@ -122,10 +122,9 @@ class RetrievalService:
         """Returns list[Evidence]. The dense leg runs on PostgreSQL only;
         SQLite unit runs degrade to keyword-only.
 
-        When ``tag_ids`` is non-empty, both the vector and full-text NoteChunk legs
-        pre-filter for documents carrying ANY of the given tags before top-k cutoff.
-        Note: Reference chunks (``retrieve_reference_context``) are not tagged and
-        therefore leave that path unchanged.
+        When ``tag_ids`` is non-empty, both NoteChunk legs and ReferenceChunk legs
+        (via ``ReferenceDocumentTag``) pre-filter for documents carrying ANY of the
+        given tags before top-k cutoff.
         """
         from apps.retrieval.models import NoteChunk
         from providers.registry import embedding_model_version, get_embedding_provider
@@ -261,6 +260,7 @@ class RetrievalService:
                 profile=profile,
                 subject=subject,
                 top_k=top_k,
+                tag_ids=tag_ids,
             )
             for ref in ref_results:
                 evidence.append(

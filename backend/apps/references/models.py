@@ -112,6 +112,35 @@ class ReferenceChunk(models.Model):
         return f"chunk {self.chunk_index} of {doc_title} (p.{self.page_number})"
 
 
+class ReferenceDocumentTag(models.Model):
+    """Conceptual tag link for a ReferenceDocument (enables metadata-tag RAG filtering)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference_document = models.ForeignKey(
+        ReferenceDocument,
+        on_delete=models.CASCADE,
+        related_name="reference_tags",
+    )
+    tag = models.ForeignKey(
+        "ai_classroom.Tag",
+        on_delete=models.CASCADE,
+        related_name="reference_document_tags",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("reference_document_id", "tag_id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("reference_document", "tag"),
+                name="uniq_reference_document_tag",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"ref_doc={self.reference_document_id} tag={self.tag_id}"
+
+
 # --- Legacy Curated Book Models (Preserved for compatibility) ---
 
 class ReferenceBook(models.Model):
