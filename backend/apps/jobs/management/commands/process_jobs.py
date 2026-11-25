@@ -25,7 +25,7 @@ class Command(BaseCommand):
                 reaped = reap_stuck_jobs(timezone.now())
                 if reaped:
                     self.stdout.write(f"Reaped {reaped} stuck jobs")
-            promote_due_retries(timezone.now())
+            promote_due_retries(timezone.now(), dispatch=False)
             candidates = list(
                 Job.objects.filter(status=Job.Status.QUEUED).order_by("created_at").values_list("pk", flat=True)[:50]
             )

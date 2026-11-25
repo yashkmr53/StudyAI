@@ -172,14 +172,30 @@ def run_claimed_job(job: Job) -> None:
             )
 
 
-def promote_due_retries(now=None) -> int:
+def promote_due_retries(now=None, *, dispatch: bool = True) -> int:
     from django.db.models import Q
 
     now = now or timezone.now()
-    return Job.objects.filter(
-        Q(status=Job.Status.FAILED_RETRYABLE)
-        & (Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now))
-    ).update(status=Job.Status.QUEUED)
+    promoted_jobs: list[Job] = []
+    with transaction.atomic():
+        candidate_ids = list(
+            Job.objects.filter(
+                Q(status=Job.Status.FAILED_RETRYABLE)
+                & (Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now))
+            ).values_list("pk", flat=True)
+        )
+        for job_id in candidate_ids:
+            updated = Job.objects.filter(
+                pk=job_id,
+                status=Job.Status.FAILED_RETRYABLE,
+            ).update(status=Job.Status.QUEUED)
+            if updated:
+                job = Job.objects.get(pk=job_id)
+                promoted_jobs.append(job)
+                if dispatch:
+                    dispatch_job(job)
+
+    return len(promoted_jobs)
 
 
 def reap_stuck_jobs(now=None) -> int:

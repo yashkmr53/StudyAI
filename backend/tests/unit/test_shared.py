@@ -66,6 +66,56 @@ class JobModelTests(TestCase):
         self.assertFalse(reloaded.claim(), "second claim must lose")
         self.assertEqual(reloaded.attempt_count, 1)
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=False)
+    def test_promote_due_retries_dispatches_once_via_on_commit_and_beat_configured(self):
+        """T7: Due retryable jobs are promoted, dispatched via on_commit, and not double-dispatched on 2nd pass."""
+        from datetime import timedelta
+        from unittest.mock import patch
+        from django.utils import timezone
+        from apps.jobs.models import Job
+        from apps.jobs.services import promote_due_retries
+        from config.celery import app as celery_app
+
+        self.assertIn("promote-retries", celery_app.conf.beat_schedule)
+        self.assertEqual(
+            celery_app.conf.beat_schedule["promote-retries"]["task"],
+            "apps.jobs.tasks.promote_retries_task",
+        )
+
+        due_job = Job.objects.create(
+            job_type="ocr",
+            resource_type="document_page_revision",
+            resource_id="r-due",
+            idempotency_key="ocr:r-due:h:v1",
+            status=Job.Status.FAILED_RETRYABLE,
+            next_retry_at=timezone.now() - timedelta(seconds=10),
+        )
+        future_job = Job.objects.create(
+            job_type="ocr",
+            resource_type="document_page_revision",
+            resource_id="r-future",
+            idempotency_key="ocr:r-future:h:v1",
+            status=Job.Status.FAILED_RETRYABLE,
+            next_retry_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        with patch("apps.jobs.tasks.process_job_task.delay") as mock_delay:
+            with self.captureOnCommitCallbacks(execute=True):
+                promoted = promote_due_retries()
+
+            self.assertEqual(promoted, 1)
+            due_job.refresh_from_db()
+            future_job.refresh_from_db()
+            self.assertEqual(due_job.status, Job.Status.QUEUED)
+            self.assertEqual(future_job.status, Job.Status.FAILED_RETRYABLE)
+            mock_delay.assert_called_once_with(str(due_job.pk))
+
+            # Second promotion pass must neither re-promote nor double-dispatch
+            with self.captureOnCommitCallbacks(execute=True):
+                promoted_second = promote_due_retries()
+            self.assertEqual(promoted_second, 0)
+            self.assertEqual(mock_delay.call_count, 1)
+
 
 class ProfileAuthorizationFallbackTests(TestCase):
     def setUp(self):
