@@ -81,15 +81,5 @@ class StorageDownloadView(APIView):
         return HttpResponse(data, content_type="application/octet-stream")
 
 
-_MAGIC_SIGNATURES = {
-    "image/png": b"\x89PNG\r\n\x1a\n",
-    "image/jpeg": b"\xff\xd8\xff",
-    "image/webp": b"RIFF",
-}
-
-
-def _magic_matches(body: bytes, content_type: str) -> bool:
-    """§23 malicious-upload defense: content must start with the declared
-    type's magic bytes (header-based type trust is otherwise spoofable)."""
-    sig = _MAGIC_SIGNATURES.get(content_type)
-    return sig is None or body.startswith(sig)
+_MAGIC_SIGNATURES = None  # backward compat sentinel; signatures live in providers.storage.validation
+from providers.storage.validation import MAGIC_SIGNATURES as _MAGIC_SIGNATURES, magic_matches as _magic_matches  # noqa: E402,F401
