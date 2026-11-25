@@ -69,7 +69,7 @@ jobs:
       - name: Check OpenAPI drift
         working-directory: ./backend
         run: |
-          python manage.py spectacular --file /tmp/schema.yml
+          python manage.py spectacular --settings=config.settings.ci --file /tmp/schema.yml
           diff -u ../docs/openapi/schema.yml /tmp/schema.yml || (echo "OpenAPI schema drifted; commit updated schema" && exit 1)
 
   postgres-integration:
@@ -215,7 +215,7 @@ jobs:
 
       - name: Generate OpenAPI schema
         working-directory: ./backend
-        run: python manage.py spectacular --file /tmp/schema.yml
+        run: python manage.py spectacular --settings=config.settings.ci --file /tmp/schema.yml
 
       - name: Check OpenAPI drift
         run: |
