@@ -40,8 +40,17 @@ class ChatSessionViewSet(
 ):
     serializer_class = ChatSessionSerializer
     throttle_scope = "ai"
-    throttle_classes = [AIBudgetThrottle]
+    throttle_classes = [LiveScopedRateThrottle]
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_throttles(self):
+        if (
+            self.request
+            and self.request.method == "POST"
+            and self.action in ("messages", "stream_message", "send_message")
+        ):
+            return [AIBudgetThrottle()]
+        return [LiveScopedRateThrottle()]
 
     def get_queryset(self):
         qs = ChatSession.objects.filter(profile__user=self.request.user)
@@ -82,8 +91,7 @@ class ChatSessionViewSet(
         )
         return Response(ChatSessionSerializer(session).data, status=201)
 
-    @action(detail=True, methods=["get", "post"], url_path="messages",
-            throttle_classes=[AIBudgetThrottle])
+    @action(detail=True, methods=["get", "post"], url_path="messages")
     def messages(self, request, pk=None):
         session = self.get_object()
         if request.method == "POST":
@@ -98,8 +106,7 @@ class ChatSessionViewSet(
         messages = ChatMessage.objects.filter(session=session)
         return Response(ChatMessageSerializer(messages, many=True).data)
 
-    @action(detail=True, methods=["post"], url_path="messages/stream",
-            throttle_classes=[AIBudgetThrottle])
+    @action(detail=True, methods=["post"], url_path="messages/stream")
     def stream_message(self, request, pk=None):
         """Stream the assistant answer for a user message via SSE.
 
