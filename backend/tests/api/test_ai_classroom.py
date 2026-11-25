@@ -248,3 +248,101 @@ def RetrievalSearchRunner(user, expected_ids):
 
     query_words = "alpha beta gamma"
     return run_retrieval_cases([{"query": query_words, "expected_chunk_ids": expected_ids}], user, k=5)
+
+
+class RelevanceGateIntegrationTests(TestCase):
+    def test_compute_embedding_similarity_uses_provider_vectors_for_paraphrases(self):
+        from unittest.mock import MagicMock, patch
+        from apps.ai_classroom.relevance_gate import compute_embedding_similarity
+
+        mock_provider = MagicMock()
+        mock_provider.model_version = "mock-v1"
+        mock_provider.embed.return_value = [
+            [0.8, 0.6, 0.0],
+            [0.8, 0.6, 0.0],
+        ]
+        with patch("apps.ai_classroom.relevance_gate.get_embedding_provider", return_value=mock_provider):
+            sim = compute_embedding_similarity("runtime efficiency", "asymptotic execution speed")
+
+        self.assertGreater(sim, 0.95)
+        mock_provider.embed.assert_called_once()
+
+    def test_gap_detection_node_suppresses_irrelevant_distractors(self):
+        from unittest.mock import MagicMock, patch
+        from apps.ai_classroom.enrichment_nodes import gap_detection_node
+        from apps.ai_classroom.prompts import seed_prompt_versions
+
+        seed_prompt_versions()
+        mock_llm = MagicMock()
+        mock_llm.generate_structured.return_value = MagicMock(
+            data={
+                "gaps": [
+                    {
+                        "topic": "binary search complexity",
+                        "why_missing": "Note describes binary search on sorted array but omits complexity",
+                        "missing_from_note": "No O(log n) analysis",
+                        "evidence_in_reference": "Binary search runs in O(log n) on a sorted array.",
+                        "source_chunk_id": "ref-1",
+                        "source_chunk_ids": ["ref-1"],
+                    },
+                    {
+                        "topic": "chloroplast thylakoid membranes",
+                        "why_missing": "Botany concept unrelated to algorithms",
+                        "missing_from_note": "No mention of photosynthesis",
+                        "evidence_in_reference": "Chloroplasts contain thylakoid membranes for photosynthesis.",
+                        "source_chunk_ids": ["ref-2"],
+                    },
+                ]
+            },
+            provider="mock",
+            model="mock",
+        )
+        state = {
+            "job_id": "j-r3",
+            "evidence_payload": {
+                "has_reference_material": True,
+                "user_chunks": [{"content": "Binary search locates a target element inside a sorted array."}],
+                "reference_chunks": [
+                    {"chunk_id": "ref-1", "content": "Binary search runs in O(log n) on a sorted array."},
+                    {"chunk_id": "ref-2", "content": "Chloroplasts contain thylakoid membranes for photosynthesis."},
+                ],
+            },
+        }
+        with patch("apps.ai_classroom.enrichment_nodes.get_llm_provider", return_value=mock_llm):
+            out = gap_detection_node(state)
+
+        topics = [g["topic"] for g in out["gaps_result"]["gaps"]]
+        self.assertIn("binary search complexity", topics)
+        self.assertNotIn("chloroplast thylakoid membranes", topics)
+
+    def test_coverage_comparison_node_filters_irrelevant_candidates(self):
+        from apps.ai_classroom.enrichment_nodes import coverage_comparison_node
+
+        state = {
+            "evidence_payload": {
+                "user_chunks": [{"content": "Binary search finds a target element in a sorted array."}],
+            },
+            "gap_candidates": [
+                {
+                    "concept": "binary search time complexity",
+                    "source_chunk_id": "ref-1",
+                    "source_content": "Binary search runs in O(log n) in a sorted array.",
+                    "evidence_span": "sorted array binary search",
+                    "confidence": 0.9,
+                    "metadata": {},
+                },
+                {
+                    "concept": "chloroplast thylakoid photosynthesis",
+                    "source_chunk_id": "ref-2",
+                    "source_content": "Chloroplasts perform photosynthesis using thylakoid membranes.",
+                    "evidence_span": "chloroplast thylakoid photosynthesis",
+                    "confidence": 0.9,
+                    "metadata": {},
+                },
+            ],
+        }
+        out = coverage_comparison_node(state)
+        concepts = [c["concept"] for c in out["gap_candidates"]]
+        self.assertIn("binary search time complexity", concepts)
+        self.assertNotIn("chloroplast thylakoid photosynthesis", concepts)
+        self.assertEqual(out["coverage_summary"].get("irrelevant_filtered"), 1)

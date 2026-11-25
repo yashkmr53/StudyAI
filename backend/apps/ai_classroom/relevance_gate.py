@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
 from apps.ai_classroom.gap_candidates import GapCandidate, STOP_WORDS
+from providers.registry import get_embedding_provider
 
 
 @dataclass
@@ -44,19 +45,43 @@ def extract_note_topics(user_note: str, max_topics: int = 10) -> List[str]:
     return [w for w, _ in scored[:max_topics]]
 
 
-def compute_embedding_similarity(text1: str, text2: str, embeddings: Optional[List[float]] = None) -> float:
-    """Compute semantic similarity between two texts.
+def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    if not vec1 or not vec2 or len(vec1) != len(vec2):
+        return 0.0
+    dot = sum(float(a) * float(b) for a, b in zip(vec1, vec2))
+    norm1 = math.sqrt(sum(float(a) * float(a) for a in vec1))
+    norm2 = math.sqrt(sum(float(b) * float(b) for b in vec2))
+    if norm1 <= 0.0 or norm2 <= 0.0:
+        return 0.0
+    return max(0.0, min(1.0, dot / (norm1 * norm2)))
 
-    If embeddings are provided, use them. Otherwise return a placeholder.
-    In practice, this would use the embedding provider.
-    """
+
+def _jaccard_similarity(text1: str, text2: str) -> float:
     words1 = set(w for w in re.findall(r"\b\w+\b", text1.lower()) if w not in STOP_WORDS and len(w) > 2)
     words2 = set(w for w in re.findall(r"\b\w+\b", text2.lower()) if w not in STOP_WORDS and len(w) > 2)
     if not words1 or not words2:
         return 0.0
-    intersection = words1 & words2
-    union = words1 | words2
-    return len(intersection) / len(union)
+    return len(words1 & words2) / len(words1 | words2)
+
+
+def compute_embedding_similarity(text1: str, text2: str, embeddings: Optional[Any] = None) -> float:
+    """Compute semantic cosine similarity using supplied vectors or the configured embedding provider."""
+    if isinstance(embeddings, (list, tuple)) and len(embeddings) == 2 and isinstance(embeddings[0], (list, tuple)):
+        return _cosine_similarity(embeddings[0], embeddings[1])
+
+    if text1 and text2:
+        try:
+            provider = get_embedding_provider()
+            vecs = provider.embed(
+                [text1, text2],
+                model_version=getattr(provider, "model_version", "v1"),
+            )
+            if isinstance(vecs, list) and len(vecs) == 2:
+                return _cosine_similarity(vecs[0], vecs[1])
+        except Exception:
+            pass
+
+    return _jaccard_similarity(text1, text2)
 
 
 def compute_lexical_overlap(candidate: str, user_note: str) -> float:
@@ -91,9 +116,14 @@ def compute_reference_context_signal(candidate: GapCandidate, user_note: str) ->
     return len(overlap) / len(ev_words)
 
 
-def evaluate_relevance_strategy_a(candidate: GapCandidate, user_note: str, note_topics: List[str]) -> RelevanceResult:
-    """Strategy A: Pure embedding similarity (proxied by lexical overlap)."""
-    score = compute_embedding_similarity(candidate.concept, user_note)
+def evaluate_relevance_strategy_a(
+    candidate: GapCandidate,
+    user_note: str,
+    note_topics: List[str],
+    embeddings: Optional[Any] = None,
+) -> RelevanceResult:
+    """Strategy A: Pure embedding similarity."""
+    score = compute_embedding_similarity(candidate.concept, user_note, embeddings=embeddings)
     is_relevant = score >= 0.15
     return RelevanceResult(
         candidate=candidate,
@@ -104,9 +134,14 @@ def evaluate_relevance_strategy_a(candidate: GapCandidate, user_note: str, note_
     )
 
 
-def evaluate_relevance_strategy_b(candidate: GapCandidate, user_note: str, note_topics: List[str]) -> RelevanceResult:
+def evaluate_relevance_strategy_b(
+    candidate: GapCandidate,
+    user_note: str,
+    note_topics: List[str],
+    embeddings: Optional[Any] = None,
+) -> RelevanceResult:
     """Strategy B: Embedding similarity + lexical overlap."""
-    emb_score = compute_embedding_similarity(candidate.concept, user_note)
+    emb_score = compute_embedding_similarity(candidate.concept, user_note, embeddings=embeddings)
     lex_score = compute_lexical_overlap(candidate.concept, user_note)
     combined = 0.6 * emb_score + 0.4 * lex_score
     is_relevant = combined >= 0.18
@@ -119,9 +154,14 @@ def evaluate_relevance_strategy_b(candidate: GapCandidate, user_note: str, note_
     )
 
 
-def evaluate_relevance_strategy_c(candidate: GapCandidate, user_note: str, note_topics: List[str]) -> RelevanceResult:
+def evaluate_relevance_strategy_c(
+    candidate: GapCandidate,
+    user_note: str,
+    note_topics: List[str],
+    embeddings: Optional[Any] = None,
+) -> RelevanceResult:
     """Strategy C: Embedding similarity + note-topic similarity."""
-    emb_score = compute_embedding_similarity(candidate.concept, user_note)
+    emb_score = compute_embedding_similarity(candidate.concept, user_note, embeddings=embeddings)
     topic_score = compute_topic_similarity(candidate.concept, note_topics)
     combined = 0.5 * emb_score + 0.5 * topic_score
     is_relevant = combined >= 0.15
@@ -134,9 +174,14 @@ def evaluate_relevance_strategy_c(candidate: GapCandidate, user_note: str, note_
     )
 
 
-def evaluate_relevance_strategy_d(candidate: GapCandidate, user_note: str, note_topics: List[str]) -> RelevanceResult:
+def evaluate_relevance_strategy_d(
+    candidate: GapCandidate,
+    user_note: str,
+    note_topics: List[str],
+    embeddings: Optional[Any] = None,
+) -> RelevanceResult:
     """Strategy D: All signals combined."""
-    emb_score = compute_embedding_similarity(candidate.concept, user_note)
+    emb_score = compute_embedding_similarity(candidate.concept, user_note, embeddings=embeddings)
     lex_score = compute_lexical_overlap(candidate.concept, user_note)
     topic_score = compute_topic_similarity(candidate.concept, note_topics)
     ref_score = compute_reference_context_signal(candidate, user_note)
@@ -169,17 +214,32 @@ def apply_relevance_gate(
     user_note: str,
     strategy: str = "D",
 ) -> Dict[str, Any]:
-    """Apply relevance gate to filter candidates.
-
-    Returns:
-        Dict with 'relevant' and 'irrelevant' candidate lists
-    """
+    """Apply relevance gate to filter candidates using batched embeddings."""
     note_topics = extract_note_topics(user_note)
     evaluator = STRATEGIES.get(strategy, evaluate_relevance_strategy_d)
+
+    note_vec = None
+    cand_vecs: List[Optional[List[float]]] = [None] * len(candidates)
+    if candidates and user_note:
+        try:
+            provider = get_embedding_provider()
+            vecs = provider.embed(
+                [user_note, *(c.concept for c in candidates)],
+                model_version=getattr(provider, "model_version", "v1"),
+            )
+            if isinstance(vecs, list) and len(vecs) == len(candidates) + 1:
+                note_vec = vecs[0]
+                cand_vecs = list(vecs[1:])
+        except Exception:
+            pass
+
     relevant = []
     irrelevant = []
-    for candidate in candidates:
-        result = evaluator(candidate, user_note, note_topics)
+    details = []
+    for candidate, cand_vec in zip(candidates, cand_vecs):
+        pair = (cand_vec, note_vec) if (cand_vec is not None and note_vec is not None) else None
+        result = evaluator(candidate, user_note, note_topics, embeddings=pair)
+        details.append(result)
         if result.is_relevant:
             relevant.append(candidate)
         else:
@@ -187,7 +247,7 @@ def apply_relevance_gate(
     return {
         'relevant': relevant,
         'irrelevant': irrelevant,
-        'details': [evaluator(c, user_note, note_topics) for c in candidates],
+        'details': details,
     }
 
 
