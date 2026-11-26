@@ -26,3 +26,6 @@ dev-dist/
 # Env / OS
 .DS_Store
 *.log
+
+# Interview preparation reports
+Prep/

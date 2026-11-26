@@ -1,114 +1,82 @@
 # StudyAI
 
-StudyAI is an AI-powered learning and study platform that transforms handwritten notes and authoritative textbooks into searchable, reference-backed, enriched learning material.
+StudyAI is a full-stack, AI-powered learning platform that turns handwritten lecture notes and reference textbooks into a searchable, citation-verified, and adaptive knowledge base.
 
-Students upload photos or scans of handwritten notes and reference textbooks. StudyAI transcribes notes using local vision models, provides an explicit Human-in-the-Loop Transcript Review Gate for line-level edits, indexes textbook chapters via hybrid vector and lexical search, structures notes into coherent learning topics, preserves verbatim student text, surfaces verified reference additions with honest grounding labels, and detects reference library updates to prompt timely re-enrichment.
+Students capture handwriting on an offline-first digital canvas or upload scans and PDFs via presigned object storage. StudyAI validates uploaded binaries, runs multimodal OCR (`qwen3.5:4b` via local Ollama or optional Google Gemini), enforces a **Human-in-the-Loop Transcript Review Gate** with immutable line lineage, indexes notes and textbooks into PostgreSQL (`pgvector` HNSW + `tsvector` GIN) fused via Reciprocal Rank Fusion (`k=60`), orchestrates 7 compiled LangGraph workflows (`chat`, parallel `Send()` topic enrichment, agentic MCP tool use, question generation, verification, adaptive testing, and revision planning), and tracks tag-level learner mastery with confidence-weighted EMA scoring.
 
 ---
 
 ## 1. Product Workflows
 
-StudyAI operates through three core asynchronous AI workflows:
-
 ### A. Reference Textbook Ingestion Workflow
 
 ```text
-PDF Upload ──► Text Extraction & OCR ──► Semantic Chunking ──► Dense Embeddings ──► Database Indexing ──► READY
-(User / Staff)    (pdfplumber / Vision)      (120w / 30w)     (qwen3-embedding)    (pgvector + tsvector)   (Library)
+PDF Upload ──► Text Extraction & OCR Fallback ──► Semantic Chunking ──► Dense Embeddings ──► Postgres Indexing ──► READY
+(User / Staff)   (pypdf + embedded-image OCR)       (120w / 30w)        (1024-d vector)    (HNSW + GIN + Tags)  (Library)
 ```
 
-1. **PDF Upload:** Students or administrators upload reference textbooks or course syllabi (PDF format) to the Subject Reference Library.
-2. **Text Extraction & OCR Fallback:** Text is extracted per page using digital extractors (`pdfplumber` / PyMuPDF). For scanned or diagram-heavy pages where digital text extraction yields minimal content, the system falls back to vision-based OCR.
-3. **Semantic Chunking:** Documents are divided into structured chunks (target 120 words with 30-word overlap) preserving page numbers, chapter headers, and sections.
-4. **Dense Vector Embeddings:** Each chunk is converted into a 1024-dimensional normalized dense vector using `qwen3-embedding:0.6b` via Ollama (`qwen3-embedding-0.6b-v1`).
-5. **Database Indexing:** Vectors are stored in PostgreSQL with `pgvector` indexing (`vector_cosine_ops`), while text content is indexed into PostgreSQL `tsvector` for full-text lexical search.
-6. **Status Lifecycle:** Tracks stage progress (`PENDING` ➔ `PROCESSING` ➔ `READY` / `FAILED`) with page counts and error reporting.
+1. **PDF Upload:** Students or staff upload reference textbooks or course packs into the Subject Reference Library (global platform-wide books or private profile-scoped references).
+2. **Text Extraction & Vision OCR Fallback:** Extracts page text via **`pypdf`**. For scanned/image-only pages with `< 30` extracted characters (`MIN_TEXT_CHARS_THRESHOLD`), StudyAI extracts the page's embedded image and falls back to vision OCR (`qwen3.5:4b` or Gemini) with bounded retries.
+3. **Semantic Chunking:** Splits pages into structured chunks (target `120` words, `30`-word overlap) preserving page bounds, chapters, and sections.
+4. **Dense Embeddings:** Embeds each chunk into a `1024`-dimensional vector using `qwen3-embedding:0.6b` via host Ollama (`hashing` deterministic embedder in test/CI).
+5. **Dual Postgres Indexing & Metadata Tags:** Stores vectors on `ReferenceChunk` (`USING hnsw (embedding vector_cosine_ops)`) alongside full-text `tsvector` (`GIN`) and optional `ReferenceDocumentTag` (`Tag` M2M, PostgreSQL RLS-scoped) for tag-filtered reference search.
+6. **Status Lifecycle:** Tracks `PENDING` → `PROCESSING` → `READY` / `FAILED` with page counts and change snapshots (`reference_snapshot_hash`).
 
 ---
 
-### B. Handwritten Transcription & Review Gate Workflow (PR 1)
+### B. Handwritten Canvas, Presigned Upload & Review Gate Workflow
 
 ```text
-Note Upload ──► Local Vision OCR ──► Transcript Review Gate ──► User Edits / Approval ──► APPROVED
-(Image / PDF)     (qwen3.5:4b)          (pending_review)        (Inline Edit / Retry)       (Ready for AI)
+Canvas / Upload ──► Size & Magic-Byte Check ──► Multimodal OCR ──► Transcript Review Gate ──► Incremental Index
+(IndexedDB / MinIO)  (validate_uploaded_object)   (qwen3.5 / Gemini)   (pending / needs_review)   (sha256 + 1024d)
 ```
 
-1. **Note Upload & Vision OCR:** The student uploads an image or scan of handwritten notes. Multimodal LLM (`qwen3.5:4b`) transcribes handwriting into structured lines with coordinates and confidence scores.
-2. **Transcript Review Gate:** Rather than immediately executing downstream AI workflows on raw OCR, the document enters a `pending_review` status.
-3. **Interactive Line Review & Editing:** Students review transcription side-by-side with original handwriting, make inline text edits, merge/split lines, or trigger bounded OCR retries.
-4. **Approval Invariant:** Downstream enrichment is strictly approval-gated. Only notes in `approved` state can be enriched, preventing wasted compute on misrecognized handwriting.
+1. **Offline-First Canvas & Presigned Upload Validation:**
+   - **Digital Canvas:** Multi-device single-writer fencing (`device_id`, `lock_generation`, `90s` lock TTL, `409 SESSION_LOCK_LOST`), idempotent batched strokes persisted locally in IndexedDB (`studyai` v2) with an offline sync outbox, and transactional PNG rasterization (`CanvasSyncService.finalize_page`).
+   - **Direct-to-MinIO Validation:** On `IngestionService.finalize_upload`, `validate_uploaded_object` inspects `storage.size(key)` before reading bytes (`<= UPLOAD_MAX_BYTES`, default `10 MB`), verifies PNG/JPEG/WebP/PDF binary magic bytes (`MAGIC_SIGNATURES`), and deletes spoofed or empty objects before raising `422 ValidationError`.
+2. **Multimodal OCR & Heuristics:** Vision OCR transcribes lines with bounding boxes and confidence scores. Pages with average confidence `< 0.80` (`OCR_REVIEW_THRESHOLD`), `> 15%` `[illegible]` lines (`OCR_ILLEGIBLE_THRESHOLD`), `> 30%` low-confidence lines, `>= 4` repeated consecutive lines, low resolution (`< 300px`), or blank/heavy-ink anomalies enter `needs_review`.
+3. **Immutable Line Revisions & Incremental Re-Indexing:** Edits create a new immutable `DocumentPageRevision` preserving stable `lineage_id` UUIDs per line. Approval (`DocumentPageApproveView`) triggers incremental SHA-256 chunk indexing—unchanged chunks retain existing embeddings while superseded chunks become `stale=True`.
 
 ---
 
-### C. Topic-Based Note Enrichment Pipeline (PR 2 + PR 3 Path B)
+### C. Topic-Based Note Enrichment Workflow (`enrichment_graph`)
 
 ```text
-Approved Note ──► Content Gate ──► Segment Classifier ──► Topic Planner ──► Decoupled Research ──► Topic Writer
-                      │                                                        (pgvector + RRF)     (Verbatim Student)
-                      ▼                                                                                    │
-               (Check Content)                                                                             ▼
-                      │                                                                           Sanitize & Dedupe
-                      ▼                                                                                    │
-               Job Checkpointing ◄── Markdown Render ◄── Verified Citations ◄── Verifier & Scoring ◄───────┘
-              (JobExecutionState)     (Global Biblio)     (Honest Labels)      (supported / partial)
+Approved Note ──► Academic Content Gate ──► Classifier & Planner ──► LangGraph Send() Fan-Out ──► Sanitize & Dedupe
+                       │                                                  │  (research + write#0      │
+                       ▼                                                  │   per topic w/ reducer)     ▼
+                  (No LLM Calls)                                     JobExecutionState          Quote-or-Drop Verifier
+                                                                     (SQL Checkpoints)                  │
+                       Markdown Render ◄── Repair Pass (Send() write#1 -> verify#1) ◄────────────────────┘
 ```
 
-1. **Academic Content Gate:** Validates note text against academic terminology. Non-academic content (noise, blank pages, personal greetings) exits early without charging AI budget or creating stub notes.
-2. **Windowed Segment Classification:** Identifies semantic concept boundaries across transcript lines using sliding window context.
-3. **Topic Planning:** Assigns transcript segments into discrete, cohesive learning topics (capped at 6) with titles and line references, falling back to a single topic if planning fails.
-4. **Decoupled Reference Retrieval:** Vectorized dense retrieval and lexical BM25/tsvector search run against the student's active subject textbooks, retrieving high-relevance textbook passages with page numbers.
-5. **Topic Writer (Verbatim Student Preservation):** Generates structured topic sections. **Student notes are preserved 100% verbatim** as `student` blocks, while supplementary concept explanations and clarifications are generated as cited `addition` blocks. (Enrichment adds cited explanations, not adversarial error checking; writer rules strictly forbid accepting or building on student false premises).
-6. **Guarded Deduplication & Sanitization:** Strips ungrounded additions and eliminates redundant concept additions across topics.
-7. **Quote-or-Drop Verifier & Contradiction Checking:** Grounding integrity is enforced through code-checked verification:
-   - **Extractive Auto-Certification:** Additions with $\ge 0.70$ lexical overlap from a single cited sentence, matching negation polarity, and matching qualifiers are auto-certified as `supported`.
-   - **Deterministic Qualifier Guard:** Additions asserting absolute qualifiers (`only`, `always`, `never`, `all`, `none`, `must`, `cannot`, `solely`) or numbers not present in the cited quote cannot be `supported`. Absolute claims like row 24 (*"the only condition"*) are dropped deterministically without relying on LLM entailment.
-   - **Quote-and-Contradiction LLM Check:** All non-extractive additions require the verifier to extract the exact supporting sentence from the cited passage. Code verifies the quote appears verbatim in the passage, shares key terms with the addition, matches polarity, and does not contradict reference evidence. Additions that contradict references or lack verified quote anchors are dropped immediately.
-   - **`supported`**: Additions backed by verified quotes from the cited reference passage.
-   - **`partial`**: Additions that extend the reference without contradicting it, anchored in a verified passage quote.
-8. **Topic Coverage Badges & Empty State Guidance:** Headings display topic evidence availability (`Reference found`, `Limited reference`, or `No reference found`). Topics without reference material feature direct links to upload textbooks for that subject.
-9. **Honest Addition Labels:** Additions are labeled transparently:
-   - `supported` ➔ **"From your reference"**
-   - `partial` ➔ **"Extends the reference"** with warning tooltip (*"This goes beyond the cited passage. Check it against your textbook."*).
-10. **Reference Library Change Detection:** Hashes active textbooks at generation time (`reference_snapshot_hash`), covering subject documents and unscoped global books scoped strictly to the student's profile. If new textbooks are uploaded to the subject, notes with missing or partial coverage display a prompt: *"Your reference library changed since this note was enriched [Regenerate]"*. Legacy notes with blank hashes are treated as unknown.
-11. **Durable Checkpoints:** Every stage and topic checkpoints in `JobExecutionState`, enabling real-time stage progress derivation in the UI (`classify` ➔ `plan` ➔ `research k of n` ➔ `write k of n` ➔ `verify`).
+1. **Academic Content Gate:** Filters out blank/non-academic notes early without invoking LLMs (`0` inference calls).
+2. **Windowed Segmentation & Topic Planning:** Classifies note lines (escaping XML delimiters against prompt injection) and groups content into up to `6` coherent topics (`SEGMENT_MIN_CONFIDENCE = 0.70`), with single-topic fallback.
+3. **Compiled LangGraph `StateGraph` + `Send()` Fan-Out:** `build_enrichment_graph()` compiles a real LangGraph `StateGraph` (`TopicEnrichmentState` with `_merge_topic_dicts` reducers), fanning out parallel `Send("topic_worker", ...)` workers per topic (`max_concurrency=4` on PostgreSQL, `1` on SQLite) under per-worker RLS binding.
+4. **Batched Embedding Relevance Gate:** `gap_detection_node` and `coverage_comparison_node` run `apply_relevance_gate(..., strategy="D")` (`relevance_gate.py`), batching `[user_note, *concepts]` in one `embed()` call to drop off-topic textbook distractors via cosine similarity.
+5. **Verbatim Student Preservation & Quote-or-Drop Verification:** Student lines are preserved verbatim (`student` blocks). Cited `addition` blocks (`supported` → *"From your reference"*, `partial` → *"Extends the reference"*) pass through deterministic qualifier/negation guards, `QuoteVerificationVerdict` substring extraction, and semantic checks; failing topics trigger targeted `Send("repair_worker", ...)` pass-1 regeneration (`write#1` → `verify#1`).
+6. **Durable SQL Checkpoints & Snapshot Change Detection:** Every stage and topic checkpoints in PostgreSQL `JobExecutionState`, deriving real-time UI progress and prompting regeneration when `reference_snapshot_hash` detects newly uploaded subject textbooks.
 
 ---
 
-## 2. Core Features
+### D. Grounded Chat, Agentic MCP & Adaptive Mastery Loop
 
-### Handwritten Transcription & Review Gate
-- **Image & PDF Ingestion:** Accepts PNG, JPEG, WebP, and multi-page PDF scans of handwritten notes.
-- **Local Multimodal OCR:** Transcribes handwriting, equations, and diagrams using `qwen3.5:4b` vision via local Ollama without sending student data to third-party APIs.
-- **Human-in-the-Loop Review Gate:** Dedicated review interface allows students to inspect OCR confidence, edit transcribed lines, reopen approved pages, or retry OCR with forced override.
-- **Immutable Revision History:** Every transcription and manual edit is stored as an immutable document revision with full audit provenance.
+1. **Hybrid RAG & Tiered Citation Verification:** `RetrievalService.search` queries top-`50` dense `pgvector` cosine candidates + top-`50` PostgreSQL `SearchRank` keyword candidates—pre-filtered by tenant `profile_id`, `subject`, `READY` status, and `tag_ids` across **both** `NoteChunk` (`DocumentTag`) and `ReferenceChunk` (`ReferenceDocumentTag`)—and fuses them via Reciprocal Rank Fusion (`RETRIEVAL_RRF_K = 60`). Citations in Chat, Agent synthesis, and Question Generation pass through **Tiered `EvidenceVerifier`**: fast lexical overlap (`>= 0.60` `supported`, `< 0.15` `unsupported`) plus a Tier 2 semantic NLI judge (`VerificationEntailmentVerdict`) on the `0.15..0.60` borderline band with lexical fallback.
+2. **Non-Blocking Async SSE Chat & Agent Mode:** Under ASGI (`ASGIRequest`), `/api/v1/chat/sessions/{id}/messages/stream` returns an async `StreamingHttpResponse` powered by `ChatService.astream` and `StreamingLLMProvider.astream` (`httpx.AsyncClient` / `ChatOllama.astream`). Agent mode runs `agent_graph` across bounded iterations (`<= 5` iterations, `<= 10` tool calls) and verifies synthesized responses before completion.
+3. **Adaptive Testing, Confidence & Mastery Scoring:** Questions bind to exact `source_revision_id` and `source_chunk_id` (`stale` flag on edits). In [TestsPage.tsx](file:///Users/yash/CV_Project/StudyAI/frontend/src/components/tests/TestsPage.tsx), learners choose confidence per answer (**Guess `0.4`**, **Unsure `0.75`**, **Confident `1.0`**), updating per-`(profile, tag)` mastery via EMA (`MasteryScoringService`: unattempted tags stay `not_assessed`, `weak < 0.4`, `strong >= 0.8`). Creating a test (`mode="adaptive"`) runs `adaptive_test_graph` to generate weak-topic questions with deterministic fallback ranking (`0.6*weakness + 0.25*recency + 0.15*difficulty`). A deterministic 14-day `RevisionPlanningService` schedules weakest/urgent topics with zero LLM calls.
 
-### Subject Reference Library
-- **Textbook Ingestion:** Ingests comprehensive textbooks, course packs, and lecture notes per subject.
-- **Page-Level Provenance:** Chunks retain document ID, title, page numbers, chapters, and section metadata.
-- **Scope Isolation:** Supports global reference textbooks (platform-wide) and private references isolated to specific student profiles via PostgreSQL Row-Level Security (RLS).
-- **Snapshot Hash Tracking:** Computes SHA-256 snapshots of active subject textbooks to power automatic change detection and cache-busting re-enrichment.
+---
 
-### Topic-Based Note Enrichment
-- **100% Verbatim Student Text Preservation:** Student handwriting and transcribed prose are never altered, overwritten, or hallucinated away.
-- **Topic Coverage Badges:** Immediate visual clarity on reference evidence availability per topic:
-  - `Reference found` (`sufficient`): Subject textbooks provide strong evidence for the topic.
-  - `Limited reference` (`partial`): Topic evidence is partial or incomplete in available textbooks.
-  - `No reference found` (`none`): No matching reference material covers the topic, featuring inline links to upload textbooks.
-- **Honest Grounding Labels for Additions:** Distinguishes verified additions (*"From your reference"*, backed by verified passage quotes) from legitimate contextual extensions (*"Extends the reference"* with tooltip guidance). Gated by `ENRICHMENT_SHOW_PARTIAL`.
-- **Dynamic Multi-Stage Progress:** Derives real-time stage progress (`classify`, `plan`, `research`, `write`, `verify`) from background execution checkpoints.
-- **Privacy-Safe Numeric Telemetry & Tracing Redaction:** Diagnostics record strictly numeric counters (`drops_by_reason` tracking `uncited`, `low_cosine`, `neutral_entailment`, `contradicted`, `correction_leak`, `student_entailed`, `restatement`, `budget_cap`, `duplicate`) with no student note text. Note: If third-party LLM tracing (`LANGSMITH_TRACING=true`) is explicitly enabled by an operator, student handwriting text and note lines are automatically redacted by default (`LANGSMITH_REDACT_STUDENT_TEXT=true`), preventing third-party data leaks. By default, LangSmith tracing is disabled.
+## 2. Core Engineering Features
 
-### Grounded Chat & Agent Mode
-- **Conversational Study Assistant:** Students can ask questions about their notes or reference textbooks with full conversational context.
-- **Server-Sent Events (SSE) Streaming:** Streams responses in real time using non-blocking database transactions that release locks during inference.
-- **StudyAI Agent Mode:** Autonomous multi-step orchestration using LangGraph. The agent coordinates tools (`search_notes`, `search_reference_books`, `get_subject_context`, `verify_citations`) to synthesize multi-source answers.
-- **Dual Grounding:** Chat queries retrieve evidence from both personal notes and first-class Reference Documents.
-
-### Security, Multi-Tenancy & Profile Isolation
-- **Row-Level Security (RLS):** Enforced natively in PostgreSQL across all multi-tenant tables.
-- **Profile Scoping:** Multiple study profiles exist under a single account. Notes, subjects, folders, chat sessions, and private references are strictly isolated.
-- **Restricted Database Role:** Application web and worker processes run under a restricted role (`studyai_app`) with minimal privileges, while migrations run under administrative credentials.
-- **Dual Study Modules:** Supports `AI_CLASSROOM` (full AI enrichment, practice QA, structured tests) and `NOTE_SPACE` (streamlined digitizer and PDF export).
+- **Unified DB + JSON Prompt Versioning:** `resolve_prompt_version` & `resolve_qualified_version` (`backend/ai/langchain/prompts.py`) prioritize active PostgreSQL `PromptVersion` rows before falling back to `backend/ai/prompts/*.json`, seeded via `seed_all_prompt_versions()` / `seed_agent_prompt_versions()` across chat, agents, and question generation.
+- **Bidirectional Model Context Protocol (MCP):**
+  - **Inbound MCP Server (`/api/v1/mcp/`):** JSON-RPC `2.0` (`initialize`, `tools/list`, `tools/call`, `ping`) with scoped tokens (`/api/v1/mcp/token/`), Pydantic schema checks, `MCPRateLimiter`, profile isolation, and 12 boot-registered tools plus `search_web`.
+  - **Outbound MCP Client (`apps/agents/mcp/client.py`):** `MCPClient` + `MCPClientToolAdapter` discovers external JSON-RPC MCP tools (`tools/list`) and registers them into `ToolRegistry` as profile-authorized `BaseTool`s.
+- **Local-First AI + Optional Cloud Switch (`USE_GEMINI`):** Defaults to local host Ollama (`qwen3.5:4b` LLM/OCR + `qwen3-embedding:0.6b`), with `USE_GEMINI=true` routing LLM reasoning & OCR to Google Gemini (`gemini-2.5-flash`) while keeping 1024-d `pgvector` embeddings consistent. `LLMChainProvider` prepends prompt-injection directives, redacts PII (`_sanitize_for_provider`: email, phone, card, SSN; `8000` char cap), handles fallbacks, and logs `ProviderCallLog`.
+- **Durable Idempotent Jobs & Celery Beat Recovery:** `Job` rows enforce unique `idempotency_key`s (`IntegrityError` race-safe), atomic `.claim()`, `transaction.on_commit` dispatch, exponential backoff + jitter (`5s..300s`), and Beat tasks (`reap-stuck-enrichment-jobs` `60s`, `promote-retries` `120s`, stuck OCR/index reconciliation `300s`, daily backup, monthly budget reset).
+- **Atomic Per-User AI Budgets & Live Redis Throttling:** Per-action `AIBudgetThrottle` reserves estimated tokens/cost (`DEFAULT_MONTHLY_TOKEN_BUDGET = 100000`, `DEFAULT_MONTHLY_COST_BUDGET_USD = $50.00`) via conditional SQL `F()` updates and settles actual `ProviderCallLog` usage (or refunds on error) in `BudgetSettlementMiddleware` / async SSE `finally`, alongside Redis throttles (`auth: 30/min`, `ai: 120/min`, `user: 600/min`).
+- **Observability & Redacted LangSmith Tracing:** Runs once at `LLMChainProvider._record_and_trace` under nested `@traced_graph` / `@traced_node` spans with `_redact_payload` replacing student text when `LANGSMITH_TRACING=true` (disabled by default; `LANGSMITH_REDACT_STUDENT_TEXT=true` by default). Exposes `/healthz`, `/readyz`, Prometheus `/metrics`, and staff-only `/api/v1/status` (including boolean tracing readiness without leaking API keys).
 
 ---
 
@@ -116,78 +84,73 @@ Approved Note ──► Content Gate ──► Segment Classifier ──► Topi
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Frontend (React 19 + TypeScript + Vite)"]
-        UI["Web UI (Subject Workspace, Notes, Reference Library, Chat)"]
+    subgraph Client ["Frontend (React 19 + TypeScript + Vite PWA)"]
+        UI["Web UI (Subjects, Notes, Reference Library, Adaptive Tests, Chat)"]
         ReviewGate["Transcript Review Gate & OCR Editor"]
-        EnrichedView["Topic Enriched View (Coverage Badges, Honest Labels)"]
-        SSE["SSE Stream Handler & Zustand Stores"]
+        CanvasIDB["Handwriting Canvas + IndexedDB Outbox"]
+        SSE["Async SSE Client + Zustand Stores"]
     end
 
-    subgraph ReverseProxy ["Ingress"]
-        GW["Gunicorn WSGI / HTTP Port 8000"]
+    subgraph Runtime ["ASGI Server & Async Middlewares"]
+        UV["Uvicorn ASGI (config.asgi:application, Port 8000)"]
+        MW["Async Middlewares (RequestID, Timing, SecurityHeaders, RlsContext, BudgetSettlement)"]
     end
 
-    subgraph Backend ["Backend Core (Django 6.1 + DRF)"]
-        API["REST API (Auth, Documents, References, Chat, Profiles)"]
-        RLS["PostgreSQL RLS Context (app.current_profile_id)"]
-        ContentGate["Academic Content Gate"]
-        EnrichGraph["Topic Enrichment Pipeline (LangGraph)"]
-        Agent["LangGraph Agent & Chat Service"]
+    subgraph Backend ["Backend Core (Django 6.1 + DRF + LangGraph)"]
+        API["REST & SSE API (Auth, Documents, References, Tests, Revision, Chat, MCP)"]
+        RLS["PostgreSQL RLS (SET LOCAL app.current_profile_id)"]
+        Graphs["7 Compiled LangGraph Workflows (Chat, Enrichment Send(), Agent, Adaptive Test, Question Gen, Revision, Verify)"]
+        RAG["Hybrid RAG (pgvector HNSW + tsvector GIN + DocumentTag/ReferenceTag + RRF k=60)"]
+        MCP["Inbound MCP Server + Outbound MCPClientToolAdapter"]
     end
 
-    subgraph AsyncWorker ["Background Tasks (Celery 5.5 + Redis 7)"]
-        RedisQueue["Redis Broker & Throttle Cache"]
-        Worker["Celery Workers (OCR, Ingestion, Topic Enrichment)"]
-        JobState["Durable Checkpoints (JobExecutionState)"]
+    subgraph AsyncWorker ["Async Queue & Recovery (Celery 5.5 + Beat + Redis 7)"]
+        RedisQueue["Redis (Celery Broker & Throttle Cache)"]
+        Worker["Celery Workers & Beat (OCR, PDF Fallback, Indexing, Enrichment, Reapers)"]
+        JobState["PostgreSQL Jobs & Checkpoints (Job, JobExecutionState, ProviderCallLog)"]
     end
 
-    subgraph AIHost ["Local AI Runtime (Host Ollama)"]
-        OLLAMA_LLM["LLM & Vision OCR: qwen3.5:4b (/api/chat)"]
-        OLLAMA_EMB["Embeddings: qwen3-embedding:0.6b (/api/embed)"]
+    subgraph AIProviders ["AI Runtimes & Observability"]
+        OLLAMA["Host Ollama: qwen3.5:4b (/api/chat) + qwen3-embedding:0.6b (/api/embed)"]
+        GEMINI["Optional Cloud: Google Gemini (USE_GEMINI=true)"]
+        LANGSMITH["Optional Redacted Tracing: LangSmith (default false)"]
     end
 
     subgraph Storage ["Data & Storage Layer"]
-        PG[("PostgreSQL 16 + pgvector (1024d) + tsvector")]
-        MinIO[("MinIO Object Storage (Images, PDFs, Scans)")]
+        PG[("PostgreSQL 16 + pgvector (1024d) + tsvector + RLS")]
+        MinIO[("MinIO / S3 (Validated Presigned Uploads & Scans)")]
     end
 
-    UI -->|HTTP / REST| GW
-    ReviewGate -->|Approve / Edit| GW
-    EnrichedView -->|Fetch / Regenerate| GW
-    SSE -->|SSE Events| GW
-    GW --> API
-    API --> RLS
-    RLS --> PG
+    UI -->|REST| UV
+    ReviewGate -->|Approve / Edit| UV
+    CanvasIDB -->|Idempotent Outbox| UV
+    SSE -->|Async SSE| UV
+    UV --> MW --> API --> RLS --> PG
     API --> MinIO
-    API --> RedisQueue
-    RedisQueue --> Worker
-    Worker --> RLS
+    API --> Graphs
+    Graphs --> RAG --> PG
+    Graphs --> MCP
+    API -->|on_commit| RedisQueue --> Worker --> RLS
+    Worker --> JobState --> PG
     Worker --> MinIO
-    Worker --> ContentGate
-    ContentGate --> EnrichGraph
-    EnrichGraph --> JobState
-    JobState --> PG
-    EnrichGraph --> OLLAMA_LLM
-    EnrichGraph --> OLLAMA_EMB
-    Agent --> OLLAMA_LLM
-    Worker --> OLLAMA_LLM
-    Worker --> OLLAMA_EMB
+    Graphs --> OLLAMA
+    Graphs -.->|USE_GEMINI=true| GEMINI
+    Graphs -.->|Redacted Spans| LANGSMITH
+    Worker --> OLLAMA
 ```
 
 ---
 
 ## 4. Production AI Stack & Invariants
 
-StudyAI runs a unified, self-hosted local AI configuration. Model execution is handled by the host Ollama server, avoiding cloud API dependencies and external data transfer.
-
-| Component | Canonical Model | Engine / Endpoint | Configuration & Invariants |
+| Component | Default / Canonical | Optional / Test Alternative | Key Invariants |
 |---|---|---|---|
-| **Multimodal LLM** | `qwen3.5:4b` | Host Ollama (`/api/chat`) | Multimodal vision OCR transcription, segment classification, topic planning, topic writing, verification, chat, and agent reasoning. |
-| **Embeddings** | `qwen3-embedding:0.6b` | Host Ollama (`/api/embed`) | 1024-dimensional normalized dense vectors ($\|v\| \approx 1.0$), canonical version `qwen3-embedding-0.6b-v1`. Zero legacy fallback to SentenceTransformer, MiniLM, or BGE-M3. |
-| **Vector Database** | `pgvector` | PostgreSQL 16 Extension | 1024-dimensional cosine distance index (`vector_cosine_ops`). |
-| **Lexical Search** | PostgreSQL Full-Text | PostgreSQL `tsvector` | GIN indexing with language-specific stemming for keyword discovery. |
-| **Ranking Fusion** | Reciprocal Rank Fusion | Backend Service | Standard RRF ($k=60$) combining dense vector and lexical ranks. |
-| **Orchestration** | LangGraph | Python StateGraph | Multi-stage topic pipeline with fan-out topic research/writing and checkpointed execution states. |
+| **Multimodal LLM & OCR** | `qwen3.5:4b` (Host Ollama `/api/chat`) | `gemini-2.5-flash` (`USE_GEMINI=true`), `MockLLMProvider` / `MockOCRProvider` in tests | Centralized `LLMChainProvider` / `OCRChainProvider`; PII scrubbing (`8000` chars) & prompt-injection directive. |
+| **Embeddings** | `qwen3-embedding:0.6b` (Host Ollama `/api/embed`) | `HashingEmbeddingProvider` (`1024`-d in test/CI) | Strictly `1024`-dimensional vectors (`EMBEDDING_DIMENSIONS=1024`). |
+| **Vector & Full-Text DB** | PostgreSQL 16 (`pgvector` HNSW + `tsvector` GIN) | SQLite keyword fallback in unit tests | `idx_notechunk_hnsw_embedding`, `idx_refchunk_hnsw_embedding`, `idx_notechunk_gin_tsv`; fused via RRF (`k=60`). |
+| **PDF Extraction** | `pypdf` (`PdfReader`) + embedded-image vision OCR | Direct multimodal image OCR (`PNG`/`JPEG`/`WebP`) | Pages with `< 30` chars fall back to vision OCR on embedded images with retries. |
+| **Orchestration** | 7 compiled LangGraph `StateGraph`s | Parallel `Send()` (`max_concurrency=4` PG / `1` SQLite) | `enrichment_graph`, `chat_graph`, `agent_graph`, `adaptive_test_graph`, `question_generation_graph`, `revision_planning_graph`, `verification_graph`. |
+| **Citation Verification** | Tiered `EvidenceVerifier` + Enrichment `"Quote-or-Drop"` | Lexical fallback if semantic judge fails | Fast path (`>= 0.60` pass, `< 0.15` reject) + NLI LLM judge on `0.15..0.60`; qualifier & contradiction guards on additions. |
 
 ---
 
@@ -195,14 +158,14 @@ StudyAI runs a unified, self-hosted local AI configuration. Model execution is h
 
 | Domain | Technologies |
 |---|---|
-| **Frontend** | React 19, TypeScript, Vite, React Router v7, Zustand, IndexedDB (`idb`), i18next, Tailwind CSS |
-| **Backend** | Python 3.12 / 3.14, Django 6.1, Django REST Framework, SimpleJWT, Gunicorn |
-| **Asynchronous Engine** | Celery 5.5, Redis 7 (broker, result backend, and rate-limiting cache) |
-| **Database** | PostgreSQL 16 with `pgvector` extension and Row-Level Security (RLS) |
-| **Object Storage** | MinIO (S3-compatible local bucket storage for scans, page images, and rendered PDFs) |
-| **AI Runtime** | Host Ollama (`qwen3.5:4b`, `qwen3-embedding:0.6b`), LangGraph, LangChain |
-| **API Documentation** | drf-spectacular (OpenAPI 3 / Swagger UI) |
-| **Testing** | Pytest, Pytest-Django, Vitest, Playwright (Chromium E2E) |
+| **Frontend** | React 19, TypeScript, Vite 7 (`vite-plugin-pwa`), React Router v7, Zustand, IndexedDB (`idb`), i18next, Custom CSS Design Tokens (`styles.css`) |
+| **Backend** | Python 3.12 (CI) / 3.14 (Docker image), Django 6.1, Django REST Framework, SimpleJWT, Uvicorn (ASGI), `httpx`, `pypdf`, `tesserocr`, `boto3` |
+| **Asynchronous Engine** | Celery 5.5 (+ Beat), Redis 7 (Celery broker & `django-redis` rate-limit cache) |
+| **Database** | PostgreSQL 16 (`pgvector/pgvector:pg16`) with `pgvector`, `tsvector` GIN, and Row-Level Security (RLS) |
+| **Object Storage** | MinIO / S3 (`MinIOStorageProvider`, `S3StorageProvider`, `LocalObjectStorage`) |
+| **AI & Tracing** | Host Ollama (`qwen3.5:4b`, `qwen3-embedding:0.6b`), Optional Google Gemini, LangGraph, LangChain (`langchain-core`, `langchain-ollama`), LangSmith, DuckDuckGo web search |
+| **API Schema & Telemetry** | `drf-spectacular` (OpenAPI 3 / Swagger UI), `django-prometheus` (`/metrics`), `/api/v1/status` |
+| **Testing** | Pytest, Pytest-Django, Vitest, `fake-indexeddb`, `puppeteer-core` (Chromium E2E) |
 
 ---
 
@@ -211,47 +174,52 @@ StudyAI runs a unified, self-hosted local AI configuration. Model execution is h
 ```text
 StudyAI/
 ├── backend/
-│   ├── ai/                      # LangGraph workflows, nodes, state definitions, prompts
-│   │   └── langgraph/
-│   │       ├── graphs/          # enrichment_graph.py, agent_graph.py
-│   │       ├── nodes/           # classifier, planner, research, writer, verification, render
-│   │       └── state/           # topic_enrichment_state.py
+│   ├── ai/
+│   │   ├── langchain/           # PromptRegistry + unified DB/JSON resolver, LangChain adapters
+│   │   ├── langgraph/
+│   │   │   ├── graphs/          # 7 graphs: adaptive_test, agent, chat, enrichment, question_generation, revision_planning, verification
+│   │   │   ├── nodes/           # Topic enrichment nodes (load/gate, classifier, planner, research, writer, verification, render) + agent nodes
+│   │   │   └── state/           # State schemas & dictionary reducers for all 7 workflows
+│   │   ├── prompts/             # Versioned JSON prompt templates synced with PromptVersion
+│   │   └── tracing/             # LangSmith client, @traced_graph / @traced_node decorators, _redact_payload
 │   ├── apps/
-│   │   ├── accounts/            # User authentication, JWT tokens, budget management
-│   │   ├── agents/              # Autonomous StudyAI agent, tools, and MCP endpoints
-│   │   ├── ai_classroom/        # Enrichment services, models, content gating, telemetry command
-│   │   ├── audit/               # Security and provider invocation audit logging
-│   │   ├── canvas/              # Handwritten canvas strokes and page management
-│   │   ├── chat/                # Multi-turn chat sessions, SSE streaming, RLS scoping
-│   │   ├── documents/           # Note documents, pages, review gate, OCR handlers, progress views
-│   │   ├── jobs/                # Durable Job engine, JobExecutionState checkpointing
-│   │   ├── notebooks/           # Notebooks and structured digital note pages
-│   │   ├── profiles/            # Multi-profile isolation and module switching
-│   │   ├── questions/           # Question generation and verification
-│   │   ├── references/          # Reference Library models, PDF ingestion, snapshot hashing
-│   │   ├── retrieval/           # NoteChunk models, pgvector search, hybrid RRF
-│   │   ├── revision/            # Revision planning and mastery tracking
-│   │   ├── subjects/            # Subject categories and metadata
-│   │   └── tests/               # Adaptive tests and mastery score evaluation
-│   ├── config/                  # Django settings (base, dev, prod, test, ci) and Celery configuration
-│   ├── providers/               # Provider adapters (Ollama LLM/Embeddings, MinIO, Mailpit)
-│   ├── reports/labeling/        # Human labeling evaluation sets, seeded mistakes, calibration CSVs
-│   ├── shared/                  # Database RLS contexts, observability, common utilities
-│   └── tests/                   # Backend regression, unit, and API integration test suites
+│   │   ├── accounts/            # Email-auth User, JWT, password reset, UserProfile & atomic BudgetService
+│   │   ├── agents/              # AgentViewSet, 12+1 BaseTools, AgentPromptVersion, inbound MCP server + outbound MCPClient
+│   │   ├── ai_classroom/        # Topic Enrichment services, PromptVersion, EvidenceVerifier, Tag/EnrichedNote models, relevance_gate
+│   │   ├── audit/               # ProviderCallLog telemetry, daily backup task
+│   │   ├── canvas/              # Canvas sessions (single-writer fencing), idempotent strokes, PNG rasterization
+│   │   ├── chat/                # ChatSession/ChatMessage, SSE sync + ASGI async streaming, chat LangGraph nodes
+│   │   ├── documents/           # Document/Page/Revision/Line models, presigned finalize, OCR heuristics & review gate
+│   │   ├── jobs/                # Durable Job queue, JobExecutionState checkpoints, Celery tasks & Beat recovery
+│   │   ├── notebooks/           # NoteSpace notebooks & structured pages
+│   │   ├── profiles/            # Multi-profile isolation & ModuleIsolationPermission
+│   │   ├── questions/           # Revision-bound Questions, QuestionTagLink, generation nodes
+│   │   ├── references/          # ReferenceBook/Document/Chunk, ReferenceDocumentTag, pypdf+OCR extractor, snapshots
+│   │   ├── retrieval/           # NoteChunk (AdaptiveVectorField + GIN), incremental chunking, hybrid RRF search
+│   │   ├── revision/            # RevisionGoals & deterministic 14-day RevisionPlanningService
+│   │   ├── subjects/            # Subject models & scoping
+│   │   └── tests/               # TestInstance, TestAttempt (unique per test+question), MasteryScore EMA, adaptive nodes
+│   ├── config/                  # asgi.py, wsgi.py, celery.py, urls.py, settings/{base,dev,prod,test,ci}.py
+│   ├── providers/               # OCR (qwen35/gemini/tesseract/paddle), LLM (qwen35/gemini/local/mock/chain + astream), embeddings, storage validation, web, email
+│   ├── reports/labeling/        # Human labeling evaluation sets & calibration CSVs
+│   ├── shared/                  # Async-capable RLS/RequestID/Timing/SecurityHeaders/BudgetSettlement middlewares, throttles, /status & /metrics
+│   └── tests/                   # Unit, API, PostgreSQL integration, evaluation, and load/e2e suites
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Application entry, global shell, CSS styles
-│   │   ├── components/          # UI primitives, notes (EnrichedView, HandwrittenView), chat
-│   │   ├── copy/                # Centralized accessibility and UI copy (enrichment.ts)
-│   │   ├── features/            # Authentication, onboarding, canvas writing
-│   │   ├── routes/              # Client-side routing and module access guards
-│   │   ├── services/            # API clients for backend endpoints and SSE streaming
-│   │   ├── state/               # Zustand state stores (workspace, auth, modules)
-│   │   └── types/               # TypeScript interfaces and schema contracts
-│   └── tests/                   # Vitest unit tests and browser E2E test suites
-├── docs/                        # OpenAPI schemas, architectural specifications, phase plans
-├── docker-compose.yml           # Multi-container Docker composition
-└── README.md                    # Project documentation
+│   │   ├── app/                 # App entry, global shell, styles.css (CSS design tokens)
+│   │   ├── components/          # UI primitives, Notes, ReferenceLibrary, Chat/Agent UI, Tests (ConfidenceSelector)
+│   │   ├── db/indexeddb/        # IndexedDB (studyai v2) local-first stroke & outbox persistence
+│   │   ├── features/            # auth (authStore), onboarding, writing/canvas tools
+│   │   ├── hooks/               # useAgentChat, useOnlineStatus
+│   │   ├── routes/              # React Router v7 routes & module guards
+│   │   ├── services/            # REST/SSE API clients & IndexedDB sync outbox
+│   │   ├── state/               # Zustand stores (workspace, moduleConfig, ui, outbox)
+│   │   └── types/               # TypeScript domain & API interfaces
+│   └── tests/                   # Vitest suites + puppeteer-core Chromium E2E scripts (tests/e2e/)
+├── docs/                        # OpenAPI schema (docs/openapi/schema.yml), architecture specs, phase docs
+├── .github/workflows/ci.yml     # Backend, PG16 integration, Frontend, Docker Compose & OpenAPI drift CI
+├── docker-compose.yml           # 8-service local stack + on-demand test profile
+└── README.md
 ```
 
 ---
@@ -260,58 +228,45 @@ StudyAI/
 
 ### 1. Prerequisites
 - **Git:** 2.30+
-- **Docker & Docker Compose:** Docker Engine 24+ and Docker Compose v2+
-- **Node.js:** 20+ and npm 10+ (for local frontend development/testing)
-- **Ollama:** Installed and running on the host machine ([ollama.com](https://ollama.com/))
+- **Docker & Docker Compose:** Docker Engine 24+ and Compose v2+
+- **Node.js:** 20+ and npm 10+ (for local frontend builds/tests)
+- **Ollama:** Running on the host machine ([ollama.com](https://ollama.com/)) unless `USE_GEMINI=true`
 
-### 2. Install and Start Ollama Models
-Install Ollama on your host operating system and pull the two canonical models:
-
+### 2. Pull Canonical Ollama Models
 ```bash
-# Pull the multimodal LLM and OCR model
 ollama pull qwen3.5:4b
-
-# Pull the canonical 1024-dimensional embedding model
 ollama pull qwen3-embedding:0.6b
-```
-
-Verify that the models are installed and running:
-```bash
-ollama list
 curl http://localhost:11434/api/tags
 ```
 
 > [!IMPORTANT]
-> Containers connect to the host Ollama instance via `http://host.docker.internal:11434`. This is pre-configured via `extra_hosts` in `docker-compose.yml`. Keep Ollama running on your host machine while using StudyAI.
+> Containers reach host Ollama via `http://host.docker.internal:11434` (`extra_hosts` is configured in `docker-compose.yml`).
 
-### 3. Clone Repository & Configure Environment
+### 3. Configure Environment
 ```bash
 git clone https://github.com/yashkmr53/StudyAI.git
 cd StudyAI
 cp .env.example .env
 ```
 
-Generate secure secrets for development and update `.env`:
+Generate secrets for `.env`:
 ```bash
 python3 -c "import secrets; print('DJANGO_SECRET_KEY=' + secrets.token_urlsafe(64))"
 python3 -c "import secrets; print('POSTGRES_PASSWORD=' + secrets.token_urlsafe(32))"
 ```
 
-### 4. Build and Start the Infrastructure
+### 4. Start the Stack
 ```bash
 docker compose up --build -d
-```
-
-Verify that all 8 containers are healthy:
-```bash
 docker compose ps
 ```
+Expect 8 active services (`db`, `redis`, `minio`, `mailpit`, `api`, `worker`, `beat`, `frontend`), with Docker healthchecks on `db`, `redis`, `minio`, `mailpit`, and `api`.
 
-### 5. Access the Application
+### 5. Access Endpoints
 - **Frontend Application:** [http://localhost:5173](http://localhost:5173)
 - **Backend API Root:** [http://localhost:8000/api/v1/](http://localhost:8000/api/v1/)
-- **Interactive Swagger Documentation:** [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
-- **Health Check Endpoint:** [http://localhost:8000/healthz](http://localhost:8000/healthz)
+- **Swagger UI:** [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
+- **Liveness / Readiness / Metrics / Staff Status:** `/healthz`, `/readyz`, `/metrics`, `/api/v1/status`
 - **Mailpit Web UI:** [http://localhost:8025](http://localhost:8025)
 - **MinIO Console:** [http://localhost:9001](http://localhost:9001) (`minioadmin` / `minioadmin`)
 
@@ -319,78 +274,76 @@ docker compose ps
 
 ## 8. Environment Configuration
 
-Key environment variables configured in `.env` (or inherited by Docker Compose):
+Key environment variables (see [.env.example](file:///Users/yash/CV_Project/StudyAI/.env.example)):
 
-| Variable | Description | Safe Default / Example | Required |
+| Variable | Description | Default / Example | Required |
 |---|---|---|:---:|
-| `DJANGO_SETTINGS_MODULE` | Active Django configuration module | `config.settings.prod` | Yes |
-| `DJANGO_SECRET_KEY` | Secret key for cryptographic signing | *(64-char random string)* | Yes |
-| `DJANGO_DEBUG` | Enables Django debug mode (0 for off, 1 for on) | `0` | Yes |
-| `POSTGRES_DB` | PostgreSQL database name | `studyai` | Yes |
-| `POSTGRES_USER` | PostgreSQL superuser username | `studyai` | Yes |
-| `POSTGRES_PASSWORD` | PostgreSQL superuser password | *(32-char random string)* | Yes |
-| `POSTGRES_HOST` | Database host within Docker network | `db` | Yes |
-| `POSTGRES_PORT` | Database port | `5432` | Yes |
-| `CELERY_BROKER_URL` | Redis connection URL for Celery | `redis://redis:6379/0` | Yes |
-| `LLM_PROVIDER` | Active LLM driver | `ollama` | Yes |
-| `LLM_MODEL` | Canonical LLM and vision model | `qwen3.5:4b` | Yes |
-| `EMBEDDING_PROVIDER` | Canonical vector embedding driver | `ollama` | Yes |
-| `EMBEDDING_MODEL_NAME` | Canonical embedding model | `qwen3-embedding:0.6b` | Yes |
-| `EMBEDDING_DIMENSIONS` | Dense vector dimension | `1024` | Yes |
-| `EMBEDDING_MODEL_VERSION` | Embedding version identifier | `qwen3-embedding-0.6b-v1` | Yes |
-| `OLLAMA_BASE_URL` | Host address of Ollama API | `http://host.docker.internal:11434` | Yes |
-| `ENRICHMENT_SHOW_PARTIAL` | Controls display of "Extends the reference" additions | `True` | No |
-| `ENRICHMENT_CONCURRENCY` | Topic processing parallelism in LangGraph pipeline | `4` (production) / `1` (tests) | No |
-| `STORAGE_BACKEND` | Object storage backend (`minio` or `s3`) | `minio` | Yes |
-| `MINIO_ENDPOINT` | MinIO internal endpoint | `http://minio:9000` | Yes |
-| `EMAIL_BACKEND` | Email driver (`mailpit`, `smtp`, `console`) | `mailpit` | Yes |
+| `DJANGO_SETTINGS_MODULE` | Active Django settings module | `config.settings.prod` | Yes |
+| `DJANGO_SECRET_KEY` | Cryptographic signing secret | *(64-char random string)* | Yes |
+| `DJANGO_DEBUG` | Enable debug mode (`0` or `1`) | `0` | Yes |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Postgres DB & migration superuser credentials | `studyai` / `studyai` | Yes |
+| `POSTGRES_APP_USER`, `POSTGRES_APP_PASSWORD` | Restricted non-superuser runtime DB role (`studyai_app`) | `studyai_app` / `studyai_app_pass` | Yes |
+| `POSTGRES_HOST`, `POSTGRES_PORT` | Postgres service host/port | `db` / `5432` | Yes |
+| `CELERY_BROKER_URL` | Redis broker for Celery | `redis://redis:6379/0` | Yes |
+| `USE_GEMINI`, `GEMINI_API_KEY`, `GEMINI_MODEL` | Switch LLM & OCR to Google Gemini (`true`/`false`) | `false` / `""` / `gemini-2.5-flash` | No |
+| `LLM_PROVIDER`, `LLM_MODEL` | Local Ollama LLM configuration | `ollama` / `qwen3.5:4b` | Yes |
+| `OCR_PROVIDER_CHAIN` | OCR chain (`qwen35`, `gemini`, `tesseract`, `paddleocr`, `mock`) | `qwen35` | Yes |
+| `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL_NAME`, `EMBEDDING_DIMENSIONS` | Dense vector encoder configuration | `ollama` / `qwen3-embedding:0.6b` / `1024` | Yes |
+| `STORAGE_BACKEND`, `MINIO_ENDPOINT`, `UPLOAD_MAX_BYTES` | Object store (`local` / `minio` / `s3`) & binary cap | `minio` / `http://minio:9000` / `10485760` | Yes |
+| `ENRICHMENT_CONCURRENCY` | Parallel `Send()` topic workers | `4` (PG/prod), `1` (SQLite/tests) | No |
+| `ENRICHMENT_SHOW_PARTIAL` | Show *"Extends the reference"* additions | `True` | No |
+| `DEFAULT_MONTHLY_TOKEN_BUDGET`, `DEFAULT_MONTHLY_COST_BUDGET_USD` | Default per-user monthly AI budget caps | `100000` / `50.00` | No |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_REDACT_STUDENT_TEXT` | Opt-in redacted LangSmith tracing | `false` / `""` / `studyai` / `true` | No |
 
 ---
 
 ## 9. Testing & Quality Assurance
 
-StudyAI maintains a test suite across backend unit tests, PostgreSQL RLS integration tests, frontend unit tests, and real-browser Playwright E2E suites.
-
-### Backend Unit & API Test Suite
-Run the 467-test unit and API test suite:
-
+### Full Backend Suite (SQLite — `770 passed, 22 skipped` on `main`)
 ```bash
-docker compose exec api pytest tests/unit tests/api --reuse-db
+docker compose exec -T api pytest --tb=short -q
 ```
-
 > [!NOTE]
-> `pytest.ini` pins `--ds=config.settings.test`, which isolates unit test runs with in-memory execution, mock AI providers, and `ALLOW_SINGLE_PROFILE_FALLBACK = True` (allowing test fixtures without HTTP headers to run). In production (`config.settings.prod`), `ALLOW_SINGLE_PROFILE_FALLBACK = False` is strictly enforced: any request without a valid `X-Active-Profile` header fails closed with HTTP 403 Forbidden.
+> `backend/pytest.ini` sets `DJANGO_SETTINGS_MODULE=config.settings.test` (SQLite `:memory:`, deterministic `mock` providers, `hashing` 1024-d embeddings, `ENRICHMENT_CONCURRENCY=1`, and `ALLOW_SINGLE_PROFILE_FALLBACK=True` for legacy fixtures). In `config.settings.base` / `prod` / `ci`, `ALLOW_SINGLE_PROFILE_FALLBACK=False` fails closed on missing `X-Active-Profile` headers.
 
-### PostgreSQL & RLS Integration Tests
-To test live Row-Level Security, multi-profile isolation, and pgvector retrieval against real PostgreSQL under unprivileged role `studyai_app`:
-
+### Real PostgreSQL 16 Suite (RLS `studyai_app`, `pgvector` HNSW, FTS, Tag Filter, ASGI SSE, `Send()`, Budgets)
+Uses `config.settings.ci` against the `pgvector/pgvector:pg16` container:
 ```bash
-docker compose exec api pytest tests/api/test_phase12_security.py tests/api/test_canvas.py tests/api/test_profiles_subjects.py --ds=config.settings.prod
+docker compose exec -T api pytest --ds=config.settings.ci --create-db --strict-markers --tb=short -q \
+  tests/api/test_postgres_integration.py \
+  tests/api/test_phase12_security.py::Phase12PostgresRLSTests \
+  tests/unit/test_shared.py::RLSMiddlewarePostgresLeakTests \
+  tests/api/test_retrieval.py::HybridRetrievalTests \
+  tests/api/test_retrieval.py::TagFilterRetrievalTests \
+  tests/unit/test_reference_library.py::TestReferenceVectorIndex \
+  tests/api/test_topic_enrichment_integration.py \
+  tests/unit/test_topic_enrichment_pipeline.py \
+  tests/unit/test_asgi_async_streaming.py \
+  tests/api/test_hardening.py::PostgresConcurrentBudgetTests
 ```
 
-### Enrichment Telemetry Reporting
-Generate the executive reference coverage summary across subjects:
-
+### Migrations & OpenAPI Drift Checks
 ```bash
-docker compose exec api python manage.py report_enrichment_coverage --days 30
+docker compose exec -T api python manage.py check
+docker compose exec -T api python manage.py makemigrations --check --dry-run
+docker compose exec -T api python manage.py spectacular --settings=config.settings.ci > /tmp/schema.yml && diff -u docs/openapi/schema.yml /tmp/schema.yml
 ```
 
-### Frontend Typecheck & Test Suite
+### Enrichment Coverage Report
+```bash
+docker compose exec -T api python manage.py report_enrichment_coverage --days 30
+```
+
+### Frontend Typecheck, Vitest (`14` files, `92 tests`) & Production Build
 ```bash
 cd frontend
-# Run TypeScript compilation check
 npx tsc --noEmit
-
-# Run Vitest test suite with coverage
-npm test -- --run
-
-# Validate production build bundle
+npm test
 npm run build
 ```
 
-### Live Browser End-to-End (E2E) Verification
-Executes the comprehensive 25-point end-to-end acceptance suite in a headless Chromium browser against the running application stack:
-
+### Live Browser E2E (`puppeteer-core`)
+Requires the full Compose stack, Ollama running on host, and Google Chrome (`CHROME_PATH` in `frontend/tests/e2e/phase14_frontend_e2e.mjs`):
 ```bash
 node frontend/tests/e2e/phase14_frontend_e2e.mjs
 ```
@@ -399,36 +352,21 @@ node frontend/tests/e2e/phase14_frontend_e2e.mjs
 
 ## 10. Security & Data Isolation Architecture
 
-- **PostgreSQL Row-Level Security (RLS):** Every tenant table (`documents`, `references`, `chat`, `notes`, `ai_classroom_enrichednote`, etc.) enforces native RLS policies checking `app.current_profile_id`.
-- **Session & Transaction Binding:** The active profile is safely bound using `bind_profile_session(profile_id)` and cleared upon transaction/middleware teardown.
-- **Least-Privilege Database Role:** Web requests and Celery workers operate under the `studyai_app` unprivileged database role. Table definitions, extensions, and schema migrations are isolated to administrative migration operations.
-- **Human-in-the-Loop Gate:** Document transcripts require explicit approval (`DocumentPageApproveView`) before AI enrichment is permitted, protecting AI resources and user data integrity.
-- **Safe Asynchronous Dispatch:** Background tasks are queued via Django's `transaction.on_commit(_dispatch)` hook, ensuring Celery workers never attempt to fetch uncommitted records.
-- **Streaming Connection Lifecycle:** During Server-Sent Events (SSE) chat streaming, database transactions are opened only for brief, discrete persistence operations. Database connections are not held open during long LLM inference calls.
+- **PostgreSQL Row-Level Security (RLS):** Tenant tables across `subjects`, `notebooks`, `documents`, `canvas`, `retrieval`, `references` (including `ReferenceDocumentTag`), `ai_classroom`, `questions`, `tests`, `chat`, and `revision` enforce native PostgreSQL RLS policies checking `current_setting('app.current_profile_id', true)`.
+- **Least-Privilege DB Role (`studyai_app`):** Web and worker processes connect as `NOSUPERUSER` role `studyai_app` (superusers bypass RLS), reserving `POSTGRES_USER` strictly for migrations (`config/settings/prod.py`).
+- **Async & Thread-Safe RLS Binding:** `RlsContextMiddleware` supports both sync (`__call__`) and async (`__acall__`); Celery tasks, async chat streams, and parallel LangGraph `Send()` workers bind transaction-local `SET LOCAL app.current_profile_id` via `profile_scoped_transaction` and release PostgreSQL worker connections cleanly.
+- **Upload & Input Guardrails:** Presigned MinIO uploads enforce byte caps and binary magic signatures (`validate_uploaded_object`); LLM prompts run PII redaction and prompt-injection framing in `LLMChainProvider`; LangSmith redacts student text when enabled.
+- **Approval & Dispatch Safety:** Notes cannot enrich before `DocumentPageApproveView`; Celery jobs dispatch inside `transaction.on_commit(...)` over durable PostgreSQL `Job` rows with conditional `F()` budget reservations.
 
 ---
 
 ## 11. Troubleshooting
 
-### 1. Celery Worker Cannot Reach Ollama (`Connection refused`)
-- **Cause:** `localhost` inside a Docker container resolves to the container itself, not your host computer.
-- **Solution:** Verify that `OLLAMA_BASE_URL` is set to `http://host.docker.internal:11434`. On Linux, ensure Docker Compose includes `extra_hosts: ["host.docker.internal:host-gateway"]`.
-
-### 2. Missing Ollama Model (`model not found`)
-- **Cause:** The required LLM or embedding model has not been pulled on the host.
-- **Solution:** Run on the host:
-  ```bash
-  ollama pull qwen3.5:4b
-  ollama pull qwen3-embedding:0.6b
-  ```
-
-### 3. Gunicorn Worker Timeout During Long Operations
-- **Cause:** Processing dense handwriting or long textbooks can exceed standard HTTP timeouts.
-- **Solution:** The Gunicorn worker timeout in `docker-compose.yml` is configured to 300 seconds (`--timeout 300`). For large files, use the asynchronous ingestion endpoints which process in background Celery workers.
-
-### 4. Database Locking Under SQLite in Tests
-- **Cause:** Multi-threaded parallel topic processing in LangGraph can lock SQLite during concurrent writes.
-- **Solution:** Sequential fallback is automatically active when `ENRICHMENT_CONCURRENCY = 1`, which is pinned in `config.settings.test`.
+1. **Worker / API Cannot Reach Ollama (`Connection refused`):** Ensure `OLLAMA_BASE_URL` uses `http://host.docker.internal:11434` (`extra_hosts: host.docker.internal:host-gateway` is configured in `docker-compose.yml`).
+2. **Missing Ollama Models:** Run `ollama pull qwen3.5:4b && ollama pull qwen3-embedding:0.6b` on the host machine.
+3. **Long Streaming or Large Document Processing:** Uvicorn keeps connections alive (`--timeout-keep-alive 120`) and streams SSE asynchronously without blocking threads, while OCR, chunking, and enrichment run asynchronously in Celery workers (`--queues`/default queue).
+4. **SQLite Locking in Parallel Tests:** `enrichment_graph.py` automatically clamps `max_concurrency = 1` when `connection.vendor == "sqlite"` and runs multi-worker parallel fan-out on PostgreSQL (`ENRICHMENT_CONCURRENCY`).
+5. **Rebuilding API Container After Dependencies Change:** Run `docker compose up --build -d api worker beat` if `backend/requirements.txt` or `Dockerfile` changes (such as Uvicorn ASGI updates).
 
 ---
 
